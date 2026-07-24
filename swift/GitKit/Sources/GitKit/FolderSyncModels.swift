@@ -78,15 +78,22 @@ public enum FolderSyncPlanner {
     ///   - base: path → blob SHA from the manifest (empty on first sync).
     ///   - local: path → blob SHA scanned from the local folder.
     ///   - remote: path → blob SHA from the remote tree.
+    ///   - isIgnored: paths for which this returns true are excluded from sync entirely —
+    ///     never uploaded, downloaded, or deleted on either side. Exclusion is never a delete.
     public static func plan(
         base: [String: String],
         local: [String: String],
-        remote: [String: String]
+        remote: [String: String],
+        isIgnored: (String) -> Bool = { _ in false }
     ) -> FolderSyncPlan {
         var plan = FolderSyncPlan()
         let paths = Set(base.keys).union(local.keys).union(remote.keys)
 
         for path in paths {
+            // Excluded/offloaded paths are invisible to the diff: no upload, no download,
+            // and crucially no delete — so excluding a file never removes it anywhere.
+            if isIgnored(path) { continue }
+
             let b = base[path]
             let l = local[path]
             let r = remote[path]

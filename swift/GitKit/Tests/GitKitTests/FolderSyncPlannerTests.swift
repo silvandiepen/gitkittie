@@ -131,6 +131,43 @@ final class FolderSyncPlannerTests: XCTestCase {
         XCTAssertTrue(plan.isEmpty)
     }
 
+    // MARK: Exclusions (ignore / selective sync) are inert — never delete.
+
+    func testExcludedLocalOnlyFileIsNotUploaded() {
+        let plan = FolderSyncPlanner.plan(
+            base: [:],
+            local: ["keep.md": "sha_k", ".DS_Store": "sha_ds"],
+            remote: [:],
+            isIgnored: { $0 == ".DS_Store" }
+        )
+        XCTAssertEqual(plan.uploads, ["keep.md"])
+        XCTAssertFalse(plan.uploads.contains(".DS_Store"))
+    }
+
+    func testExcludingALocalFileNeverDeletesItFromRemote() {
+        // A file exists everywhere, but is now excluded on this device. It must NOT be
+        // seen as "locally deleted" and removed from the remote / other devices.
+        let plan = FolderSyncPlanner.plan(
+            base: ["big/asset.psd": "sha1", "keep.md": "sha2"],
+            local: ["keep.md": "sha2"],                       // asset not materialized here
+            remote: ["big/asset.psd": "sha1", "keep.md": "sha2"],
+            isIgnored: { $0.hasPrefix("big/") }
+        )
+        XCTAssertTrue(plan.remoteDeletes.isEmpty, "excluding a file must never delete it remotely")
+        XCTAssertTrue(plan.isEmpty, "an excluded, otherwise-unchanged tree yields no actions")
+    }
+
+    func testExcludedRemoteFileIsNotDownloaded() {
+        let plan = FolderSyncPlanner.plan(
+            base: [:],
+            local: [:],
+            remote: ["secrets/.env": "sha_env", "readme.md": "sha_r"],
+            isIgnored: { $0.hasPrefix("secrets/") }
+        )
+        XCTAssertEqual(plan.downloads, ["readme.md"])
+        XCTAssertFalse(plan.downloads.contains("secrets/.env"))
+    }
+
     // MARK: Blob hashing matches git.
 
     func testGitBlobHashMatchesGit() {
