@@ -1,6 +1,6 @@
 import Foundation
 
-/// Swift mirror of `@gitkit/gitkanban-core`'s board schema. The TypeScript package
+/// Swift mirror of `@gitkittie/gitkanban-core`'s board schema. The TypeScript package
 /// is the source of truth; these types must stay in step with it. See
 /// `project-assets/Tasks/README.md` for the canonical contract.
 

@@ -3,7 +3,7 @@
 ## Phase 0 — Contract and setup
 
 - Scaffold the Vue/Vite workspace under `apps/gitkanban-web`.
-- Add `@gitkit/gitkanban-core`, Vue, Pinia, `bemm`, `@sil/ui`, Nizel/markdown rendering, Vitest,
+- Add `@gitkittie/gitkanban-core`, Vue, Pinia, `bemm`, `@sil/ui`, Nizel/markdown rendering, Vitest,
   and Playwright.
 - Add app-local styles using existing website token conventions without importing website code.
 - Add typed models for repository/session/UI state that wrap, not duplicate, `gitkanban-core`.

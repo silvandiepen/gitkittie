@@ -17,7 +17,7 @@ It must not depend on:
 ## Where things live
 
 - **Code:** `apps/gitbud-ios/GitBud/` once scaffolded.
-- **Shared Swift:** `../../swift/GitKit` for provider-agnostic models that do
+- **Shared Swift:** `../../swift/GitKittieKit` for provider-agnostic models that do
   not assume shell git or local checkouts.
 - **App docs:** `apps/gitbud-ios/docs/{Features,Decisions,Architecture}.md`.
 - **GitPont:** remote repositories, branches, file reads/writes, provider auth,

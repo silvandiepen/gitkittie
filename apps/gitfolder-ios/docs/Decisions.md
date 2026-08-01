@@ -1,7 +1,7 @@
 # GitFolder iOS — Decisions (ADR-lite)
 
 The app is unbuilt; every decision here is **proposed** or **open**. Sources: the plan
-(`Projects/GitKit/Gitfolder/plans/ios-app-plan.md`), the transport rationale
+(`Projects/GitKittie/Gitfolder/plans/ios-app-plan.md`), the transport rationale
 (`GitKanban/plan/platforms-and-git.md`), and the libgit2 spike (`spikes/libgit2-ios/`).
 Nothing here is ratified by shipped code.
 
@@ -52,10 +52,10 @@ the single most important finding the spike must record.
 ### 3. One `GitEngine` protocol shared with macOS — not a second abstraction
 
 **Decision:** The iOS `Libgit2Engine` conforms to the **same `GitEngine` protocol** as
-the macOS `ShellGitEngine` in `swift/GitKit`. Do **not** build a separate iOS git
+the macOS `ShellGitEngine` in `swift/GitKittieKit`. Do **not** build a separate iOS git
 abstraction.
 
-**Context:** `swift/GitKit` already defines `GitEngine`
+**Context:** `swift/GitKittieKit` already defines `GitEngine`
 (`clone / pullRebase / commit / push / status / fileHistory`) with `ShellGitEngine`
 implemented for macOS and `Libgit2Engine` pending. The app/UI layer calls only through
 that protocol, which is what lets one UI run on shell-git (macOS) and libgit2 (iOS)

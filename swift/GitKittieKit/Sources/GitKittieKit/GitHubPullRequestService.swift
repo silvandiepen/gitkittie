@@ -221,7 +221,7 @@ public struct GitHubPullRequestService: Sendable {
     public init(
         session: URLSession = .shared,
         apiBaseURL: URL = URL(string: "https://api.github.com")!,
-        userAgent: String = "GitKit"
+        userAgent: String = "GitKittie"
     ) {
         self.session = session
         self.apiBaseURL = apiBaseURL

@@ -1,17 +1,17 @@
-# GitKit — Decisions (monorepo)
+# GitKittie — Decisions (monorepo)
 
 An ADR-lite log of **cross-cutting, monorepo-wide** decisions — the ones that shape the whole
 repo rather than a single app. Per-app decisions live in each app's `docs/Decisions.md`.
 
 Each entry: **Decision**, **Context**, **Rationale**, **Status** (accepted / proposed / open).
-Referenced task cards use the `GITKIT-###` ids from the GitKit board
+Referenced task cards use the `GITKIT-###` ids from the GitKittie board
 (`project-assets/Tasks/GitKit/`).
 
 ---
 
-### 1. Reframe the repo as a GitKit monorepo housing both products
+### 1. Reframe the repo as a GitKittie monorepo housing both products
 
-**Decision.** The repository is the **GitKit monorepo** (root package `gitkit-monorepo`), an
+**Decision.** The repository is the **GitKittie monorepo** (root package `gitkittie-monorepo`), an
 umbrella for git-backed apps — GitFolder and GitKanban — not a single-product GitFolder repo.
 
 **Context.** GitFolder shipped first, and the repo was originally `gitfolder-monorepo`. GitKanban
@@ -30,7 +30,7 @@ real cost is a one-time refactor to lift GitFolder's inline services into a shar
 
 ### 2. Apps depend on packages, never on each other
 
-**Decision.** An app may depend on a shared package (`swift/GitKit` for Swift, `packages/*` for
+**Decision.** An app may depend on a shared package (`swift/GitKittieKit` for Swift, `packages/*` for
 TypeScript). An app **must never** import from another app.
 
 **Context.** With four app targets sharing logic, cross-app imports would recreate the drift the
@@ -65,9 +65,9 @@ rule is *aspirational* for GitFolder and *realized* for GitKanban.
 
 ---
 
-### 4. One shared Swift `GitKit` package, extracted from GitFolder
+### 4. One shared Swift `GitKittie` package, extracted from GitFolder
 
-**Decision.** A single Swift package `swift/GitKit` owns the shared native services — `GitEngine`,
+**Decision.** A single Swift package `swift/GitKittieKit` owns the shared native services — `GitEngine`,
 `ConfigStore`, `KeychainService`, `GitHubOAuthService`, `FolderAccessService` — extracted out of
 GitFolder's inline `Services/`. Both native apps depend on it.
 
@@ -94,7 +94,7 @@ with embedded libgit2 over HTTPS (`Libgit2Engine`). The UI only ever calls the p
 
 **Context.** iOS has **no shell, no user-invokable `git` binary, and no subprocess execution**, so
 GitFolder's shell-out approach does not port. This platform delta is the defining architectural
-constraint for going cross-platform. (`project-assets` `GitKit/GitKanban/plan/platforms-and-git.md`)
+constraint for going cross-platform. (`project-assets` `GitKittie/GitKanban/plan/platforms-and-git.md`)
 
 **Rationale.** The protocol boundary lets the same board/UI layer run unchanged on both backends and
 lets the engine choice change cheaply. Ship macOS on shell-out to move fast; introduce libgit2 for
@@ -117,7 +117,7 @@ reviewable project definitions.
 
 **Rationale.** `project.yml` is text — diffable, mergeable, and the single source of the target's
 settings, entitlements, and package dependencies (e.g. `gitkanban-macos` declares its dependency on
-`swift/GitKit` in `project.yml`). Regenerate with `npm run macos:generate` (GitFolder) or
+`swift/GitKittieKit` in `project.yml`). Regenerate with `npm run macos:generate` (GitFolder) or
 `xcodegen generate` in the app dir.
 
 **Status.** Accepted.
@@ -144,7 +144,7 @@ what CI runs.
 
 **Decision.** CI is split into four GitHub Actions workflows: `check.yml` (npm workspaces on
 ubuntu), `macos-native.yml` (XcodeGen generate + xcodebuild test + Release/archive of GitFolder on
-macos-15), `swift-gitkit.yml` (`swift build`/`swift test` of the GitKit package, path-filtered), and
+macos-15), `swift-gitkittiekit.yml` (`swift build`/`swift test` of the GitKittie package, path-filtered), and
 `deploy-website.yml` (build + Cloudflare Pages deploy on push to `main`).
 
 **Context.** GitFolder's audit flagged that the repo *lacked* Swift CI; the swift package needs its
@@ -175,7 +175,7 @@ of GitFolder's existing Cloudflare setup. (Deploy project name is currently `git
 ### 10. Product plans live in `project-assets`; the code repo mirrors GitFolder's plans
 
 **Decision.** Product specs, plans, and the task board live in the separate `project-assets` repo
-(`GitKit/Gitfolder/`, `GitKit/GitKanban/plan/`, `Tasks/GitKit/`). The code repo's `docs/` mirrors the
+(`GitKittie/Gitfolder/`, `GitKittie/GitKanban/plan/`, `Tasks/GitKit/`). The code repo's `docs/` mirrors the
 GitFolder product plans; GitKanban's plan is *not* duplicated into the code repo.
 
 **Context.** Plans, audits, and the kanban board are living documents maintained outside the build.
@@ -191,10 +191,10 @@ docs *reference* the existing `docs/*.md` plans rather than restating them.
 ### 11. Naming and scope cleanup (deferred, tracked)
 
 **Decision.** Renamed `apps/native-macos` → `apps/gitfolder-macos` (GITKIT-007, done), and unify TS
-package scopes under `@gitkit/*` (GITKIT-008, still open) — `packages/core` is still `@gitfolder/core`
-while `packages/gitkanban-core` is already `@gitkit/gitkanban-core`.
+package scopes under `@gitkittie/*` (GITKIT-008, still open) — `packages/core` is still `@gitkittie/core`
+while `packages/gitkanban-core` is already `@gitkittie/gitkanban-core`.
 
-**Context.** Both names predate the GitKit reframe. With multiple products, `native-macos` named a
+**Context.** Both names predate the GitKittie reframe. With multiple products, `native-macos` named a
 platform not a product, and the mixed `@gitfolder` / `@gitkit` scopes are inconsistent.
 
 **Rationale.** Consistency and disambiguation; low-risk internal-only renames. Deferred (P3) because

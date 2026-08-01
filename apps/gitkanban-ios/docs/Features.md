@@ -10,7 +10,7 @@ marked **Planned**; where the plan is silent on an iOS specific, the entry says 
 | Mark | Meaning |
 |---|---|
 | **Done** | Implemented and running in the app today. |
-| **Planned** | Specced / tracked on the GitKit board; not built yet. |
+| **Planned** | Specced / tracked on the GitKittie board; not built yet. |
 
 ## Guiding contract (inherited, not re-invented)
 
@@ -20,8 +20,8 @@ marked **Planned**; where the plan is silent on an iOS specific, the entry says 
 - Config inheritance (`root` → `project`): lanes **replace**, vocabularies **merge**.
 - Unknown frontmatter/config keys are **preserved on round-trip**.
 
-All of the above is owned by [`@gitkit/gitkanban-core`](../../../packages/gitkanban-core/)
-(TypeScript, the source of truth) and mirrored into Swift (`swift/GitKit`). iOS consumes that mirror
+All of the above is owned by [`@gitkittie/gitkanban-core`](../../../packages/gitkanban-core/)
+(TypeScript, the source of truth) and mirrored into Swift (`swift/GitKittieKit`). iOS consumes that mirror
 via `RemoteBoardStore` + `BoardFileSource` — it does not fork the schema.
 
 ## Feature set

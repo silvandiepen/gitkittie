@@ -17,7 +17,7 @@ apps/gitkanban-macos/*.xcodeproj/
 apps/gitkanban-macos/DerivedData/
 apps/gitkanban-macos/GitKanban/Info.plist
 apps/gitkanban-macos/GitKanban/GitKanban.entitlements
-swift/GitKit/Package.resolved
+swift/GitKittieKit/Package.resolved
 apps/gitkanban-macos/build/
 apps/gitkanban-macos/*.xcuserdata/
 apps/gitkanban-ios/*.xcodeproj/

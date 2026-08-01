@@ -8,7 +8,7 @@
 - **Conflict UX.** Merge, rebase, revert, cherry-pick, pull-rebase, and stash-pop conflicts now
   surface through the shared conflict model with `Your change` / `REmote change` labels. Continue
   and abort recovery are covered at the AppModel level across the shared conflict modes, including
-  a real merge-conflict continuation that lands as a two-parent merge commit. GitKit also has
+  a real merge-conflict continuation that lands as a two-parent merge commit. GitKittie also has
   real-git coverage for side-choice mapping across merge, rebase, revert, cherry-pick, and
   stash-pop conflicts.
 - **Purge blast radius.** Full-history purge affects branches, tags, remotes, and collaborators.
@@ -26,7 +26,7 @@
 - Which providers should GitPont support for GitBud v1 beyond the providers already available in
   the dependency?
 - Should protected branches be configured locally by GitBud, read from provider metadata, or both?
-- Which modern history filtering tool should GitKit wrap for purge on macOS?
-- Should app-managed remote checkouts be shared with other GitKit apps or isolated per product?
+- Which modern history filtering tool should GitKittie wrap for purge on macOS?
+- Should app-managed remote checkouts be shared with other GitKittie apps or isolated per product?
 - What is the minimum Magic prompt context that produces useful messages without sending excessive
   repository data?

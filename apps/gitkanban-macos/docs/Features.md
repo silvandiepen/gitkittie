@@ -12,14 +12,14 @@ a commit; sync is `git pull` / `git push` against the user's own remote.
 | Mark | Meaning |
 |---|---|
 | **Exists** | Implemented and running in the app today. |
-| **Planned** | Specced in the plan / tracked on the GitKit board; not built yet. |
+| **Planned** | Specced in the plan / tracked on the GitKittie board; not built yet. |
 
 The macOS **app builds and runs a working read/write board**. It connects to GitHub with
 device-flow OAuth, clones the chosen repo into an app-owned checkout, and renders, creates, edits,
 moves, reorders, deletes, filters, searches, and syncs cards — committing and pushing every
 mutation. The board *logic* it uses (schema, inheritance, ordering, validation) lives in the
-TypeScript package [`@gitkit/gitkanban-core`](../../../packages/gitkanban-core/) and is mirrored in
-`swift/GitKit`; the board *format* is the canonical contract in
+TypeScript package [`@gitkittie/gitkanban-core`](../../../packages/gitkanban-core/) and is mirrored in
+`swift/GitKittieKit`; the board *format* is the canonical contract in
 `/Users/silvandiepen/Projects/Tasks/README.md`. What remains **Planned** is background interval
 sync, a conflict-resolution UI, and fractional rank keys in the app; see
 [Architecture.md](./Architecture.md) for what is on disk versus tracked.

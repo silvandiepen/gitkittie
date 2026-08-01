@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// The verb registry. Every git operation the user can invoke is declared here once,

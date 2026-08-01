@@ -25,21 +25,21 @@ for the rest.
   lane folder, and config lives in root/project README frontmatter with inheritance. Treat it as
   the authoritative schema. Moving a card means moving its file into the new lane folder **and**
   updating `status`.
-- **Git and board parsing come from `swift/GitKit`,** not inline copies — `GitEngine`/
+- **Git and board parsing come from `swift/GitKittieKit`,** not inline copies — `GitEngine`/
   `ShellGitEngine`, `BoardStore`/`BoardMarkdown`/`BoardModel`/`BoardInheritance`, `RemoteBoardStore`,
   `KeychainService`, `GitHubOAuthService`, `GitHubReposService`, `CardText`. Apps depend on
   packages, never on each other or on GitFolder.
 - **Preserve unknown frontmatter keys.** Writes must round-trip untouched keys (a read-then-write
   of an unchanged card should be a zero diff). External writers (sills, CI, agents) add fields the
   app does not model; do not drop them. NB: card writes currently compose frontmatter by hand in
-  `AppModel`; routing them through GitKit/Yams and hardening round-trip fidelity is tracked on the
+  `AppModel`; routing them through GitKittie/Yams and hardening round-trip fidelity is tracked on the
   board — keep that guarantee in mind when touching the write path.
 - **XcodeGen only.** Never hand-edit the `.xcodeproj`. Edit `project.yml`, then regenerate:
   `cd apps/gitkanban-macos && xcodegen generate`.
 
 ## Where the plan and tasks live
 
-- **Plan / spec:** `/Users/silvandiepen/Projects/GitKit/GitKanban/plan/` (`README.md`,
+- **Plan / spec:** `/Users/silvandiepen/Projects/GitKittie/GitKanban/plan/` (`README.md`,
   `product-spec.md`, `data-model.md`, `sync-model.md`, `architecture.md`, `platforms-and-git.md`,
   `implementation-plan.md`, `phase-1.md`, `risks-and-open-questions.md`).
 - **Task board:** `/Users/silvandiepen/Projects/Tasks/GitKit/` — cards with a `GITKIT-###` id and

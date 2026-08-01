@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// What you clicked on: the message, its files, its diff, and the verbs that apply.

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Resolve a project's effective configuration by overlaying it on the root,
-/// mirroring `@gitkit/gitkanban-core`'s `resolveEffectiveConfig`:
+/// mirroring `@gitkittie/gitkanban-core`'s `resolveEffectiveConfig`:
 /// - Lanes **replace** (a non-empty project lane list wins; else inherit root).
 /// - Vocabularies (users/epics/priorities/types/tags) **merge**; same id → project wins.
 public func resolveEffectiveConfig(_ root: BoardConfig, _ project: ProjectConfig? = nil) -> EffectiveConfig {

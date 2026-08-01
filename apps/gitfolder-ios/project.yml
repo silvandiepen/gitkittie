@@ -19,8 +19,8 @@ packages:
     url: https://github.com/silvandiepen/git-pont.git
     branch: codex/initial-git-pont-monorepo
   # Shared Swift helpers (KeychainService).
-  GitKit:
-    path: ../../swift/GitKit
+  GitKittieKit:
+    path: ../../swift/GitKittieKit
 
 targets:
   GitFolder:
@@ -35,8 +35,8 @@ targets:
         product: GitPontGitHub
       - package: git-pont
         product: GitPontGitLab
-      - package: GitKit
-        product: GitKit
+      - package: GitKittieKit
+        product: GitKittieKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitfolder

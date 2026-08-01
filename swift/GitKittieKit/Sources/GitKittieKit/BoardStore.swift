@@ -2,7 +2,7 @@ import Foundation
 import Yams
 
 /// Parsing board configuration and cards from markdown/YAML, and assembling a
-/// board's columns. Mirrors the read path of `@gitkit/gitkanban-core`.
+/// board's columns. Mirrors the read path of `@gitkittie/gitkanban-core`.
 public enum BoardStore {
 
     // MARK: Config parsing (from a README's YAML frontmatter)

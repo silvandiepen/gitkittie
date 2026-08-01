@@ -1,6 +1,6 @@
 import AppKit
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// One verb the user can invoke on something.

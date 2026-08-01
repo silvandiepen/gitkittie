@@ -1,5 +1,5 @@
 import Foundation
-import GitKit
+import GitKittieKit
 
 /// A config inferred from a board's folders + card fields, used to prefill the setup sheet.
 public struct DetectedBoardConfig {

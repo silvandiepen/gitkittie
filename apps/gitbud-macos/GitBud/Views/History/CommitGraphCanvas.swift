@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// Draws one row's worth of the commit graph.

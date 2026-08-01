@@ -1,5 +1,5 @@
 import XCTest
-@testable import GitKit
+@testable import GitKittieKit
 
 #if os(macOS)
 final class GitHistoryTests: XCTestCase {

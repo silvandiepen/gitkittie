@@ -32,7 +32,7 @@ engine. It reaches the repo over HTTPS through git-pont instead.
            │ load/parse                     │ read/write files
            ▼                               ▼
 ┌────────────────────────┐     ┌───────────────────────────────┐
-│  GitKit RemoteBoardStore│     │  GitPontFileSource            │  Exists
+│  GitKittie RemoteBoardStore│     │  GitPontFileSource            │  Exists
 │  + BoardMarkdown/CardText│    │  (conforms to BoardFileSource)│
 │  build Workspace/columns │    │  list/readText/write/delete    │
 └────────────────────────┘     └───────────────┬───────────────┘
@@ -52,7 +52,7 @@ engine. It reaches the repo over HTTPS through git-pont instead.
 | Layer | State on iOS | Where it lives |
 |---|---|---|
 | `gitkanban-core` board schema + logic (TS) | **Exists** (built + tested) | `packages/gitkanban-core` |
-| Swift board model + parsing | **Exists** | `swift/GitKit` (`RemoteBoardStore`, `BoardFileSource`, `BoardMarkdown`, `CardText`, `BoardModel`) |
+| Swift board model + parsing | **Exists** | `swift/GitKittieKit` (`RemoteBoardStore`, `BoardFileSource`, `BoardMarkdown`, `CardText`, `BoardModel`) |
 | API transport (`GitPontFileSource` over git-pont) | **Exists** | `apps/gitkanban-ios` + `_libs/git-pont` |
 | Connect / repo picker / board render / card CRUD | **Exists** | `apps/gitkanban-ios/GitKanban` |
 | Kanban/list view toggle + backlog-last ordering | **Exists** | `BoardScreen` (`viewMode`) |
@@ -92,7 +92,7 @@ apps/gitkanban-ios/GitKanban/
 
 ## Dependency direction (monorepo rule)
 
-- Apps depend on packages, **never on each other**. GitKanban iOS depends on `swift/GitKit` and
+- Apps depend on packages, **never on each other**. GitKanban iOS depends on `swift/GitKittieKit` and
   git-pont, and mirrors `packages/gitkanban-core`; it does not import from `gitkanban-macos` or
   `gitfolder-*`.
 - There is no shared SwiftUI board layer today — the iOS UI is written here.

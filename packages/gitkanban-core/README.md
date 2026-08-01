@@ -1,4 +1,4 @@
-# @gitkit/gitkanban-core
+# @gitkittie/gitkanban-core
 
 The platform-agnostic contract for **GitKanban** boards: the schema and logic for
 turning a git repo of markdown files into a kanban board. TypeScript is the source

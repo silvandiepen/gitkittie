@@ -15,8 +15,8 @@ settings:
 
 packages:
   # The shared Swift engine both native apps depend on.
-  GitKit:
-    path: ../../swift/GitKit
+  GitKittieKit:
+    path: ../../swift/GitKittieKit
   # Provider REST transport types used by the UI (GitRepository, OAuth session).
   git-pont:
     url: https://github.com/silvandiepen/git-pont.git
@@ -34,8 +34,8 @@ targets:
     dependencies:
       - package: GitKanbanKit
         product: GitKanbanKit
-      - package: GitKit
-        product: GitKit
+      - package: GitKittieKit
+        product: GitKittieKit
       - package: git-pont
         product: GitPontCore
     settings:

@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// Pull requests from the connected provider: the list, and the review.

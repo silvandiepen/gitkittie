@@ -14,8 +14,8 @@ settings:
     DEVELOPMENT_TEAM: "38MGF83L2L"
 
 packages:
-  GitKit:
-    path: ../../swift/GitKit
+  GitKittieKit:
+    path: ../../swift/GitKittieKit
   git-pont:
     url: https://github.com/silvandiepen/git-pont.git
     branch: codex/initial-git-pont-monorepo
@@ -27,8 +27,8 @@ targets:
     sources:
       - path: GitBud/Core
     dependencies:
-      - package: GitKit
-        product: GitKit
+      - package: GitKittieKit
+        product: GitKittieKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitbud.core
@@ -43,8 +43,8 @@ targets:
           - Core
     dependencies:
       - target: GitBudCore
-      - package: GitKit
-        product: GitKit
+      - package: GitKittieKit
+        product: GitKittieKit
       - package: git-pont
         product: GitPontCore
     settings:
@@ -79,8 +79,8 @@ targets:
       - path: Tests
     dependencies:
       - target: GitBudCore
-      - package: GitKit
-        product: GitKit
+      - package: GitKittieKit
+        product: GitKittieKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitbud.tests

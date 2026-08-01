@@ -1,9 +1,9 @@
-# GitKit — Agent Instructions
+# GitKittie — Agent Instructions
 
 Entry point for any agent (or human) working in this repo. Read this first, then the
 per-app `AGENTS.md` for whichever app you're touching.
 
-GitKit is a **monorepo for git-backed apps**: three products — **GitFolder**, **GitKanban**,
+GitKittie is a **monorepo for git-backed apps**: three products — **GitFolder**, **GitKanban**,
 and **GitBud** — each targeting Apple platforms, plus a marketing website, all sharing one git
 engine. The products are local-first or remote-provider-first depending on platform, own-your-data,
 no-server apps that treat a git repository as the source of truth.
@@ -35,24 +35,24 @@ apps/
   gitbud-ios/         GitBud — iOS/iPadOS remote git client (planned; docs/spec only)
   website/            Marketing/docs site (Vue 3 + Vite)
 packages/
-  core/               @gitfolder/core — GitFolder's TypeScript config contract
-  gitkanban-core/     @gitkit/gitkanban-core — GitKanban board schema + logic (TS, tested)
+  core/               @gitkittie/core — GitFolder's TypeScript config contract
+  gitkanban-core/     @gitkittie/gitkanban-core — GitKanban board schema + logic (TS, tested)
 swift/
-  GitKit/             Shared Swift package: GitEngine + app services (config, keychain, OAuth)
-docs/                 Global GitKit docs + GitFolder product plans
+  GitKittieKit/             Shared Swift package: GitEngine + app services (config, keychain, OAuth)
+docs/                 Global GitKittie docs + GitFolder product plans
 ```
 
 **Dependency rule (hard):** apps depend on packages, **never on each other**. Shared logic
-belongs in a package — `swift/GitKit` (Swift) or `packages/*` (TypeScript) — not a cross-app
+belongs in a package — `swift/GitKittieKit` (Swift) or `packages/*` (TypeScript) — not a cross-app
 import. TypeScript is the source of truth for the board/config contracts; the Swift apps mirror
 those packages, they do not fork them.
 
 ## Where the plans and tasks live
 
-- **Product plans & specs:** the `project-assets` repo under `GitKit/` (`GitKit/Gitfolder/`,
-  `GitKit/GitKanban/plan/`; GitBud docs currently live under `apps/gitbud-*`). The code repo's
+- **Product plans & specs:** the `project-assets` repo under `GitKittie/` (`GitKittie/Gitfolder/`,
+  `GitKittie/GitKanban/plan/`; GitBud docs currently live under `apps/gitbud-*`). The code repo's
   `docs/` mirrors the GitFolder product docs.
-- **Task board:** the `GitKit` board in `project-assets/Tasks/GitKit/` (canonical format:
+- **Task board:** the `GitKittie` board in `project-assets/Tasks/GitKit/` (canonical format:
   `project-assets/Tasks/README.md`). Cards carry a `GITKIT-###` or `GITFOLDER-###` id and an
   `epic:` (`gitfolder`, `gitkanban-core`, `gitkit-swift`, `gitkanban-macos`, `gitkanban-ios`,
   `monorepo-setup`). Every board mutation is committed and pushed.
@@ -71,7 +71,7 @@ npm run gitbud:test         # build + test the GitBud macOS app
 
 Swift apps use **XcodeGen** — never hand-edit `.xcodeproj`; edit `project.yml` and regenerate.
 CI (`.github/workflows/`): `check.yml` (npm), `macos-native.yml` (build+test GitFolder),
-`swift-gitkit.yml` (GitKit package), `deploy-website.yml` (Cloudflare).
+`swift-gitkittiekit.yml` (GitKittie package), `deploy-website.yml` (Cloudflare).
 
 ## Conventions
 

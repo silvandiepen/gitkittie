@@ -2,7 +2,7 @@
 
 An ADR-lite log of significant product, design, and technical decisions for the
 GitFolder macOS app. Entries are mined from the product plans (`docs/`), the deep
-Sills audit (`GitKit/Gitfolder/audit/`), and the `GITFOLDER-0xx` task cards. Where
+Sills audit (`GitKittie/Gitfolder/audit/`), and the `GITFOLDER-0xx` task cards. Where
 a decision is not yet made, it is recorded as **Open**.
 
 Status legend: **accepted** (in the shipping code) · **proposed** (planned,
@@ -176,15 +176,15 @@ the reset-to-empty path is a latent data-loss bug the moment a v2 schema ships.
 
 ---
 
-### 10. Shared Swift package (`swift/GitKit`) — extract app services over time
+### 10. Shared Swift package (`swift/GitKittieKit`) — extract app services over time
 
-**Decision:** Cross-app Swift logic lives in `swift/GitKit`. GitFolder already
-consumes GitKit's **`KeychainService`** and **`GitHubOAuthService`**. GitKit also
+**Decision:** Cross-app Swift logic lives in `swift/GitKittieKit`. GitFolder already
+consumes GitKittie's **`KeychainService`** and **`GitHubOAuthService`**. GitKittie also
 defines a `GitEngine` protocol with a `ShellGitEngine` (ported from GitFolder's
 `GitRunner`) and a planned iOS `Libgit2Engine`.
 
 **Context:** Root `AGENTS.md` dependency rule: apps depend on packages, never on
-each other; the Swift apps mirror the shared package, they don't fork it. GitKit
+each other; the Swift apps mirror the shared package, they don't fork it. GitKittie
 `README.md` lists `FolderAccessService`, `ConfigStore`, and a `MarkdownStore` as
 **pending extraction** — they still live inline in GitFolder.
 
@@ -193,7 +193,7 @@ GitKanban (macOS + iOS) avoids a third hand-copy (GITFOLDER-029). Extraction is
 staged because each move needs an Xcode build to verify GitFolder still compiles.
 
 **Status:** accepted (direction); extraction **in progress**. Note: GitFolder's
-`GitSyncEngine` still uses its **own** `GitRunner` + `git-pont`, not GitKit's
+`GitSyncEngine` still uses its **own** `GitRunner` + `git-pont`, not GitKittie's
 `GitEngine`, so the engine consolidation is not done.
 
 ---
@@ -271,7 +271,7 @@ follow-up.
 **Decision (accepted, done):** The app directory was renamed from
 `apps/native-macos/` to `apps/gitfolder-macos/` (GITKIT-007).
 
-**Context:** With a second product (GitKanban) under the GitKit umbrella,
+**Context:** With a second product (GitKanban) under the GitKittie umbrella,
 `native-macos` was ambiguous — it names a platform, not a product.
 
 **Rationale:** Consistency with `gitkanban-macos`/`gitkanban-ios`; the folder now

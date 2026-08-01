@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// Four destinations and the repository's current state. Nothing here performs git work —

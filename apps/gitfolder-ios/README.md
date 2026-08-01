@@ -28,10 +28,10 @@ v0.1; a true offline clone can return later as an enhancement.
 
 | What | Where |
 |---|---|
-| Full product & implementation plan | `Projects/GitKit/Gitfolder/plans/ios-app-plan.md` |
-| iOS git-transport rationale | `Projects/GitKit/GitKanban/plan/platforms-and-git.md` |
+| Full product & implementation plan | `Projects/GitKittie/Gitfolder/plans/ios-app-plan.md` |
+| iOS git-transport rationale | `Projects/GitKittie/GitKanban/plan/platforms-and-git.md` |
 | libgit2 iOS spike (branch, not in working tree) | `spikes/libgit2-ios/` on `origin/claude/gitfolder-audit-ios-plan-w4ayyo` |
-| Shared Swift package (the `GitEngine` both platforms share) | `swift/GitKit/README.md` |
+| Shared Swift package (the `GitEngine` both platforms share) | `swift/GitKittieKit/README.md` |
 | macOS app this mirrors | `apps/gitfolder-macos/README.md` |
 
 ### Task cards (GITFOLDER-028 .. 035)

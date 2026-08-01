@@ -1,5 +1,5 @@
 import XCTest
-@testable import GitKit
+@testable import GitKittieKit
 
 final class CommitGraphLayoutTests: XCTestCase {
     func testLinearHistoryStaysInOneLane() {

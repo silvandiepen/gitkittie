@@ -1,12 +1,12 @@
 import XCTest
-@testable import GitKit
+@testable import GitKittieKit
 
 final class WorkspaceTests: XCTestCase {
     private var root: URL!
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("gitkit-workspace-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("gitkittie-workspace-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 

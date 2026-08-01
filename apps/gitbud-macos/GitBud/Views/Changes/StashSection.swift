@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// Stashes, collapsed until you have one. Actions hang off each stash rather than a

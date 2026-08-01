@@ -42,7 +42,7 @@ modeled, documented, or claimed but not yet built**. Status reflects the code in
 
 - **Connect GitHub** — GitHub OAuth **device flow**: the app shows a user code,
   opens `github.com`, polls for the token, and looks up the account login
-  (`GitHubOAuthService` from GitKit). This is the default and primary path.
+  (`GitHubOAuthService` from GitKittie). This is the default and primary path.
 - **PAT** — paste a fine-grained personal access token instead
   (`SecureField`), for users who prefer not to use the device flow.
 - Token is stored **only in the macOS Keychain**

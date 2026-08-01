@@ -2,8 +2,8 @@
 
 **Status: Planned.** No iOS code exists yet. This describes the intended architecture and
 marks clearly which parts are **proven**, **in progress**, or **planned**. Sources:
-`Projects/GitKit/Gitfolder/plans/ios-app-plan.md` (Section 9),
-`GitKanban/plan/platforms-and-git.md`, `swift/GitKit/README.md`, and the spike in
+`Projects/GitKittie/Gitfolder/plans/ios-app-plan.md` (Section 9),
+`GitKanban/plan/platforms-and-git.md`, `swift/GitKittieKit/README.md`, and the spike in
 `spikes/libgit2-ios/`.
 
 ## Guiding principle
@@ -29,7 +29,7 @@ unchanged. The only platform-specific piece is the concrete `GitEngine` implemen
         │                           │
 ┌───────▼───────────────┐  ┌────────▼─────────────┐  ┌────────────────────┐
 │ GitEngine (protocol)   │  │ GitHubService        │  │ KeychainService    │
-│ swift/GitKit — SHARED  │  │ REST + device OAuth  │  │ token storage      │
+│ swift/GitKittieKit — SHARED  │  │ REST + device OAuth  │  │ token storage      │
 │ clone/pullRebase/      │  │ (Foundation-only,    │  │ (shared, ✅ done)   │
 │ commit/push/status/    │  │ shared, ✅ done)      │  └────────────────────┘
 │ fileHistory            │  └──────────┬───────────┘
@@ -51,7 +51,7 @@ On macOS the same `GitEngine` protocol is satisfied by `ShellGitEngine` (subproc
 ```mermaid
 flowchart TD
     UI["App UI (SwiftUI)<br/>planned"] --> KIT["GitFolderKit<br/>shared domain · planned"]
-    KIT --> ENG["GitEngine protocol<br/>swift/GitKit · shared"]
+    KIT --> ENG["GitEngine protocol<br/>swift/GitKittieKit · shared"]
     KIT --> GH["GitHubService<br/>REST + device OAuth · done"]
     KIT --> KC["KeychainService<br/>token · done"]
     ENG -. "macOS · proven" .-> SHELL["ShellGitEngine<br/>subprocess git"]
@@ -64,7 +64,7 @@ flowchart TD
 
 | Component | Layer | Platform | Status |
 |---|---|---|---|
-| `GitEngine` protocol | engine boundary | shared | Exists in `swift/GitKit` |
+| `GitEngine` protocol | engine boundary | shared | Exists in `swift/GitKittieKit` |
 | `ShellGitEngine` | engine impl | macOS | Proven (ported from `GitRunner`, tested) |
 | `Libgit2Engine` | engine impl | iOS | **Planned** — spike must prove transport |
 | `KeychainService` | secrets | shared | Done |

@@ -1,5 +1,5 @@
 import XCTest
-import GitKit
+import GitKittieKit
 @testable import GitBudCore
 
 @MainActor

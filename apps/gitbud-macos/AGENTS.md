@@ -24,7 +24,7 @@ Phase 1 is macOS-first and supports:
 - **Code:** `apps/gitbud-macos/GitBud/` for app UI and state sources.
 - **Testable app core:** the XcodeGen `GitBudCore` framework target compiles
   `AppModel` and settings for non-hosted unit tests.
-- **Shared Swift:** `../../swift/GitKit` owns git graph, diff, rewrite, safety,
+- **Shared Swift:** `../../swift/GitKittieKit` owns git graph, diff, rewrite, safety,
   and purge primitives. GitBud UI must not launch git directly.
 - **App docs:** `apps/gitbud-macos/docs/{Features,Decisions,Architecture}.md`.
 - **GitPont:** provider auth, remote repo listing, branch metadata, HTTPS git
@@ -38,7 +38,7 @@ Phase 1 is macOS-first and supports:
   hosted app launch for git rewrite tests.
 - Views call `AppModel` intents only; git/AIPont/GitPont operations sit behind
   UI-agnostic services.
-- Shell git is allowed on macOS only through GitKit service boundaries.
+- Shell git is allowed on macOS only through GitKittie service boundaries.
 - Use argv-based process launching only; never build shell strings with user
   repo paths, branches, refs, or commit messages.
 - Store persisted provider tokens and AI keys only in Keychain.

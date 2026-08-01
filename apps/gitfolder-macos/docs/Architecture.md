@@ -2,7 +2,7 @@
 
 How the GitFolder macOS app is built. Scope: the shipping SwiftUI/AppKit target
 under `apps/gitfolder-macos/GitFolder/` and its dependency on the shared
-`swift/GitKit` package. Reflects the current source, not the aspirational
+`swift/GitKittieKit` package. Reflects the current source, not the aspirational
 `docs/`/`packages/core` model.
 
 ## Layering at a glance
@@ -18,7 +18,7 @@ Services                        ConfigStore · FolderAccessService · GitRunner
                                 GitSyncEngine · LoginItemService
         │  depends on
         ▼
-swift/GitKit (SwiftPM)          KeychainService · GitHubOAuthService
+swift/GitKittieKit (SwiftPM)          KeychainService · GitHubOAuthService
 git-pont (SwiftPM)              GitPontCore / GitPontGitCLI (credential context)
 system git / ssh (subprocess)
 ```
@@ -50,8 +50,8 @@ fakes):
 |---|---|---|
 | `ConfigStore` | Load/save `config.json` | inline (`Services/`) |
 | `GitSyncEngine` | Run the per-folder sync pipeline | inline (`Services/`) |
-| `KeychainService` | Store/load the GitHub token | **GitKit** |
-| `GitHubOAuthService` | Device-flow OAuth + viewer login | **GitKit** |
+| `KeychainService` | Store/load the GitHub token | **GitKittie** |
+| `GitHubOAuthService` | Device-flow OAuth + viewer login | **GitKittie** |
 | `LoginItemManaging` (`LoginItemService`) | `SMAppService` login item | inline |
 | `UserDefaults` | First-run prompt flag | standard |
 | `Timer` (`scheduler`) | 60-second due-folder tick | Foundation |
@@ -151,16 +151,16 @@ Alternatively the user pastes a fine-grained **PAT** directly into the same
 Keychain slot. The OAuth device flow currently requests the broad classic `repo`
 scope (Decision 3 / GITFOLDER-009).
 
-## Dependency on `swift/GitKit`
+## Dependency on `swift/GitKittieKit`
 
-GitFolder consumes two GitKit services today — `KeychainService` and
+GitFolder consumes two GitKittie services today — `KeychainService` and
 `GitHubOAuthService` (both generalized from GitFolder's originals so GitFolder and
-GitKanban share one implementation). GitKit also ships a `GitEngine` protocol with
+GitKanban share one implementation). GitKittie also ships a `GitEngine` protocol with
 a `ShellGitEngine` (ported from GitFolder's `GitRunner`) and a planned iOS
 `Libgit2Engine`, **but GitFolder's `GitSyncEngine` does not use them yet** — it
-still drives its own `GitRunner` + `git-pont`. Per GitKit's `README.md`,
+still drives its own `GitRunner` + `git-pont`. Per GitKittie's `README.md`,
 `FolderAccessService`, `ConfigStore`, and a `MarkdownStore` are **pending
-extraction** into GitKit; they remain inline in GitFolder until an Xcode build
+extraction** into GitKittie; they remain inline in GitFolder until an Xcode build
 verifies the move. This is the "extract app services over time" direction
 (Decision 10, GITFOLDER-029).
 
@@ -170,8 +170,8 @@ verifies the move. This is the "extract app services over time" direction
   `GitFolder.xcodeproj` (which is git-ignored). Regenerate with
   `npm run macos:generate` (root script) or `xcodegen generate` in
   `apps/gitfolder-macos/`.
-- SwiftPM dependencies declared in `project.yml`: `GitKit` (local path
-  `../../swift/GitKit`) and `git-pont` (remote, **branch-pinned** — Decision 11).
+- SwiftPM dependencies declared in `project.yml`: `GitKittie` (local path
+  `../../swift/GitKittieKit`) and `git-pont` (remote, **branch-pinned** — Decision 11).
 - Entitlements: `com.apple.security.app-sandbox`, `network.client`,
   `files.user-selected.read-write`, `files.bookmarks.app-scope`. Hardened runtime
   on; automatic signing; `LSUIElement` true; min macOS 14.0.

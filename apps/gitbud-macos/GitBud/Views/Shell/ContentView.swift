@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// The window. A sidebar of four surfaces, a toolbar of repository-wide verbs, and

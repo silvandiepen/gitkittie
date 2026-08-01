@@ -1,7 +1,7 @@
 import Foundation
 
 /// String helpers for reading card fields out of markdown, mirroring
-/// `@gitkit/gitkanban-core`'s `bodyfields.ts`. Pure (no YAML) so they are simple
+/// `@gitkittie/gitkanban-core`'s `bodyfields.ts`. Pure (no YAML) so they are simple
 /// and portable.
 public enum BoardMarkdown {
     /// Split a document into its raw YAML frontmatter string and its body.

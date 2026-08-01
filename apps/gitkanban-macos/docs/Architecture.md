@@ -3,7 +3,7 @@
 How GitKanban is built. The theme throughout: **the board contract is owned in TypeScript, the git
 engine and board parsing are shared Swift, and the app is a thin UI + state layer on top.** This
 document is explicit about what **Exists** on disk today versus what is **Planned** / tracked on
-the GitKit board.
+the GitKittie board.
 
 ---
 
@@ -13,18 +13,18 @@ the GitKit board.
 |---|---|---|
 | Board contract (card + config format) | `/Users/silvandiepen/Projects/Tasks/README.md` | **Exists** (canonical, live board) |
 | Board logic (schema, inheritance, rank, validation) | `packages/gitkanban-core` (TS) | **Exists** — built + tested |
-| Shared git engine + services | `swift/GitKit` | **Exists** — `GitEngine`, `ShellGitEngine`, `GitProcessRunner`, `KeychainService`, `GitHubOAuthService`, `GitHubReposService` |
-| Swift board model + parsing | `swift/GitKit` | **Exists** — `BoardStore`, `BoardMarkdown`, `BoardModel`, `BoardInheritance`, `RemoteBoardStore`, `CardText` |
+| Shared git engine + services | `swift/GitKittieKit` | **Exists** — `GitEngine`, `ShellGitEngine`, `GitProcessRunner`, `KeychainService`, `GitHubOAuthService`, `GitHubReposService` |
+| Swift board model + parsing | `swift/GitKittieKit` | **Exists** — `BoardStore`, `BoardMarkdown`, `BoardModel`, `BoardInheritance`, `RemoteBoardStore`, `CardText` |
 | App shell + board UI (read/write) | `apps/gitkanban-macos/GitKanban/` | **Exists** — connect, own-checkout clone, render, create/edit/move/reorder/delete, filter/search, per-card history, commit+push |
 | Background interval sync + conflict UI | `apps/gitkanban-macos/GitKanban/` | **Planned** — writes commit+push immediately; last-writer-wins |
 | Fractional rank keys in the app | `apps/gitkanban-macos/GitKanban/` | **Planned** — the app uses an integer `order` today (core has `rank.ts`) |
 | Swift test target | `apps/gitkanban-macos/project.yml` | **Planned** — no `GitKanbanTests` target yet |
 
-> GITKIT-009 (Swift board model) and GITKIT-010 (board render) shipped in `swift/GitKit` and the
+> GITKIT-009 (Swift board model) and GITKIT-010 (board render) shipped in `swift/GitKittieKit` and the
 > app. GITKIT-011 (editing/move), GITKIT-012 (commit+push), and GITKIT-013 (history) also shipped,
 > alongside a large amount of unplanned surface (GitHub connect + own-the-checkout, project/task
 > CRUD, editable settings, markdown webview, filters/search/list/multi-select). Do not assume Swift
-> APIs beyond what `swift/GitKit/Sources/GitKit/` and `apps/gitkanban-macos/GitKanban/` contain.
+> APIs beyond what `swift/GitKittieKit/Sources/GitKittie/` and `apps/gitkanban-macos/GitKanban/` contain.
 
 ---
 
@@ -47,14 +47,14 @@ The platform-agnostic source of truth. Modules:
 | `bodyfields.ts` | `resolveBodySectionFields` — read fields from a markdown body section (legacy boards) |
 | `validation.ts` | `validateCard(config, card)` against the effective config |
 
-The **Swift side mirrors this package** and is tested (in GitKit) against shared fixtures so the
+The **Swift side mirrors this package** and is tested (in GitKittie) against shared fixtures so the
 two parsers cannot drift.
 
-### 2. `swift/GitKit` — the shared Swift engine (Exists)
+### 2. `swift/GitKittieKit` — the shared Swift engine (Exists)
 
 The one package both native apps depend on. `apps/gitkanban-macos/project.yml` declares the
-dependency (`packages: GitKit: path: ../../swift/GitKit`). Present in
-`swift/GitKit/Sources/GitKit/`:
+dependency (`packages: GitKittie: path: ../../swift/GitKittieKit`). Present in
+`swift/GitKittieKit/Sources/GitKittie/`:
 
 - `GitEngine` (protocol) — `clone`, `pullRebase`, `commit`, `push`, `status`,
   `fileHistory(at:file:limit:)`. **The only thing that knows git.**
@@ -91,7 +91,7 @@ GitKanban/
   Resources/ markdown-renderer.html
 ```
 
-Convention (root AGENTS.md): `AppModel` is the single UI-facing state object; GitKit stays
+Convention (root AGENTS.md): `AppModel` is the single UI-facing state object; GitKittie stays
 UI-agnostic so the board parsing layer can back iOS unchanged.
 
 ---
@@ -115,7 +115,7 @@ UI-agnostic so the board parsing layer can back iOS unchanged.
                 │ read                        │ write + git
                 ▼                            ▼
    ┌─────────────────────────┐   ┌──────────────────────────────┐
-   │ GitKit BoardStore /     │   │ GitKit ShellGitEngine        │   Exists
+   │ GitKittie BoardStore /     │   │ GitKittie ShellGitEngine        │   Exists
    │ BoardMarkdown / Model / │   │ clone · pullRebase · commit  │
    │ Inheritance (Yams read) │   │ · push · status · fileHistory│
    └───────────┬─────────────┘   └───────────────┬──────────────┘
@@ -146,7 +146,7 @@ single fractional key — see [Decisions.md](./Decisions.md) §6.
   (`app-sandbox`, `network.client`, `files.user-selected.read-write`, `bookmarks.app-scope`),
   hardened runtime, category `developer-tools`. **No test target is defined yet** (tracked on the
   board).
-- **Dependency:** the `GitKit` Swift package (`../../swift/GitKit`).
+- **Dependency:** the `GitKittie` Swift package (`../../swift/GitKittieKit`).
 - **Markdown webview:** `webview/` bundles `renderer.ts` (Nizel) with esbuild; rebuild with
   `npm run gitkanban:webview:build`.
 - **Core tests:** `npm run gitkanban:core:test` runs the TypeScript board-logic suite (Vitest).
@@ -158,6 +158,6 @@ single fractional key — see [Decisions.md](./Decisions.md) §6.
 
 macOS shells out to `git` via `ShellGitEngine`. iOS cannot — no shell, no `git` binary — so the
 iOS app talks to a hosted git provider's REST API through **git-pont** (no local clone), reusing
-GitKit's `RemoteBoardStore`/`BoardFileSource` for parsing. That superseded the earlier
+GitKittie's `RemoteBoardStore`/`BoardFileSource` for parsing. That superseded the earlier
 "`Libgit2Engine` first" plan. Details in
-`/Users/silvandiepen/Projects/GitKit/GitKanban/plan/platforms-and-git.md`.
+`/Users/silvandiepen/Projects/GitKittie/GitKanban/plan/platforms-and-git.md`.

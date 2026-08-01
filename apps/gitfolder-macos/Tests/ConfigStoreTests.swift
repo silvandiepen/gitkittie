@@ -1,5 +1,5 @@
 import Foundation
-import GitKit
+import GitKittieKit
 import XCTest
 @testable import GitFolder
 

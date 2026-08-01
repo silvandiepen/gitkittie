@@ -1,5 +1,5 @@
 import Foundation
-import GitKit
+import GitKittieKit
 import GitPontCore
 import GitPontGitHub
 import GitPontGitLab

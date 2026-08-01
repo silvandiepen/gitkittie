@@ -5,13 +5,13 @@ on:
     branches: [main, development]
     paths:
       - apps/gitkanban-macos/**
-      - swift/GitKit/**
+      - swift/GitKittieKit/**
       - .github/workflows/gitkanban-macos.yml
   push:
     branches: [main, development]
     paths:
       - apps/gitkanban-macos/**
-      - swift/GitKit/**
+      - swift/GitKittieKit/**
       - .github/workflows/gitkanban-macos.yml
   workflow_dispatch:
 

@@ -1,5 +1,5 @@
 import XCTest
-@testable import GitKit
+@testable import GitKittieKit
 
 final class GitHubPullRequestServiceTests: XCTestCase {
     override func tearDown() {
@@ -14,7 +14,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
         let service = GitHubPullRequestService(
             session: session,
             apiBaseURL: URL(string: "https://api.example.test")!,
-            userAgent: "GitKitTests"
+            userAgent: "GitKittieKitTests"
         )
 
         PullRequestURLProtocol.handler = { request in
@@ -23,7 +23,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKitTests")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKittieKitTests")
 
             let body = try XCTUnwrap(request.httpBodyStream.flatMap(Self.data(from:)))
             let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
@@ -72,7 +72,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
         let service = GitHubPullRequestService(
             session: URLSession(configuration: .ephemeral),
             apiBaseURL: URL(string: "https://api.example.test")!,
-            userAgent: "GitKitTests"
+            userAgent: "GitKittieKitTests"
         )
 
         do {
@@ -99,7 +99,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
         let service = GitHubPullRequestService(
             session: session,
             apiBaseURL: URL(string: "https://api.example.test")!,
-            userAgent: "GitKitTests"
+            userAgent: "GitKittieKitTests"
         )
 
         PullRequestURLProtocol.handler = { request in
@@ -110,7 +110,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
             XCTAssertEqual(request.httpMethod, "GET")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKitTests")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKittieKitTests")
 
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -155,14 +155,14 @@ final class GitHubPullRequestServiceTests: XCTestCase {
         let service = GitHubPullRequestService(
             session: session,
             apiBaseURL: URL(string: "https://api.example.test")!,
-            userAgent: "GitKitTests"
+            userAgent: "GitKittieKitTests"
         )
 
         PullRequestURLProtocol.handler = { request in
             XCTAssertEqual(request.httpMethod, "GET")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKitTests")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKittieKitTests")
 
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -302,7 +302,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
         let service = GitHubPullRequestService(
             session: session,
             apiBaseURL: URL(string: "https://api.example.test")!,
-            userAgent: "GitKitTests"
+            userAgent: "GitKittieKitTests"
         )
 
         PullRequestURLProtocol.handler = { request in
@@ -311,7 +311,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKitTests")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKittieKitTests")
 
             let body = try XCTUnwrap(request.httpBodyStream.flatMap(Self.data(from:)))
             let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
@@ -359,7 +359,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
         let service = GitHubPullRequestService(
             session: session,
             apiBaseURL: URL(string: "https://api.example.test")!,
-            userAgent: "GitKitTests"
+            userAgent: "GitKittieKitTests"
         )
 
         PullRequestURLProtocol.handler = { request in
@@ -368,7 +368,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKitTests")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKittieKitTests")
 
             let body = try XCTUnwrap(request.httpBodyStream.flatMap(Self.data(from:)))
             let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
@@ -424,7 +424,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
         let service = GitHubPullRequestService(
             session: session,
             apiBaseURL: URL(string: "https://api.example.test")!,
-            userAgent: "GitKitTests"
+            userAgent: "GitKittieKitTests"
         )
 
         PullRequestURLProtocol.handler = { request in

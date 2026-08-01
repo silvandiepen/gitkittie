@@ -1,13 +1,13 @@
-# GitKit — Features (monorepo overview)
+# GitKittie — Features (monorepo overview)
 
-This is the **monorepo-level** capability map for GitKit. It describes what GitKit is,
+This is the **monorepo-level** capability map for GitKittie. It describes what GitKittie is,
 the products it houses, and the shared engine underneath them. Per-app detail lives in
 each app's own `docs/Features.md` (linked below); GitFolder's full product plans live in
 this repo's `docs/*.md` (product-spec, data-model, sync-model, etc.).
 
-## What GitKit is
+## What GitKittie is
 
-GitKit is **a monorepo for git-backed apps** — apps that make a git repository a quiet,
+GitKittie is **a monorepo for git-backed apps** — apps that make a git repository a quiet,
 first-class backend for everyday work, rather than a tool you consciously operate. Three
 products share one git foundation, so the plumbing lives once in this repo and the apps depend
 on it.
@@ -20,7 +20,7 @@ The common thesis across every app:
 - **Own-your-data.** The source of truth is plain files (folders, or markdown cards) in a
   repository the user owns and hosts wherever they host git. No proprietary store, no export
   step — the data is already portable.
-- **No-server.** There is no GitKit or GitBud backend. The apps talk directly to the user's git
+- **No-server.** There is no GitKittie or GitBud backend. The apps talk directly to the user's git
   host over the user's own credentials. Nothing is relayed through infrastructure we run. History,
   offline access where supported, and portability come from git itself.
 
@@ -46,21 +46,21 @@ git client for understanding and repairing history.
 |---|---|---|---|
 | GitFolder (macOS) | `apps/gitfolder-macos/` | SwiftUI + AppKit menu-bar app, XcodeGen | **Shipping** (App Store) |
 | GitFolder (iOS) | `apps/gitfolder-ios/` | SwiftUI, embedded libgit2 (planned) | Planned — docs/spec only; libgit2 spike outstanding |
-| GitKanban (macOS) | `apps/gitkanban-macos/` | SwiftUI board app, XcodeGen | In development — read-only board UI (loads markdown boards via GitKit; editing/drag/git-sync deferred) |
+| GitKanban (macOS) | `apps/gitkanban-macos/` | SwiftUI board app, XcodeGen | In development — read-only board UI (loads markdown boards via GitKittie; editing/drag/git-sync deferred) |
 | GitKanban (iOS) | `apps/gitkanban-ios/` | SwiftUI, libgit2 (planned) | Planned — Phase 2, not scaffolded |
 | GitBud (macOS) | `apps/gitbud-macos/` | SwiftUI git client, XcodeGen | In development — local repo graph/diff/history, rewrite actions, conflicts, Magic BYOK, purge, force-with-lease |
 | GitBud (iOS/iPadOS) | `apps/gitbud-ios/` | SwiftUI remote git client, XcodeGen planned | Planned — docs/spec only; GitPont remote-only |
 | Website | `apps/website/` | Vue 3 + Vite, deployed on Cloudflare Pages | Shipping |
 
 > Status is deliberately honest. Only GitFolder macOS ships today. GitKanban macOS is in
-> development — it builds and renders a read-only board loaded via GitKit, with editing,
+> development — it builds and renders a read-only board loaded via GitKittie, with editing,
 > drag-to-move, and git-sync still deferred. GitBud macOS now has a tested native scaffold for
 > local history inspection and rewrite workflows, while GitBud iOS/iPadOS remains plan-only.
 > The shared Swift package extraction (see below) is **in progress**, not complete.
 
 ## The shared engine
 
-The native apps depend on shared Swift packages, especially **`swift/GitKit`**, so common git,
+The native apps depend on shared Swift packages, especially **`swift/GitKittieKit`**, so common git,
 auth, parsing, and app-service behavior can live once:
 
 - **`GitEngine`** — the single protocol that knows git (`clone / pullRebase / commit / push /
@@ -92,7 +92,7 @@ For product-level capabilities, see each app's own docs:
   `docs/data-model.md`, `docs/sync-model.md`, `docs/github-access.md`, `docs/macos-permissions.md`.
 - GitFolder (iOS): `apps/gitfolder-ios/docs/Features.md`.
 - GitKanban (macOS): `apps/gitkanban-macos/README.md`; board contract in
-  `packages/gitkanban-core/README.md`; full plan in `project-assets` `GitKit/GitKanban/plan/`.
+  `packages/gitkanban-core/README.md`; full plan in `project-assets` `GitKittie/GitKanban/plan/`.
 - GitBud (macOS): `apps/gitbud-macos/docs/Features.md`, `apps/gitbud-macos/docs/Architecture.md`,
   `apps/gitbud-macos/docs/Decisions.md`.
 - GitBud (iOS/iPadOS): `apps/gitbud-ios/docs/Features.md`,

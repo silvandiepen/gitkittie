@@ -38,9 +38,9 @@ npm run gitkanban:run
 
 ## How it fits together
 
-- **Board logic** comes from [`@gitkit/gitkanban-core`](../../packages/gitkanban-core/) (TS,
+- **Board logic** comes from [`@gitkittie/gitkanban-core`](../../packages/gitkanban-core/) (TS,
   source of truth). Swift models mirror it.
-- **Git, board parsing, and services** come from the shared [`GitKit`](../../swift/GitKit/) Swift
+- **Git, board parsing, and services** come from the shared [`GitKittie`](../../swift/GitKittieKit/) Swift
   package — `GitEngine`/`ShellGitEngine`, `BoardStore`/`BoardMarkdown`/`BoardModel`/
   `BoardInheritance`, `RemoteBoardStore`, `KeychainService`, `GitHubOAuthService`,
   `GitHubReposService`, `CardText`.
@@ -48,7 +48,7 @@ npm run gitkanban:run
   `/Users/silvandiepen/Projects/Tasks/README.md` (folder-per-lane; card frontmatter + root/project
   config with inheritance).
 - **Phase 1 scope** (macOS, shell-out git, GitHub) is in
-  `/Users/silvandiepen/Projects/GitKit/GitKanban/plan/phase-1.md`.
+  `/Users/silvandiepen/Projects/GitKittie/GitKanban/plan/phase-1.md`.
 
 ## Structure
 
@@ -64,12 +64,12 @@ webview/      renderer.ts + esbuild build (bundles the markdown renderer)
 scripts/      run.sh (npm run gitkanban:run)
 ```
 
-`AppModel` is the single UI-facing `@Observable` state object. It reads boards through GitKit's
+`AppModel` is the single UI-facing `@Observable` state object. It reads boards through GitKittie's
 `BoardStore`, writes card files directly (frontmatter composed in `AppModel`), and drives git
 through `ShellGitEngine`. There is no separate `MarkdownStore`/`BoardSyncEngine` layer — those
-responsibilities live in GitKit (`BoardStore`/`BoardMarkdown`) and in `AppModel` respectively.
+responsibilities live in GitKittie (`BoardStore`/`BoardMarkdown`) and in `AppModel` respectively.
 
-> **Known gaps / drift from the plan** (tracked on the GitKit board): reordering currently uses an
+> **Known gaps / drift from the plan** (tracked on the GitKittie board): reordering currently uses an
 > integer `order` and rewrites the affected lane rather than minting a single fractional rank key;
 > card writes compose frontmatter by hand rather than round-tripping through Yams; there is no
 > Swift test target yet; background interval sync and a conflict-resolution UI are not built (each

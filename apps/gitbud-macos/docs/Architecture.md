@@ -1,8 +1,8 @@
 # GitBud (macOS) — Architecture
 
-GitBud is a native SwiftUI app in active development on top of shared GitKit history
+GitBud is a native SwiftUI app in active development on top of shared GitKittie history
 services, GitPont-style direct provider integration, and AIPont-style Magic. The app is a thin UI
-and state layer; git operations belong in `swift/GitKit`.
+and state layer; git operations belong in `swift/GitKittieKit`.
 
 ## Layering
 
@@ -21,7 +21,7 @@ GitBudCore
         ├── GitBud services (UI-agnostic orchestration)
         │     RepositorySessionStore · RewriteCoordinator · MagicCoordinator
         │
-        ├── swift/GitKit
+        ├── swift/GitKittieKit
         │     graph · refs · branch switching · status · stage/unstage · diff · file history · rewrite · purge · safety checks
         │
         ├── GitPont
@@ -72,7 +72,7 @@ in place; `applyPlannedCommitOrder` hands that order to `GitHistory.reorderCommi
 ## Commit graph
 
 `GitHistory.commitGraph` returns a window of history (`historyLimit`, raised by
-`loadMoreHistory()`). `layoutCommitGraph` in GitKit assigns each commit a lane and
+`loadMoreHistory()`). `layoutCommitGraph` in GitKittie assigns each commit a lane and
 colour and emits the edges crossing each row; lanes are reused when free but never
 re-indexed, so pass-through lines stay vertical. `CommitGraphCell` draws one row's
 band at a time, which keeps the list lazy — there is no scroll-offset synchronisation
@@ -83,8 +83,8 @@ between the list and a full-height canvas.
 ### Local repository mode
 
 The user opens an existing local repository. GitBud stores a security-scoped
-bookmark to the selected folder, reads graph/status through GitKit, and performs
-history edits with macOS system git behind GitKit APIs.
+bookmark to the selected folder, reads graph/status through GitKittie, and performs
+history edits with macOS system git behind GitKittie APIs.
 
 ### GitPont remote mode
 
@@ -108,9 +108,9 @@ Remote-only API editing is not the macOS v1 path for rebase/split/squash because
 those operations need complete git object/history semantics. GitPont API writes
 can still support metadata and simpler provider-native operations.
 
-## Shared GitKit work
+## Shared GitKittie work
 
-GitBud needs GitKit APIs beyond the current `GitEngine` surface:
+GitBud needs GitKittie APIs beyond the current `GitEngine` surface:
 
 - Graph: commits, parents, branch/ref decoration, ahead/behind, merge-base, branch-flow
   current-only/target-only commit summaries, and current-vs-target branch file impact.
@@ -155,7 +155,7 @@ GitBud needs GitKit APIs beyond the current `GitEngine` surface:
 2. Create a safety branch/ref before mutating history.
 3. Build a rewrite plan from selected commits, files, and hunks.
 4. Preview the resulting stack and affected files.
-5. Apply the rewrite through GitKit.
+5. Apply the rewrite through GitKittie.
 6. If conflicts occur, show affected commits/files and offer side-aware or manually
    edited resolution plus continue/abort for the active merge or rebase. Conflict UI
    labels must use `Your change` and `REmote change`.
@@ -187,7 +187,7 @@ written to repo config or logs by default.
 `npm run gitbud:test` builds the GitBud scheme for testing and runs the generated
 `GitBudTests.xctest` bundle directly with `xcrun xctest`. This avoids macOS app
 test-host launch flakiness while still exercising the same `GitBudCore` state and
-GitKit rewrite code that the app uses.
+GitKittie rewrite code that the app uses.
 
 ## iOS/iPad relationship
 

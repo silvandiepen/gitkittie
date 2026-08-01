@@ -1,6 +1,6 @@
 import AppKit
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// The default surface: the commit graph, and whatever you clicked on.

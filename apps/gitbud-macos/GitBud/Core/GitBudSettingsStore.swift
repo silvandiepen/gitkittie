@@ -1,5 +1,5 @@
 import Foundation
-import GitKit
+import GitKittieKit
 
 public struct GitBudMagicSettings: Equatable {
     public var provider: AIPontProvider

@@ -11,7 +11,7 @@ The user is expected to have SSH access working already.
 Example repository URL:
 
 ```txt
-git@github.com:silvandiepen/Gitfolder.git
+git@github.com:silvandiepen/gitkittie.git
 ```
 
 ## Test connection

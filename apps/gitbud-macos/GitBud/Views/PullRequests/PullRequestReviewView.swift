@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// Reviewing a pull request: its files, their patches, the inline threads, and the

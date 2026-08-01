@@ -1,7 +1,7 @@
 import XCTest
-@testable import GitKit
+@testable import GitKittieKit
 
-final class GitKitTests: XCTestCase {
+final class GitKittieKitTests: XCTestCase {
     func testPullResultDefaults() {
         let result = PullResult(updated: true)
         XCTAssertTrue(result.updated)

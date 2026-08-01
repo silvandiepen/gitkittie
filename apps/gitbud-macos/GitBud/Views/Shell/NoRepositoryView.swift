@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// The welcome screen. Opening and cloning live here; account setup lives in Settings,

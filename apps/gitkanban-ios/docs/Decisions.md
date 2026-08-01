@@ -2,15 +2,15 @@
 
 ADR-lite log for GitKanban iOS **as built**. Entries are **Accepted** where the app implements them,
 **Open** where the plan is silent, and **Superseded** where the shipped app diverged from the
-original plan (`/Users/silvandiepen/Projects/GitKit/GitKanban/plan/`).
+original plan (`/Users/silvandiepen/Projects/GitKittie/GitKanban/plan/`).
 
 ---
 
 ### 1. Reuse the same board logic as macOS (gitkanban-core, TS is source of truth)
 
 **Decision:** GitKanban iOS consumes the board schema and logic from
-[`@gitkit/gitkanban-core`](../../../packages/gitkanban-core/) via the Swift mirror in
-`swift/GitKit` (`RemoteBoardStore`, `BoardMarkdown`, `CardText`, `BoardModel`) — it does not define
+[`@gitkittie/gitkanban-core`](../../../packages/gitkanban-core/) via the Swift mirror in
+`swift/GitKittieKit` (`RemoteBoardStore`, `BoardMarkdown`, `CardText`, `BoardModel`) — it does not define
 its own card/board schema.
 
 **Context:** The board contract is platform-agnostic and already built and tested in TypeScript.
@@ -26,7 +26,7 @@ Two independent parsers would drift and render boards differently per platform.
 
 **Decision:** The app reads and writes the board over the host's REST API through **git-pont**
 (`GitPontCore` + `GitPontGitHub`/`GitPontGitLab`), reached via `GitPontFileSource`, which conforms
-to GitKit's **`BoardFileSource`**. It does **not** call the `GitEngine` protocol.
+to GitKittie's **`BoardFileSource`**. It does **not** call the `GitEngine` protocol.
 
 **Context:** iOS has no shell and no `git` binary, so `ShellGitEngine` cannot run. The board layer
 was made transport-agnostic (`RemoteBoardStore` + `BoardFileSource`) so a non-git transport can

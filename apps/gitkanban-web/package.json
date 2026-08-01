@@ -1,5 +1,5 @@
 {
-  "name": "@gitkit/gitkanban-web",
+  "name": "@gitkittie/gitkanban-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@gitkit/gitkanban-core": "file:../../packages/gitkanban-core",
+    "@gitkittie/gitkanban-core": "file:../../packages/gitkanban-core",
     "@sil/ui": "^2.6.0",
     "bemm": "^1.4.0",
     "nizel": "^0.1.1",

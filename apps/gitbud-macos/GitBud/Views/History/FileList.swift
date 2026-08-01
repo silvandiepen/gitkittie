@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// The files a commit touched. Right-click a file for what you can do to it; tick one to

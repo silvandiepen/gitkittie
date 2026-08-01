@@ -13,7 +13,7 @@ Read the root `../../AGENTS.md` first; this file adds GitFolder-iOS-specific rul
   over HTTPS with a token on a device. The whole app depends on that result.
 
 - **One engine abstraction, not two.** The iOS engine must conform to the **same
-  `GitEngine` protocol** as the macOS `ShellGitEngine` (in `swift/GitKit`). Do **not**
+  `GitEngine` protocol** as the macOS `ShellGitEngine` (in `swift/GitKittieKit`). Do **not**
   build a second git abstraction for iOS — implement `Libgit2Engine` against the shared
   protocol.
 
@@ -22,7 +22,7 @@ Read the root `../../AGENTS.md` first; this file adds GitFolder-iOS-specific rul
   that is the divergence trap the audit called out.
 
 - **Where the plan and tasks live:**
-  - Plan: `Projects/GitKit/Gitfolder/plans/ios-app-plan.md`
+  - Plan: `Projects/GitKittie/Gitfolder/plans/ios-app-plan.md`
   - Transport rationale: `GitKanban/plan/platforms-and-git.md`
   - Spike: `spikes/libgit2-ios/` (branch above)
   - Tasks: GITFOLDER-028 .. 035 (see `README.md` for the phase mapping)

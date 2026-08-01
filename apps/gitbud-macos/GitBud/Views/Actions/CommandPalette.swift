@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// ⌘K. Every verb that applies to the current selection, filterable, keyboard-first.

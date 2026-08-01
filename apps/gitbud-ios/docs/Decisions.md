@@ -11,7 +11,7 @@ not shell out to git or maintain full local clones for v1.
 cannot.
 
 **Rationale.** Remote-only keeps mobile scope realistic and aligns with existing
-GitPont use in GitKit apps.
+GitPont use in GitKittie apps.
 
 **Status.** Accepted.
 
@@ -55,6 +55,6 @@ sync infrastructure.
 GitBud does not operate a relay or account service.
 
 **Rationale.** The mobile apps should preserve the same no-server trust model as
-the rest of GitKit.
+the rest of GitKittie.
 
 **Status.** Accepted.

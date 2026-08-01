@@ -5,15 +5,15 @@ implementation status.
 
 ---
 
-### 1. GitBud lives inside the GitKit monorepo
+### 1. GitBud lives inside the GitKittie monorepo
 
-**Decision.** GitBud is a third GitKit product, alongside GitFolder and
+**Decision.** GitBud is a third GitKittie product, alongside GitFolder and
 GitKanban.
 
 **Context.** It needs the same native foundations: git process execution,
 Keychain storage, provider integration, and app services.
 
-**Rationale.** Shared git correctness belongs in `swift/GitKit`; apps depend on
+**Rationale.** Shared git correctness belongs in `swift/GitKittieKit`; apps depend on
 packages, never each other.
 
 **Status.** Accepted.
@@ -144,7 +144,7 @@ some conflicts need a real manual merge instead of a whole-side choice.
 
 **Rationale.** The app should make conflict resolution understandable while still
 landing real git state: write the resolved file, stage it, then let the active
-merge or rebase continue through GitKit.
+merge or rebase continue through GitKittie.
 
 **Status.** Accepted and implemented.
 
@@ -206,9 +206,9 @@ about the publish path was loosened.
 
 **Status.** Accepted and implemented.
 
-### 13. The commit graph is laid out in GitKit, not in the view
+### 13. The commit graph is laid out in GitKittie, not in the view
 
-**Decision.** `layoutCommitGraph` in `swift/GitKit/Sources/GitKit/CommitGraphLayout.swift`
+**Decision.** `layoutCommitGraph` in `swift/GitKittieKit/Sources/GitKittie/CommitGraphLayout.swift`
 turns the newest-first `[GitCommitNode]` into `[GitGraphRow]` — lane, colour, and the
 edges crossing each row. The SwiftUI `Canvas` only draws what it is given.
 

@@ -1,4 +1,4 @@
-import GitKit
+import GitKittieKit
 import XCTest
 @testable import GitKanbanKit
 

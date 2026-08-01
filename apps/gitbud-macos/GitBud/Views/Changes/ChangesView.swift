@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// The working copy. Pick files, write a message, commit. Stashes live at the bottom

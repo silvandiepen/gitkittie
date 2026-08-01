@@ -10,7 +10,7 @@ personal access token, lists repositories, and loads a board **over the provider
 **created, edited, reordered, moved between lanes, and deleted**; each write is an immediate
 provider commit and the board reloads. The board renders as **lanes (kanban) or a list** (toggle),
 with **backlog lanes ordered last** and card **descriptions rendered as Markdown** in the detail.
-Board parsing/model is the shared `swift/GitKit` (`RemoteBoardStore` + `BoardFileSource`). Still to
+Board parsing/model is the shared `swift/GitKittieKit` (`RemoteBoardStore` + `BoardFileSource`). Still to
 do: OAuth sign-in (personal-access-token only today), per-card history, offline/local mode, and
 sync/conflict handling (writes are currently blind, last-writer-wins). An embedded-libgit2 offline
 mode remains a possible later addition, not a gate — the earlier "libgit2 engine first" plan is
@@ -27,7 +27,7 @@ The defining difference from macOS is transport: **iOS has no shell and no `git`
 cannot shell out to `git` the way macOS does. Instead of an on-device git engine, GitKanban iOS
 talks to the host over HTTPS through **git-pont** — a provider abstraction with GitHub and GitLab
 backends — reading files with `listDirectory`/`readFile` and writing them with
-`commitFile`/`deleteFile`. GitKit's transport-agnostic `RemoteBoardStore` + `BoardFileSource` turn
+`commitFile`/`deleteFile`. GitKittie's transport-agnostic `RemoteBoardStore` + `BoardFileSource` turn
 those file operations into a parsed board, so the schema/model is shared with macOS and does not
 fork.
 
@@ -35,9 +35,9 @@ fork.
 
 | Depends on | For | Status |
 |---|---|---|
-| [`@gitkit/gitkanban-core`](../../packages/gitkanban-core/) | Board schema + logic (TS, source of truth; Swift mirrors) | Built + tested |
-| [`swift/GitKit`](../../swift/GitKit/) — `RemoteBoardStore` + `BoardFileSource` | Transport-agnostic board load/parse | Built; used by this app |
-| [`swift/GitKit`](../../swift/GitKit/) — `KeychainService`, `CardText`, `BoardMarkdown` | Token storage + card parsing | Built; used by this app |
+| [`@gitkittie/gitkanban-core`](../../packages/gitkanban-core/) | Board schema + logic (TS, source of truth; Swift mirrors) | Built + tested |
+| [`swift/GitKittieKit`](../../swift/GitKittieKit/) — `RemoteBoardStore` + `BoardFileSource` | Transport-agnostic board load/parse | Built; used by this app |
+| [`swift/GitKittieKit`](../../swift/GitKittieKit/) — `KeychainService`, `CardText`, `BoardMarkdown` | Token storage + card parsing | Built; used by this app |
 | [git-pont](../../../_libs/git-pont) — `GitPontCore`, `GitPontGitHub`, `GitPontGitLab` | Provider REST transport (read + write) | Built; linked in `project.yml` |
 
 The app does **not** use `GitEngine`/`ShellGitEngine`, `GitHubOAuthService`, or any `Libgit2Engine`
@@ -60,8 +60,8 @@ personal access token, not device-flow OAuth.
 
 ## Where the plan and tasks live
 
-- **Plan:** `/Users/silvandiepen/Projects/GitKit/GitKanban/plan/` — start with
+- **Plan:** `/Users/silvandiepen/Projects/GitKittie/GitKanban/plan/` — start with
   `platforms-and-git.md` (the macOS-vs-iOS git story), then `architecture.md`.
-- **Tasks:** the `GitKit` board in `/Users/silvandiepen/Projects/Tasks/GitKit/`, epic
+- **Tasks:** the `GitKittie` board in `/Users/silvandiepen/Projects/Tasks/GitKit/`, epic
   **`gitkanban-ios`**.
 - App-specific agent rules: [`AGENTS.md`](./AGENTS.md). Detail: [`docs/`](./docs/).

@@ -1,6 +1,6 @@
-# GitKit — Architecture (monorepo)
+# GitKittie — Architecture (monorepo)
 
-The shape of the GitKit monorepo: its layout, the dependency rule, the shared-engine strategy,
+The shape of the GitKittie monorepo: its layout, the dependency rule, the shared-engine strategy,
 the TypeScript-source-of-truth ↔ Swift-mirror relationship, and the build/test/CI topology. For a
 single app's internal architecture, see that app's own `docs/Architecture.md`. GitFolder's product
 plans live in this repo's `docs/*.md` and are referenced, not restated, here.
@@ -12,27 +12,27 @@ apps/
   gitfolder-macos/    GitFolder — macOS menu-bar app (SwiftUI/AppKit, XcodeGen). Shipping.
                       (rename → gitfolder-macos is tracked: GITKIT-007)
   gitfolder-ios/      GitFolder — iOS app. Planned; docs/spec only, no code.
-  gitkanban-macos/    GitKanban — macOS board app (SwiftUI, XcodeGen). In development — read-only board UI (loads markdown boards via GitKit; editing/drag/git-sync deferred).
+  gitkanban-macos/    GitKanban — macOS board app (SwiftUI, XcodeGen). In development — read-only board UI (loads markdown boards via GitKittie; editing/drag/git-sync deferred).
   gitkanban-ios/      GitKanban — iOS app. Planned; not yet scaffolded.
   gitbud-macos/       GitBud — macOS git client. In development. Local repo inspection, app-managed remote clones, provider repo/PR workflows, history rewrites, Magic, purge, force-with-lease, and GitBudCore app-model tests are scaffolded/tested.
   gitbud-ios/         GitBud — iOS/iPadOS remote git client. Planned; docs/spec only. GitPont remote-only, no shell git or local history surgery.
   website/            Marketing/docs site (Vue 3 + Vite). Shipping.
 packages/
-  core/               @gitfolder/core — GitFolder's TS config contract (see caveat below).
-  gitkanban-core/     @gitkit/gitkanban-core — GitKanban board schema + logic (TS, tested).
+  core/               @gitkittie/core — GitFolder's TS config contract (see caveat below).
+  gitkanban-core/     @gitkittie/gitkanban-core — GitKanban board schema + logic (TS, tested).
 swift/
-  GitKit/             Shared Swift package: GitEngine + app services. Extraction in progress.
-docs/                 Global GitKit docs (this file) + GitFolder product plans.
+  GitKittieKit/             Shared Swift package: GitEngine + app services. Extraction in progress.
+docs/                 Global GitKittie docs (this file) + GitFolder product plans.
 ```
 
 Two package ecosystems live side by side: **npm workspaces** (`apps/*` + `packages/*`, one
 lockfile) for TypeScript/Vue, and **Swift Package Manager / XcodeGen** for the native apps. The
-Swift package `swift/GitKit` is *not* an npm workspace; the native apps consume it via SPM.
+Swift package `swift/GitKittieKit` is *not* an npm workspace; the native apps consume it via SPM.
 
 ## The dependency rule (hard)
 
 Apps depend on packages, **never on each other**. Shared logic belongs in a package —
-`swift/GitKit` (Swift) or `packages/*` (TypeScript) — not a cross-app import.
+`swift/GitKittieKit` (Swift) or `packages/*` (TypeScript) — not a cross-app import.
 
 ```txt
         apps/gitfolder-macos ─┐            ┌─ apps/gitfolder-ios (planned)
@@ -41,7 +41,7 @@ Apps depend on packages, **never on each other**. Shared logic belongs in a pack
        apps/gitbud-* ──────┘
                                 │
                                 ▼
-                        swift/GitKit  (Swift: GitEngine + services)
+                        swift/GitKittieKit  (Swift: GitEngine + services)
                         packages/*    (TS:  board/config contracts)
 
         apps/website ── depends on ── packages/* (TS)
@@ -59,7 +59,7 @@ UI (SwiftUI: board / cards / folders / history)
         ▼
 Domain (Card, Board, Column  |  SyncedFolder, Config)   ← schema mirrored from packages/*
         │
-        ├── MarkdownStore   (files ⇄ Card, via gitkanban-core rules)   [pending in GitKit]
+        ├── MarkdownStore   (files ⇄ Card, via gitkanban-core rules)   [pending in GitKittie]
         └── SyncEngine      (orchestrates pull → commit → push)
                     │  calls only the protocol
                     ▼
@@ -69,15 +69,15 @@ Domain (Card, Board, Column  |  SyncedFolder, Config)   ← schema mirrored from
 ```
 
 `GitEngine` is the only thing that knows common clone/sync git operations; `MarkdownStore` is the
-only thing that knows the file format. GitBud adds a broader GitKit history surface for graph,
+only thing that knows the file format. GitBud adds a broader GitKittie history surface for graph,
 diff, rewrite, push-safety, Magic, and purge operations. macOS executes those operations against
 local checkouts via system git;
 iOS/iPadOS GitBud is planned as GitPont remote-only and must not assume shell git or full local
-history surgery. `swift/GitKit` also carries the cross-cutting services `KeychainService`
+history surgery. `swift/GitKittieKit` also carries the cross-cutting services `KeychainService`
 (implemented), `GitHubOAuthService` (GitHub device-flow, implemented), and — pending extraction
 from GitFolder — `FolderAccessService` (security-scoped bookmarks) and `ConfigStore`.
 
-**Extraction status.** `swift/GitKit` is being populated *additively* from GitFolder's inline
+**Extraction status.** `swift/GitKittieKit` is being populated *additively* from GitFolder's inline
 `Services/`: shared code lands, GitFolder is repointed at it, and its inline copy is deleted — each
 step verified by the macOS xcodebuild CI. Done: Keychain + OAuth (GitFolder runs on them).
 In progress: `ShellGitEngine` wired into the app, `FolderAccessService`, `ConfigStore` (GITKIT-005).
@@ -98,7 +98,7 @@ packages/gitkanban-core  (TypeScript — SOURCE OF TRUTH, Vitest-tested)
         │
         │  mirrored (by hand, checked against fixtures)
         ▼
-Swift domain models in gitkanban-macos / (later) MarkdownStore in swift/GitKit
+Swift domain models in gitkanban-macos / (later) MarkdownStore in swift/GitKittieKit
 ```
 
 Design invariants enforced by the contract: **one card = one file** (editing a card never touches
@@ -106,7 +106,7 @@ another's bytes); **column = a field (`status`), not a folder** at the data laye
 lenient** — unknown frontmatter/config keys survive round-trips so agents and other tools can add
 fields the app doesn't model. The canonical format is `project-assets/Tasks/README.md`.
 
-**Caveat — `packages/core` (GitFolder).** Unlike `gitkanban-core`, GitFolder's `@gitfolder/core` is
+**Caveat — `packages/core` (GitFolder).** Unlike `gitkanban-core`, GitFolder's `@gitkittie/core` is
 currently **not consumed** by the shipping Swift app and has drifted from it (flagged by the
 architecture audit: it models an SSH-only, richly-instrumented surface the app doesn't ship). So the
 "TS is the source of truth" relationship is *realized* for GitKanban and *aspirational / under
@@ -137,10 +137,10 @@ hand-edited.
 |---|---|---|---|
 | `check.yml` | ubuntu | push/PR to `main`,`development` | `npm ci` + `npm run check` (all TS workspaces) |
 | `macos-native.yml` | macos-15 | push/PR to `main`,`development` | `xcodegen generate` → xcodebuild **test**, Release build, and archive-shape validation of GitFolder (unsigned) |
-| `swift-gitkit.yml` | macos-15 | push/PR touching `swift/GitKit/**` | `swift build` + `swift test` of the GitKit package |
+| `swift-gitkittiekit.yml` | macos-15 | push/PR touching `swift/GitKittieKit/**` | `swift build` + `swift test` of the GitKittie package |
 | `deploy-website.yml` | ubuntu | push to `main` touching `apps/website`/`packages`/root configs | `npm run site:build` → Cloudflare Pages deploy (`wrangler-action`) |
 
-The macOS and swift-gitkit jobs are path/branch aware; `swift-gitkit` and `deploy-website` only run
+The macOS and swift-gitkittiekit jobs are path/branch aware; `swift-gitkittiekit` and `deploy-website` only run
 when their inputs change. There is no signing in CI (`CODE_SIGNING_ALLOWED=NO`); signed archiving is
 a local script (`npm run macos:archive:app-store`).
 
@@ -148,8 +148,8 @@ a local script (`npm run macos:archive:app-store`).
 
 - **Code** — this repo (`apps/`, `packages/`, `swift/`).
 - **Product plans, specs, audits, and the task board** — the separate `project-assets` repo:
-  - GitFolder plans: `GitKit/Gitfolder/` (and mirrored into this repo's `docs/*.md`).
-  - GitKanban plans: `GitKit/GitKanban/plan/` (architecture, platforms-and-git, data-model,
+  - GitFolder plans: `GitKittie/Gitfolder/` (and mirrored into this repo's `docs/*.md`).
+  - GitKanban plans: `GitKittie/GitKanban/plan/` (architecture, platforms-and-git, data-model,
     sync-model, phases) — **not** duplicated into the code repo.
   - GitBud plans: currently in `apps/gitbud-macos/docs/` and `apps/gitbud-ios/docs/` until a
     project-assets product-plan packet is created.

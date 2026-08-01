@@ -1,5 +1,5 @@
 import Foundation
-import GitKit
+import GitKittieKit
 
 /// A board file source that also supports writes — the abstraction `AppModel` drives,
 /// so the same board/edit flows run over the real provider API (`GitPontFileSource`)

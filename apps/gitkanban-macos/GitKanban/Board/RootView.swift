@@ -1,4 +1,4 @@
-import GitKit
+import GitKittieKit
 import GitKanbanKit
 import GitPontCore
 import SwiftUI

@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// Repository-wide verbs — the ones that act on the repo rather than on a selected item.

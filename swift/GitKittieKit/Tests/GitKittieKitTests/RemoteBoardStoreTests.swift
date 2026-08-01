@@ -1,5 +1,5 @@
 import XCTest
-@testable import GitKit
+@testable import GitKittieKit
 
 /// A `BoardFileSource` backed by an on-disk directory, used to prove the async
 /// remote loader produces byte-identical boards to the disk `BoardStore`.
@@ -29,7 +29,7 @@ final class RemoteBoardStoreTests: XCTestCase {
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("gitkit-remote-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("gitkittie-remote-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
@@ -150,7 +150,7 @@ final class RemoteBoardStoreTests: XCTestCase {
         # Tasks
         """, to: "Tasks/README.md")
         // The project inherits by leaving lanes empty.
-        try write("---\nconfig: project\nproject: GitKit\nlanes: []\n---\n\n# GitKit", to: "Tasks/GitKit/README.md")
+        try write("---\nconfig: project\nproject: GitKittie\nlanes: []\n---\n\n# GitKittie", to: "Tasks/GitKit/README.md")
         try write("---\nid: G-1\ntitle: One\nstatus: todo\n---\n\n# One", to: "Tasks/GitKit/1. To do/G-1.md")
         try write("---\nid: G-2\ntitle: Two\nstatus: done\n---\n\n# Two", to: "Tasks/GitKit/2. Done/G-2.md")
 

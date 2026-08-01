@@ -9,7 +9,7 @@ reviewable workflows.
 
 | Mark | Meaning |
 |---|---|
-| **Implemented** | Built in the macOS app or shared GitKit layer and covered by tests. |
+| **Implemented** | Built in the macOS app or shared GitKittie layer and covered by tests. |
 | **Planned** | Product/architecture plan; not implemented yet. |
 | **Future** | Intentionally deferred until the core workflow proves itself. |
 
@@ -46,7 +46,7 @@ command palette, which lists what applies to the current selection.
 
 - **Implemented:** Multi-lane commit graph drawn from real parent links — branches occupy their
   own coloured lane, merges are ringed and fan out to each parent, and branch points show the
-  child lanes converging. Lane assignment lives in `GitKit/CommitGraphLayout.swift` and is unit
+  child lanes converging. Lane assignment lives in `GitKittie/CommitGraphLayout.swift` and is unit
   tested (linear, branch/merge, octopus, orphan root, parent outside the fetched window).
 - **Implemented:** History loads in windows and fetches older commits on demand rather than
   silently stopping at a fixed count.

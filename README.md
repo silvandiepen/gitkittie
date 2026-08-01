@@ -1,6 +1,6 @@
-# GitKit
+# GitKittie
 
-**A monorepo for git-backed apps.** GitKit houses the apps that make git a quiet,
+**A monorepo for git-backed apps.** GitKittie houses the apps that make git a quiet,
 first-class backend for everyday work — and the shared engine they run on.
 
 | App | What it is | Status |
@@ -23,16 +23,16 @@ apps/
   gitbud-ios/         GitBud — iOS/iPadOS remote git client (planned; docs/spec only)
   website/            Marketing/docs site (Vue 3 + Vite)
 packages/
-  core/               @gitfolder/core — GitFolder's TypeScript contract
-  gitkanban-core/     @gitkit/gitkanban-core — GitKanban board schema + logic (TS, tested)
+  core/               @gitkittie/core — GitFolder's TypeScript contract
+  gitkanban-core/     @gitkittie/gitkanban-core — GitKanban board schema + logic (TS, tested)
 swift/
-  GitKit/             Shared Swift package: the GitEngine, board model, and app services (implemented + tested)
+  GitKittieKit/             Shared Swift package: the GitEngine, board model, and app services (implemented + tested)
 docs/                 GitFolder product docs
 ```
 
-> **Shared engine.** `swift/GitKit` is the shared Swift package native apps depend on
+> **Shared engine.** `swift/GitKittieKit` is the shared Swift package native apps depend on
 > (git engine, config store, keychain, GitHub OAuth, folder access, and future GitBud history
-> primitives). Extracting GitFolder's inline services into it is tracked work — see the GitKit
+> primitives). Extracting GitFolder's inline services into it is tracked work — see the GitKittie
 > tasks board.
 
 ## GitFolder
@@ -51,7 +51,7 @@ Docs: [product spec](docs/product-spec.md) · [data model](docs/data-model.md) �
 Your kanban board is a git repo. A native macOS/iOS kanban app backed by markdown files in a
 git repository you own — full history, no server, portable by default. The board schema,
 config inheritance, and card logic live in [`packages/gitkanban-core`](packages/gitkanban-core/),
-and the full plan lives in the `project-assets` repo under `GitKit/GitKanban/plan/`.
+and the full plan lives in the `project-assets` repo under `GitKittie/GitKanban/plan/`.
 
 The canonical board format is the shared Tasks contract (`project-assets/Tasks/README.md`):
 root/project configuration with inheritance, and markdown cards with YAML frontmatter.

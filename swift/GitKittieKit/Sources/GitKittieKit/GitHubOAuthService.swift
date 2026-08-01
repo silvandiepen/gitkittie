@@ -28,7 +28,7 @@ public struct GitHubOAuthService: Sendable {
     public init(
         clientID: String,
         scope: String = "repo",
-        userAgent: String = "GitKit",
+        userAgent: String = "GitKittie",
         session: URLSession = .shared
     ) {
         self.clientID = clientID

@@ -1,5 +1,5 @@
 import XCTest
-@testable import GitKit
+@testable import GitKittieKit
 
 final class ReposServiceTests: XCTestCase {
     override func tearDown() {
@@ -8,7 +8,7 @@ final class ReposServiceTests: XCTestCase {
     }
 
     func testReposServiceIsConstructible() {
-        _ = GitHubReposService(userAgent: "GitKitTests")
+        _ = GitHubReposService(userAgent: "GitKittieKitTests")
     }
 
     func testDecodesUserReposArray() throws {
@@ -57,7 +57,7 @@ final class ReposServiceTests: XCTestCase {
         let service = GitHubReposService(
             session: session,
             apiBaseURL: URL(string: "https://api.example.test")!,
-            userAgent: "GitKitTests"
+            userAgent: "GitKittieKitTests"
         )
         var requestedURLs: [String] = []
 
@@ -66,7 +66,7 @@ final class ReposServiceTests: XCTestCase {
             XCTAssertEqual(request.httpMethod, "GET")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer repo-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKitTests")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "GitKittieKitTests")
 
             switch request.url?.absoluteString {
             case "https://api.example.test/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member":

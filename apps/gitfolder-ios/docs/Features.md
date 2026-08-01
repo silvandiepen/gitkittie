@@ -2,7 +2,7 @@
 
 **Status: everything on this page is Planned.** No feature here is built. This is the
 intended v1 (and v1.1) scope, phased to match the GITFOLDER-028..035 task cards and the
-plan in `Projects/GitKit/Gitfolder/plans/ios-app-plan.md`.
+plan in `Projects/GitKittie/Gitfolder/plans/ios-app-plan.md`.
 
 ## Scope in one line
 

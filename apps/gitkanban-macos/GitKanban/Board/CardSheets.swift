@@ -1,6 +1,6 @@
 import AppKit
 import GitKanbanKit
-import GitKit
+import GitKittieKit
 import SwiftUI
 import UniformTypeIdentifiers
 

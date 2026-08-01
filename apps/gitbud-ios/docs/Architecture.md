@@ -1,7 +1,7 @@
 # GitBud (iOS/iPadOS) — Architecture
 
 GitBud iOS/iPadOS is remote-only. It talks to hosted git providers through
-GitPont and uses shared GitKit types only where those types do not assume local
+GitPont and uses shared GitKittie types only where those types do not assume local
 git process access.
 
 ## Layering
@@ -17,7 +17,7 @@ AppModel (@Observable, @MainActor)
         ├── GitPont
         │     auth · repos · branches · files · commits · PR/MR
         │
-        ├── swift/GitKit
+        ├── swift/GitKittieKit
         │     shared provider-neutral models and parsing helpers only
         │
         └── AIPont

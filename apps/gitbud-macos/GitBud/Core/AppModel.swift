@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import GitKit
+import GitKittieKit
 import Observation
 
 /// A way back from a rewrite. GitBud always cuts a safety branch before rewriting, so

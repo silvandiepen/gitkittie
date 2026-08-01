@@ -18,9 +18,9 @@ packages:
   git-pont:
     url: https://github.com/silvandiepen/git-pont.git
     branch: codex/initial-git-pont-monorepo
-  # The shared board model + parsers (mirrors @gitkit/gitkanban-core).
-  GitKit:
-    path: ../../swift/GitKit
+  # The shared board model + parsers (mirrors @gitkittie/gitkanban-core).
+  GitKittieKit:
+    path: ../../swift/GitKittieKit
   # The shared GitKanban app layer (AppModel + provider transport), tested once.
   GitKanbanKit:
     path: ../../swift/GitKanbanKit
@@ -36,8 +36,8 @@ targets:
         product: GitKanbanKit
       - package: git-pont
         product: GitPontCore
-      - package: GitKit
-        product: GitKit
+      - package: GitKittieKit
+        product: GitKittieKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitkanban

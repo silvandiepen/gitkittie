@@ -1,5 +1,5 @@
 import XCTest
-@testable import GitKit
+@testable import GitKittieKit
 
 /// Compile/link-level checks that the shared services expose a usable public API.
 /// (Keychain and network calls are not exercised here — they need entitlements /
@@ -11,11 +11,11 @@ final class ServicesTests: XCTestCase {
     }
 
     func testKeychainServiceIsConstructible() {
-        _ = KeychainService(service: "app.hakobs.gitkit.tests", account: "token")
+        _ = KeychainService(service: "app.hakobs.gitkittie.tests", account: "token")
     }
 
     func testOAuthServiceIsConstructible() {
-        _ = GitHubOAuthService(clientID: "test-client-id", userAgent: "GitKitTests")
+        _ = GitHubOAuthService(clientID: "test-client-id", userAgent: "GitKittieKitTests")
     }
 
     func testDeviceAuthorizationValueSemantics() {
@@ -32,7 +32,7 @@ final class ServicesTests: XCTestCase {
         let service = GitHubOAuthService(
             clientID: "client-123",
             scope: "repo read:user",
-            userAgent: "GitKitTests",
+            userAgent: "GitKittieKitTests",
             session: session
         )
 

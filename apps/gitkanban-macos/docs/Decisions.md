@@ -3,7 +3,7 @@
 An ADR-lite log of the load-bearing decisions behind GitKanban. Each entry records the
 **Decision**, its **Context**, the **Rationale**, and a **Status** (accepted / proposed / open /
 superseded). These are drawn from the GitKanban plan
-(`/Users/silvandiepen/Projects/GitKit/GitKanban/plan/`), the `@gitkit/gitkanban-core` README, the
+(`/Users/silvandiepen/Projects/GitKittie/GitKanban/plan/`), the `@gitkittie/gitkanban-core` README, the
 canonical board contract (`/Users/silvandiepen/Projects/Tasks/README.md`), and the shipped app.
 Where the shipped implementation diverges from the original plan, that is called out explicitly.
 
@@ -12,7 +12,7 @@ Where the shipped implementation diverges from the original plan, that is called
 ### 1. TypeScript is the source of truth; Swift mirrors it
 
 **Decision.** The board schema and logic live in `packages/gitkanban-core` (TypeScript, built and
-tested). The Swift apps **mirror** this package (via `swift/GitKit`); they do not fork or re-invent
+tested). The Swift apps **mirror** this package (via `swift/GitKittieKit`); they do not fork or re-invent
 the contract. To change the contract, change it in TypeScript first, then mirror the change in
 Swift.
 
@@ -148,10 +148,10 @@ sync, a conflict UI, and the fractional rank keys of Decision 6.
 
 ---
 
-### 9. GitKanban lives in the GitKit monorepo, sharing one git/board package
+### 9. GitKanban lives in the GitKittie monorepo, sharing one git/board package
 
-**Decision.** GitKanban is built inside the GitKit monorepo alongside GitFolder, not as a forked
-repo. Both apps depend on the shared `swift/GitKit` Swift package (git engine, board parsing,
+**Decision.** GitKanban is built inside the GitKittie monorepo alongside GitFolder, not as a forked
+repo. Both apps depend on the shared `swift/GitKittieKit` Swift package (git engine, board parsing,
 keychain, OAuth, repos service); board logic depends on `packages/gitkanban-core`. Apps never import
 each other.
 
@@ -179,14 +179,14 @@ transport-agnostic.
 
 **Status.** Accepted (protocol + `ShellGitEngine` exist and are used by the app). NB: iOS did **not**
 implement `Libgit2Engine` behind this protocol — it ships over a REST API via git-pont using
-GitKit's `RemoteBoardStore`/`BoardFileSource` instead (see Decision 12 and the iOS app).
+GitKittie's `RemoteBoardStore`/`BoardFileSource` instead (see Decision 12 and the iOS app).
 
 ---
 
 ### 11. YAML frontmatter via Yams (Swift), `yaml` (TS)
 
 **Decision.** The TS core parses/serializes frontmatter with the `yaml` package; the Swift board
-parsing in `swift/GitKit` uses **Yams**.
+parsing in `swift/GitKittieKit` uses **Yams**.
 
 **Context.** Frontmatter round-trip fidelity across two languages is the correctness crux
 (Decision 4).
@@ -194,7 +194,7 @@ parsing in `swift/GitKit` uses **Yams**.
 **Rationale.** Established YAML libraries on each side, exercised against shared fixtures, keep the
 parsers aligned.
 
-**Status.** Accepted for the **read** path (GitKit's `BoardStore`/`BoardMarkdown` use Yams). The
+**Status.** Accepted for the **read** path (GitKittie's `BoardStore`/`BoardMarkdown` use Yams). The
 macOS app's **write** path currently bypasses Yams (hand-rolled frontmatter composition in
 `AppModel`); moving writes onto Yams/`BoardMarkdown` is tracked on the board (see Decision 4).
 
@@ -203,7 +203,7 @@ macOS app's **write** path currently bypasses Yams (hand-rolled frontmatter comp
 ### 12. iOS transport superseded: git-pont REST API, not libgit2
 
 **Decision.** The iOS app talks to a hosted git provider's REST API through **git-pont** (no local
-clone), reusing GitKit's `RemoteBoardStore`/`BoardFileSource` for parsing. It does **not** use an
+clone), reusing GitKittie's `RemoteBoardStore`/`BoardFileSource` for parsing. It does **not** use an
 embedded `Libgit2Engine`.
 
 **Context.** The plan originally gated iOS on an embedded-libgit2 `GitEngine`. In practice the iOS

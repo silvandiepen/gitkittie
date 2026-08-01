@@ -50,7 +50,7 @@ public struct GitProcessRunner: Sendable {
         let outBox = Box()
         let errBox = Box()
         let group = DispatchGroup()
-        let queue = DispatchQueue(label: "gitkit.pipe.read", attributes: .concurrent)
+        let queue = DispatchQueue(label: "gitkittie.pipe.read", attributes: .concurrent)
 
         do {
             try process.run()

@@ -1,5 +1,5 @@
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// ⌘, — a real macOS Settings window rather than a sidebar tab. Everything here is

@@ -1,5 +1,5 @@
 import XCTest
-@testable import GitKit
+@testable import GitKittieKit
 
 /// Records requests and replays canned responses so the client is tested without network.
 private final class MockHTTP: SyncHTTPClient, @unchecked Sendable {

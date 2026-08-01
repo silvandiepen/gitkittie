@@ -292,7 +292,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { resolveCardFields, type Column, type Lane } from "@gitkit/gitkanban-core";
+import { resolveCardFields, type Column, type Lane } from "@gitkittie/gitkanban-core";
 import { useBemm } from "bemm";
 
 import { cardTitle, type BoardCard } from "@/services";

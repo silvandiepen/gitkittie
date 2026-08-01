@@ -1,5 +1,5 @@
 import XCTest
-@testable import GitKit
+@testable import GitKittieKit
 
 /// Drives `ShellGitEngine` against a throwaway local bare "remote" and two clones,
 /// so no network or credentials are needed. Runs wherever `git` is on PATH.
@@ -10,7 +10,7 @@ final class ShellGitEngineTests: XCTestCase {
 
     override func setUpWithError() throws {
         tmp = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("gitkit-\(UUID().uuidString)")
+            .appendingPathComponent("gitkittie-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
     }
 
@@ -20,7 +20,7 @@ final class ShellGitEngineTests: XCTestCase {
 
     private func configureIdentity(_ repo: URL) throws {
         try runner.run(["config", "user.email", "test@example.com"], in: repo)
-        try runner.run(["config", "user.name", "GitKit Test"], in: repo)
+        try runner.run(["config", "user.name", "GitKittie Test"], in: repo)
     }
 
     private func write(_ text: String, to repo: URL, _ name: String) throws {
@@ -51,7 +51,7 @@ final class ShellGitEngineTests: XCTestCase {
         let history = try await engine.fileHistory(at: b, file: "card.md", limit: 10)
         XCTAssertEqual(history.count, 1)
         XCTAssertEqual(history.first?.message, "add card")
-        XCTAssertEqual(history.first?.author, "GitKit Test")
+        XCTAssertEqual(history.first?.author, "GitKittie Test")
 
         // A moves the card (one-line change), pushes; B pulls it cleanly.
         try configureIdentity(b)

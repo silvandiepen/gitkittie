@@ -1,5 +1,5 @@
 import AppKit
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 struct SettingsView: View {

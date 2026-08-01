@@ -7,9 +7,9 @@ app target is scaffolded and the core v1 workflows are implemented behind real-g
 
 - **Done:** Add XcodeGen projects for `apps/gitbud-macos` and GitBud documentation for
   `apps/gitbud-ios`.
-- **Done:** Define GitKit history models: commits, refs, graph rows, file diffs, hunks, rewrite plans, and
+- **Done:** Define GitKittie history models: commits, refs, graph rows, file diffs, hunks, rewrite plans, and
   rewrite results.
-- **Done:** Add GitKit shell-git commands for graph/status/diff/file-history using argv-only process calls.
+- **Done:** Add GitKittie shell-git commands for graph/status/diff/file-history using argv-only process calls.
 - **Done:** Add Keychain-backed configuration for GitPont connections and AIPont provider keys.
 - **Done:** Keep the no-backend rule in AGENTS/docs before any auth or AI code is added.
 

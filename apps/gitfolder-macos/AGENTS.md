@@ -16,14 +16,14 @@ Git. Menu-bar-only (`LSUIElement`), local-first, no backend. See
 
 - **Code:** `apps/gitfolder-macos/GitFolder/` — `App/` (`GitFolderApp`, `AppModel`),
   `Services/`, `Models/`, `Views/`. Tests in `apps/gitfolder-macos/Tests/`.
-- **Shared Swift:** `../../swift/GitKit` — `KeychainService`, `GitHubOAuthService`
+- **Shared Swift:** `../../swift/GitKittieKit` — `KeychainService`, `GitHubOAuthService`
   (consumed today); `GitEngine`/`ShellGitEngine` and further extractions in
   progress. Put cross-app logic here, not in the app.
 - **App docs:** `apps/gitfolder-macos/docs/{Features,Decisions,Architecture}.md`.
 - **Product plans:** repo `docs/` (product-spec, sync-model, data-model, …) —
   note several describe an SSH-first/aspirational design the app no longer
   matches; treat this app's `docs/` and the code as authoritative.
-- **Tasks:** the `GitKit` board, `GITFOLDER-###` cards (epic `gitfolder`).
+- **Tasks:** the `GitKittie` board, `GITFOLDER-###` cards (epic `gitfolder`).
 
 ## Build / run / test
 
@@ -40,7 +40,7 @@ open apps/gitfolder-macos/GitFolder.xcodeproj   # then build/run in Xcode
 ## XcodeGen rule (hard)
 
 Edit **`project.yml`** and regenerate — **never** hand-edit `GitFolder.xcodeproj`
-(it is generated and git-ignored). Dependencies (`GitKit`, `git-pont`),
+(it is generated and git-ignored). Dependencies (`GitKittie`, `git-pont`),
 entitlements, Info.plist keys, and signing all live in `project.yml`.
 
 ## App-specific gotchas

@@ -9,7 +9,7 @@ import {
   type Priority,
   type ProjectConfig,
   type User,
-} from "@gitkit/gitkanban-core";
+} from "@gitkittie/gitkanban-core";
 
 import type { GitHubClient, GitHubRepo, GitHubTreeItem } from "@/services/github";
 import type { BoardCard, BoardProject, LoadedBoard, LoadedWorkspace } from "./BoardLoader.model";

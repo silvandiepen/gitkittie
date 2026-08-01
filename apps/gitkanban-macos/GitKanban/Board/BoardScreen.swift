@@ -1,6 +1,6 @@
 import AppKit
 import GitKanbanKit
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// The board for the active project, in **lanes** (horizontal kanban) or **list** mode.

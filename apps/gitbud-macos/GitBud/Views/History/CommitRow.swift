@@ -1,6 +1,6 @@
 import AppKit
 import GitBudCore
-import GitKit
+import GitKittieKit
 import SwiftUI
 
 /// One commit in the graph. Click to focus, ⌘-click to add to the selection, ⇧-click to

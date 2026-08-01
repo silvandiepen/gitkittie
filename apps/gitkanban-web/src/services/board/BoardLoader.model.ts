@@ -4,7 +4,7 @@ import type {
   EffectiveConfig,
   ParsedCard,
   ProjectConfig,
-} from "@gitkit/gitkanban-core";
+} from "@gitkittie/gitkanban-core";
 
 import type { GitHubRepo } from "@/services/github";
 

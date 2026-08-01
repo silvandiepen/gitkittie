@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { serializeCard, type CardFields, type Lane } from "@gitkit/gitkanban-core";
+import { serializeCard, type CardFields, type Lane } from "@gitkittie/gitkanban-core";
 
 import {
   cardMatchesQuery,
