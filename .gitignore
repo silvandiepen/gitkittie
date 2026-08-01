@@ -32,5 +32,11 @@ apps/gitfolder-ios/build/
 apps/gitfolder-ios/*.xcuserdata/
 apps/gitfolder-ios/GitFolder/Info.plist
 apps/gitfolder-ios/GitFolder/GitFolder.entitlements
+apps/gitbud-macos/*.xcodeproj/
+apps/gitbud-macos/DerivedData/
+apps/gitbud-macos/build/
+apps/gitbud-macos/*.xcuserdata/
+apps/gitbud-macos/GitBud/Info.plist
+apps/gitbud-macos/GitBud/GitBud.entitlements
 swift/*/.build/
 .swiftpm/
