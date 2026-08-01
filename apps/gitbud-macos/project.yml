@@ -1,0 +1,101 @@
+name: GitBud
+options:
+  bundleIdPrefix: app.hakobs
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: 1
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: "38MGF83L2L"
+
+packages:
+  GitKit:
+    path: ../../swift/GitKit
+  git-pont:
+    url: https://github.com/silvandiepen/git-pont.git
+    branch: codex/initial-git-pont-monorepo
+
+targets:
+  GitBudCore:
+    type: framework
+    platform: macOS
+    sources:
+      - path: GitBud/Core
+    dependencies:
+      - package: GitKit
+        product: GitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitbud.core
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+  GitBud:
+    type: application
+    platform: macOS
+    sources:
+      - path: GitBud
+        excludes:
+          - Core
+    dependencies:
+      - target: GitBudCore
+      - package: GitKit
+        product: GitKit
+      - package: git-pont
+        product: GitPontCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitbud
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: GitBud/Info.plist
+        CODE_SIGN_ENTITLEMENTS: GitBud/GitBud.entitlements
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_STYLE: Automatic
+    entitlements:
+      path: GitBud/GitBud.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
+    info:
+      path: GitBud/Info.plist
+      properties:
+        CFBundleDisplayName: GitBud
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSApplicationCategoryType: public.app-category.developer-tools
+        ITSAppUsesNonExemptEncryption: false
+        LSMinimumSystemVersion: "14.0"
+        NSHumanReadableCopyright: "Copyright © Sil van Diepen"
+  GitBudTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: GitBudCore
+      - package: GitKit
+        product: GitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitbud.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
+
+schemes:
+  GitBud:
+    build:
+      targets:
+        GitBudCore: all
+        GitBud: all
+        GitBudTests: test
+    test:
+      targets:
+        - GitBudTests
