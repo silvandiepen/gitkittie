@@ -29,6 +29,16 @@ public struct ShellGitEngine: GitEngine {
         )
     }
 
+    public func fetch(at path: URL, auth: GitAuth) async throws {
+        try require(
+            authArgs(auth) + ["fetch", "--prune", "origin"],
+            in: path,
+            auth: auth,
+            timeout: 120,
+            label: "fetch"
+        )
+    }
+
     public func pullRebase(at path: URL, auth: GitAuth) async throws -> PullResult {
         let branch = try currentBranch(at: path)
         let result = try runner.run(

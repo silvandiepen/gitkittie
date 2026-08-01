@@ -6,6 +6,7 @@ import Foundation
 /// See `project-assets/GitKit/GitKanban/plan/platforms-and-git.md`.
 public protocol GitEngine {
     func clone(_ remote: URL, to path: URL, auth: GitAuth) async throws
+    func fetch(at path: URL, auth: GitAuth) async throws
     func pullRebase(at path: URL, auth: GitAuth) async throws -> PullResult
     func commit(at path: URL, message: String, paths: [String]) async throws
     func push(at path: URL, auth: GitAuth) async throws

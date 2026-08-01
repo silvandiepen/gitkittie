@@ -71,8 +71,6 @@ public struct GitHubReposService: Sendable {
     }
 
     /// List the authenticated user's repositories (owner + collaborator + org member).
-    /// v1 returns the first 100 most-recently-updated repos.
-    // TODO: pagination — follow the `Link: rel="next"` header to fetch beyond 100.
     public func listRepositories(token: String) async throws -> [GitHubRepo] {
         var components = URLComponents(
             url: apiBaseURL.appendingPathComponent("user/repos"),
@@ -87,6 +85,17 @@ public struct GitHubReposService: Sendable {
             throw GitHubReposError.invalidResponse
         }
 
+        var repositories: [GitHubRepo] = []
+        var nextURL: URL? = url
+        while let pageURL = nextURL {
+            let (pageRepositories, pageNextURL) = try await repositoryPage(url: pageURL, token: token)
+            repositories.append(contentsOf: pageRepositories)
+            nextURL = pageNextURL
+        }
+        return repositories
+    }
+
+    private func repositoryPage(url: URL, token: String) async throws -> ([GitHubRepo], URL?) {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -102,10 +111,24 @@ public struct GitHubReposService: Sendable {
             throw GitHubReposError.requestFailed(status: httpResponse.statusCode)
         }
         do {
-            return try JSONDecoder().decode([GitHubRepo].self, from: data)
+            return (
+                try JSONDecoder().decode([GitHubRepo].self, from: data),
+                nextPageURL(from: httpResponse.value(forHTTPHeaderField: "Link"))
+            )
         } catch {
             throw GitHubReposError.invalidResponse
         }
+    }
+
+    private func nextPageURL(from linkHeader: String?) -> URL? {
+        guard let linkHeader else { return nil }
+        for part in linkHeader.split(separator: ",") {
+            let pieces = part.split(separator: ";").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            guard pieces.contains("rel=\"next\""), let link = pieces.first else { continue }
+            let trimmed = link.trimmingCharacters(in: CharacterSet(charactersIn: "<>"))
+            return URL(string: trimmed)
+        }
+        return nil
     }
 }
 

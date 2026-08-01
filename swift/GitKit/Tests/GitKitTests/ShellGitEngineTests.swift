@@ -94,4 +94,35 @@ final class ShellGitEngineTests: XCTestCase {
         XCTAssertFalse(status.clean)
         XCTAssertTrue(status.changedPaths.contains("card.md"))
     }
+
+    func testPushInjectsHTTPSAuthHeaderWithoutPrompting() async throws {
+        let argsLog = tmp.appendingPathComponent("args.log")
+        let envLog = tmp.appendingPathComponent("env.log")
+        let fakeGit = tmp.appendingPathComponent("fake-git.sh")
+        let script = """
+        #!/bin/sh
+        printf '%s\\n' "$@" >> "\(argsLog.path)"
+        printf '%s\\n' "$GIT_TERMINAL_PROMPT" >> "\(envLog.path)"
+        if [ "$1" = "branch" ]; then
+          echo "feature/auth"
+          exit 0
+        fi
+        if [ "$1" = "-c" ]; then
+          exit 0
+        fi
+        exit 1
+        """
+        try Data(script.utf8).write(to: fakeGit)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeGit.path)
+        let authEngine = ShellGitEngine(runner: GitProcessRunner(gitExecutableURL: fakeGit))
+
+        try await authEngine.push(at: tmp, auth: .httpsToken(username: "x-access-token", token: "secret-token"))
+
+        let args = try String(contentsOf: argsLog, encoding: .utf8)
+        let env = try String(contentsOf: envLog, encoding: .utf8)
+        let expectedHeader = Data("x-access-token:secret-token".utf8).base64EncodedString()
+        XCTAssertTrue(args.contains("http.extraHeader=Authorization: Basic \(expectedHeader)"))
+        XCTAssertTrue(args.contains("push\n-u\norigin\nfeature/auth"))
+        XCTAssertTrue(env.split(separator: "\n").contains("0"))
+    }
 }
