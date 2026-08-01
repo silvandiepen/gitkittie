@@ -3,12 +3,12 @@
 Entry point for any agent (or human) working in this repo. Read this first, then the
 per-app `AGENTS.md` for whichever app you're touching.
 
-GitKit is a **monorepo for git-backed apps**: two products — **GitFolder** and **GitKanban** —
-each targeting **macOS and iOS**, plus a marketing website, all sharing one git engine. Both
-products are local-first, own-your-data, no-server apps that treat a git repository as the
-source of truth.
+GitKit is a **monorepo for git-backed apps**: three products — **GitFolder**, **GitKanban**,
+and **GitBud** — each targeting Apple platforms, plus a marketing website, all sharing one git
+engine. The products are local-first or remote-provider-first depending on platform, own-your-data,
+no-server apps that treat a git repository as the source of truth.
 
-## The four apps (+ site)
+## The apps (+ site)
 
 | App | Home | Platform | Status |
 |---|---|---|---|
@@ -16,6 +16,8 @@ source of truth.
 | GitFolder (iOS) | `apps/gitfolder-ios/` | SwiftUI (planned) | Roadmap — libgit2 spike + plan |
 | GitKanban (macOS) | `apps/gitkanban-macos/` | SwiftUI board app | In development (read-only board UI) |
 | GitKanban (iOS) | `apps/gitkanban-ios/` | SwiftUI (planned) | Roadmap — Phase 2 |
+| GitBud (macOS) | `apps/gitbud-macos/` | SwiftUI git client | In development — tested local history/rewrite UI |
+| GitBud (iOS/iPadOS) | `apps/gitbud-ios/` | SwiftUI remote git client (planned) | Docs/spec — GitPont remote-only |
 | Website | `apps/website/` | Vue 3 + Vite | Shipping |
 
 Each app folder carries its own `AGENTS.md` and `docs/{Features,Decisions,Architecture}.md`.
@@ -29,6 +31,8 @@ apps/
   gitfolder-ios/      GitFolder — iOS app (planned; docs/spec only)
   gitkanban-macos/    GitKanban — macOS board app (read-only board UI)
   gitkanban-ios/      GitKanban — iOS app (planned; docs/spec only)
+  gitbud-macos/       GitBud — macOS git client (SwiftUI/AppKit, XcodeGen)
+  gitbud-ios/         GitBud — iOS/iPadOS remote git client (planned; docs/spec only)
   website/            Marketing/docs site (Vue 3 + Vite)
 packages/
   core/               @gitfolder/core — GitFolder's TypeScript config contract
@@ -46,7 +50,8 @@ those packages, they do not fork them.
 ## Where the plans and tasks live
 
 - **Product plans & specs:** the `project-assets` repo under `GitKit/` (`GitKit/Gitfolder/`,
-  `GitKit/GitKanban/plan/`). The code repo's `docs/` mirrors the GitFolder product docs.
+  `GitKit/GitKanban/plan/`; GitBud docs currently live under `apps/gitbud-*`). The code repo's
+  `docs/` mirrors the GitFolder product docs.
 - **Task board:** the `GitKit` board in `project-assets/Tasks/GitKit/` (canonical format:
   `project-assets/Tasks/README.md`). Cards carry a `GITKIT-###` or `GITFOLDER-###` id and an
   `epic:` (`gitfolder`, `gitkanban-core`, `gitkit-swift`, `gitkanban-macos`, `gitkanban-ios`,
@@ -60,6 +65,8 @@ npm run check               # typecheck + test + build every workspace (what CI 
 npm run gitkanban:core:test # test the GitKanban core package
 npm run site:dev            # run the website locally
 npm run macos:generate      # regenerate the GitFolder Xcode project (XcodeGen)
+npm run gitbud:generate     # regenerate the GitBud Xcode project (XcodeGen)
+npm run gitbud:test         # build + test the GitBud macOS app
 ```
 
 Swift apps use **XcodeGen** — never hand-edit `.xcodeproj`; edit `project.yml` and regenerate.

@@ -14,6 +14,8 @@ apps/
   gitfolder-ios/      GitFolder — iOS app. Planned; docs/spec only, no code.
   gitkanban-macos/    GitKanban — macOS board app (SwiftUI, XcodeGen). In development — read-only board UI (loads markdown boards via GitKit; editing/drag/git-sync deferred).
   gitkanban-ios/      GitKanban — iOS app. Planned; not yet scaffolded.
+  gitbud-macos/       GitBud — macOS git client. In development. Local repo inspection, app-managed remote clones, provider repo/PR workflows, history rewrites, Magic, purge, force-with-lease, and GitBudCore app-model tests are scaffolded/tested.
+  gitbud-ios/         GitBud — iOS/iPadOS remote git client. Planned; docs/spec only. GitPont remote-only, no shell git or local history surgery.
   website/            Marketing/docs site (Vue 3 + Vite). Shipping.
 packages/
   core/               @gitfolder/core — GitFolder's TS config contract (see caveat below).
@@ -36,6 +38,7 @@ Apps depend on packages, **never on each other**. Shared logic belongs in a pack
         apps/gitfolder-macos ─┐            ┌─ apps/gitfolder-ios (planned)
    apps/gitkanban-macos ───┼── depend ──┤
     apps/gitkanban-ios ────┘   on       └─  (never on each other)
+       apps/gitbud-* ──────┘
                                 │
                                 ▼
                         swift/GitKit  (Swift: GitEngine + services)
@@ -65,11 +68,14 @@ Domain (Card, Board, Column  |  SyncedFolder, Config)   ← schema mirrored from
              └── Libgit2Engine    (iOS — embedded libgit2/HTTPS)  ⏳ pending (Phase-0 spike first)
 ```
 
-`GitEngine` is the only thing that knows git; `MarkdownStore` is the only thing that knows the file
-format. That separation is what lets the same board UI run on macOS shell-git and iOS libgit2
-unchanged. `swift/GitKit` also carries the cross-cutting services `KeychainService` (implemented),
-`GitHubOAuthService` (GitHub device-flow, implemented), and — pending extraction from GitFolder —
-`FolderAccessService` (security-scoped bookmarks) and `ConfigStore`.
+`GitEngine` is the only thing that knows common clone/sync git operations; `MarkdownStore` is the
+only thing that knows the file format. GitBud adds a broader GitKit history surface for graph,
+diff, rewrite, push-safety, Magic, and purge operations. macOS executes those operations against
+local checkouts via system git;
+iOS/iPadOS GitBud is planned as GitPont remote-only and must not assume shell git or full local
+history surgery. `swift/GitKit` also carries the cross-cutting services `KeychainService`
+(implemented), `GitHubOAuthService` (GitHub device-flow, implemented), and — pending extraction
+from GitFolder — `FolderAccessService` (security-scoped bookmarks) and `ConfigStore`.
 
 **Extraction status.** `swift/GitKit` is being populated *additively* from GitFolder's inline
 `Services/`: shared code lands, GitFolder is repointed at it, and its inline copy is deleted — each
@@ -117,6 +123,8 @@ npm run check                # typecheck + test + build every workspace — exac
 npm run gitkanban:core:test  # Vitest for packages/gitkanban-core
 npm run site:dev             # run the website locally
 npm run macos:generate       # XcodeGen: regenerate GitFolder's .xcodeproj
+npm run gitbud:generate      # XcodeGen: regenerate GitBud's .xcodeproj
+npm run gitbud:test          # build GitBud tests and run GitBudTests.xctest directly
 ```
 
 `npm run check` = `typecheck --workspaces --if-present && test … && build …`, so adding a workspace
@@ -143,6 +151,8 @@ a local script (`npm run macos:archive:app-store`).
   - GitFolder plans: `GitKit/Gitfolder/` (and mirrored into this repo's `docs/*.md`).
   - GitKanban plans: `GitKit/GitKanban/plan/` (architecture, platforms-and-git, data-model,
     sync-model, phases) — **not** duplicated into the code repo.
+  - GitBud plans: currently in `apps/gitbud-macos/docs/` and `apps/gitbud-ios/docs/` until a
+    project-assets product-plan packet is created.
   - Task board: `Tasks/GitKit/` — cards carry `GITKIT-###` / `GITFOLDER-###` ids and an `epic:`
     (`gitfolder`, `gitkanban-core`, `gitkit-swift`, `gitkanban-macos`, `gitkanban-ios`,
     `monorepo-setup`); board mutations are committed and pushed.

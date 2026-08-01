@@ -2,7 +2,7 @@
   "name": "gitkit-monorepo",
   "private": true,
   "type": "module",
-  "description": "GitKit \u2014 a monorepo for git-backed apps: GitFolder and GitKanban.",
+  "description": "GitKit \u2014 a monorepo for git-backed apps: GitFolder, GitKanban, and GitBud.",
   "engines": {
     "node": ">=22"
   },
@@ -25,7 +25,9 @@
     "gitkanban:webview:build": "npm run build -w @gitkit/gitkanban-markdown-webview",
     "macos:generate": "cd apps/gitfolder-macos && xcodegen generate",
     "macos:archive:app-store": "apps/gitfolder-macos/scripts/archive-app-store.sh",
-    "gitkanban:run": "apps/gitkanban-macos/scripts/run.sh"
+    "gitkanban:run": "apps/gitkanban-macos/scripts/run.sh",
+    "gitbud:generate": "cd apps/gitbud-macos && xcodegen generate",
+    "gitbud:test": "zsh apps/gitbud-macos/scripts/test.sh"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",

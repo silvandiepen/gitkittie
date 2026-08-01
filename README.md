@@ -7,9 +7,11 @@ first-class backend for everyday work — and the shared engine they run on.
 |---|---|---|
 | **GitFolder** | macOS menu-bar app that auto-versions selected folders to GitHub | Shipping (App Store) |
 | **GitKanban** | macOS/iOS kanban board backed by a git repo of markdown files | In development |
+| **GitBud** | macOS/iOS/iPadOS git client focused on visual history editing and simple rebasing | macOS scaffold in development |
 
-Both are local-first, own-your-data, no-server apps that treat a git repository as the
-source of truth. They share the same git plumbing, so it lives in one repo.
+The products are local-first or remote-provider-first depending on platform, own-your-data,
+no-server apps that treat a git repository as the source of truth. They share the same git
+plumbing, so it lives in one repo.
 
 ## Repository layout
 
@@ -17,6 +19,8 @@ source of truth. They share the same git plumbing, so it lives in one repo.
 apps/
   gitfolder-macos/    GitFolder — macOS menu-bar app (SwiftUI/AppKit, XcodeGen)
   gitkanban-macos/    GitKanban — macOS board app (read-only board UI)
+  gitbud-macos/       GitBud — macOS git client (SwiftUI/AppKit, XcodeGen)
+  gitbud-ios/         GitBud — iOS/iPadOS remote git client (planned; docs/spec only)
   website/            Marketing/docs site (Vue 3 + Vite)
 packages/
   core/               @gitfolder/core — GitFolder's TypeScript contract
@@ -26,9 +30,10 @@ swift/
 docs/                 GitFolder product docs
 ```
 
-> **Shared engine.** `swift/GitKit` is the shared Swift package both native apps depend on
-> (git engine, config store, keychain, GitHub OAuth, folder access). Extracting GitFolder's
-> inline services into it is tracked work — see the GitKit tasks board.
+> **Shared engine.** `swift/GitKit` is the shared Swift package native apps depend on
+> (git engine, config store, keychain, GitHub OAuth, folder access, and future GitBud history
+> primitives). Extracting GitFolder's inline services into it is tracked work — see the GitKit
+> tasks board.
 
 ## GitFolder
 
@@ -51,6 +56,28 @@ and the full plan lives in the `project-assets` repo under `GitKit/GitKanban/pla
 The canonical board format is the shared Tasks contract (`project-assets/Tasks/README.md`):
 root/project configuration with inheritance, and markdown cards with YAML frontmatter.
 
+## GitBud
+
+Simple visual git history editing. GitBud is a native macOS git client in active development for
+branch flows, commit graphs, file history, interactive rebase, commit splitting, squashing/merging,
+reordering, Magic commit-message drafting via AIPont-style BYOK provider calls, and safe
+full-history purge workflows.
+
+macOS supports local repositories and GitPont-connected remotes cloned into app-managed checkouts
+for full history editing. iOS and iPadOS are planned as remote-only clients through GitPont: repo
+browsing, branches, diffs, file history where available, Magic, and branch/PR workflows without
+shell git or local clone history surgery. GitBud has no accounts, hosted backend, or GitBud-owned
+sync infrastructure.
+
+Docs: [macOS features](apps/gitbud-macos/docs/Features.md) ·
+[macOS architecture](apps/gitbud-macos/docs/Architecture.md) ·
+[macOS decisions](apps/gitbud-macos/docs/Decisions.md) ·
+[product spec](apps/gitbud-macos/docs/product-spec.md) ·
+[implementation plan](apps/gitbud-macos/docs/implementation-plan.md) ·
+[iOS/iPadOS features](apps/gitbud-ios/docs/Features.md) ·
+[iOS/iPadOS architecture](apps/gitbud-ios/docs/Architecture.md) ·
+[iOS/iPadOS decisions](apps/gitbud-ios/docs/Decisions.md)
+
 ## Development
 
 ```bash
@@ -58,4 +85,6 @@ npm install                              # install all workspaces
 npm run check                            # typecheck + test + build everything
 npm run gitkanban:core:test              # test the GitKanban core
 npm run macos:generate                   # regenerate the GitFolder Xcode project
+npm run gitbud:generate                  # regenerate the GitBud Xcode project
+npm run gitbud:test                      # build GitBud tests and run GitBudTests.xctest
 ```

@@ -194,7 +194,7 @@ docs *reference* the existing `docs/*.md` plans rather than restating them.
 package scopes under `@gitkit/*` (GITKIT-008, still open) — `packages/core` is still `@gitfolder/core`
 while `packages/gitkanban-core` is already `@gitkit/gitkanban-core`.
 
-**Context.** Both names predate the GitKit reframe. With two products, `native-macos` named a
+**Context.** Both names predate the GitKit reframe. With multiple products, `native-macos` named a
 platform not a product, and the mixed `@gitfolder` / `@gitkit` scopes are inconsistent.
 
 **Rationale.** Consistency and disambiguation; low-risk internal-only renames. Deferred (P3) because
