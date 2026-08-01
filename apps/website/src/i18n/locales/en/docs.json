@@ -1,10 +1,10 @@
 {
   "meta": {
     "title": "Docs — GitFolder",
-    "description": "GitFolder documentation: install, add folders, sync settings, SSH keys, troubleshooting and FAQ. GitKanban docs live on GitHub."
+    "description": "GitFolder documentation: install, add folders, sync settings, SSH keys, troubleshooting and FAQ. GitKanban and GitBud docs live on GitHub."
   },
   "sidebarTitle": "GitFolder docs",
-  "sidebarNoteHtml": "Looking for GitKanban? Its board format and docs live on <a href=\"https://github.com/silvandiepen/Gitfolder\" target=\"_blank\" rel=\"noopener\">GitHub</a>.",
+  "sidebarNoteHtml": "Looking for GitKanban or GitBud? Both are still in development — their docs live on <a href=\"https://github.com/silvandiepen/gitkittie\" target=\"_blank\" rel=\"noopener\">GitHub</a>.",
   "sections": [
     {
       "id": "getting-started",

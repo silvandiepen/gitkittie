@@ -1,6 +1,6 @@
 # Website — Agent Instructions
 
-The GitKit marketing site: a **Vue 3 + Vite** SPA that covers the whole family — an umbrella
+The GitKittie marketing site: a **Vue 3 + Vite** SPA that covers the whole family — an umbrella
 home page plus product pages for **GitFolder** (shipped) and **GitKanban** (coming soon) — and the
 standard pages a site needs (docs, support, privacy, terms, sitemap, robots). Read the root
 [`AGENTS.md`](../../AGENTS.md) first.
@@ -27,8 +27,8 @@ build on `@sil/ui` tokens. Concretely:
   `var(--border-radius-*)`, `var(--color-*)`, etc. Brand hex lives in exactly one place —
   the palette block in `_variables.scss`.
 - **Per-app theming:** the two brand colours come from the app icon backgrounds in
-  `project-assets/GitKit/assets/icon.svg` — green (GitFolder) and orange (GitKanban);
-  the shell is a neutral slate (GitKit). A page/section sets `data-app="gitfolder"` or
+  `project-assets/GitKittie/assets/icon.svg` — green (GitFolder) and orange (GitKanban);
+  the shell is a neutral slate (GitKittie). A page/section sets `data-app="gitfolder"` or
   `data-app="gitkanban"` on its root; `_variables.scss` remaps the generic `--color-accent*` tokens
   from that, so the shared `.mkt` primitives (`_marketing.scss`) theme themselves. For accent-
   coloured **text/icons** use `var(--accent-legible)` (flips to the light shade in dark mode);

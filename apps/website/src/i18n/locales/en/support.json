@@ -1,10 +1,10 @@
 {
   "meta": {
-    "title": "Support — GitKit",
-    "description": "Support and troubleshooting for GitFolder and GitKanban. Most issues come down to git, token access, repository URLs, or folder permissions."
+    "title": "Support — GitKittie",
+    "description": "Support and troubleshooting for GitFolder, GitKanban and GitBud. Most issues come down to git, token access, repository URLs, or folder permissions."
   },
   "title": "Support",
-  "intro": "GitFolder and GitKanban are small, local-first apps. Most issues come down to git, token access, repository URLs, or folder permissions. Pick your app below.",
+  "intro": "GitFolder, GitKanban and GitBud are small, local-first apps. Most issues come down to git, token access, repository URLs, or folder permissions. Pick your app below.",
   "gitfolder": {
     "heading": "GitFolder",
     "setup": {
@@ -27,10 +27,15 @@
   "gitkanban": {
     "heading": "GitKanban",
     "title": "In development",
-    "bodyHtml": "GitKanban's native macOS app is still being built, so there's nothing to install yet. The board format and core logic are open on <a href=\"https://github.com/silvandiepen/Gitfolder\" target=\"_blank\" rel=\"noopener\">GitHub</a> — that's the best place to follow progress, report issues, or ask questions. Want a heads-up when it ships? <a href=\"mailto:me@sil.mt?subject=Notify%20me%20about%20GitKanban\">Notify me</a>."
+    "bodyHtml": "GitKanban's native macOS app is still being built, so there's nothing to install yet. The board format and core logic are open on <a href=\"https://github.com/silvandiepen/gitkittie\" target=\"_blank\" rel=\"noopener\">GitHub</a> — that's the best place to follow progress, report issues, or ask questions. Want a heads-up when it ships? <a href=\"mailto:me@sil.mt?subject=Notify%20me%20about%20GitKanban\">Notify me</a>."
+  },
+  "gitbud": {
+    "heading": "GitBud",
+    "title": "In development",
+    "bodyHtml": "GitBud's macOS app isn't on the App Store yet, so there's nothing to install. Development happens in the open on <a href=\"https://github.com/silvandiepen/gitkittie\" target=\"_blank\" rel=\"noopener\">GitHub</a> — that's the place to follow progress, report issues, or ask questions. Want a heads-up when it ships? <a href=\"mailto:me@sil.mt?subject=Notify%20me%20about%20GitBud\">Notify me</a>."
   },
   "stillStuck": {
     "title": "Still stuck?",
-    "bodyHtml": "Email <a href=\"mailto:me@sil.mt\">me@sil.mt</a> or open an issue on <a href=\"https://github.com/silvandiepen/Gitfolder\" target=\"_blank\" rel=\"noopener\">GitHub</a> with the error message from Settings and your macOS version. Technical git output is kept in local logs so sync errors can be diagnosed without exposing details in the menu bar."
+    "bodyHtml": "Email <a href=\"mailto:me@sil.mt\">me@sil.mt</a> or open an issue on <a href=\"https://github.com/silvandiepen/gitkittie\" target=\"_blank\" rel=\"noopener\">GitHub</a> with the error message from Settings and your macOS version. Technical git output is kept in local logs so sync errors can be diagnosed without exposing details in the menu bar."
   }
 }

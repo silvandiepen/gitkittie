@@ -14,9 +14,12 @@ export interface Step {
   desc: string
 }
 
+/** The products the site themes itself for — drives [data-app] and the marks. */
+export type AppSlug = 'gitfolder' | 'gitkanban' | 'gitbud'
+
 /** A home-page product card. */
 export interface AppCardContent {
-  app: 'gitfolder' | 'gitkanban'
+  app: AppSlug
   name: string
   tagline: string
   points: string[]

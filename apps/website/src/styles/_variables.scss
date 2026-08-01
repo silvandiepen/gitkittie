@@ -1,5 +1,5 @@
 // ==========================================================================
-// GitKit Design Tokens
+// GitKittie Design Tokens
 //
 // Layered on top of `@sil/ui/defaults` (imported in main.scss), which provides
 // the colour tokens (--color-dark/light/foreground/background/border/accent…)
@@ -8,10 +8,10 @@
 // This file:
 //   1. mirrors @sil/ui's global token scale (space / radius / font-size /
 //      weight / family / shadow / transition) so components can use those vars;
-//   2. sets GitKit's neutral surfaces + the two app brand palettes (the single
-//      source of brand hex);
+//   2. sets GitKittie's neutral surfaces + the three app brand palettes (the
+//      single source of brand hex);
 //   3. remaps the generic --color-accent* per [data-app] so shared styles theme
-//      themselves (GitFolder green, GitKanban orange, slate = shell).
+//      themselves (GitFolder green, GitKanban orange, GitBud blue, slate = shell).
 // ==========================================================================
 
 :root {
@@ -67,7 +67,7 @@
   --transition: 0.2s ease;
   --transition-fast: 0.12s ease;
 
-  // ── Neutral surfaces (GitKit shell) ───────────────────────────────────
+  // ── Neutral surfaces (GitKittie shell) ────────────────────────────────
   --color-dark: #12151b;
   --color-light: #ffffff;
   --color-background: #f4f5f7;
@@ -87,35 +87,45 @@
   --shadow-l: 0 12px 32px color-mix(in srgb, var(--color-dark), transparent 86%);
 
   // ── Brand palettes (single source of brand hex) ───────────────────────
-  // GitKit — neutral slate (shell)
-  --gitkit: #2b3440;
-  --gitkit-light: #4a5563;
-  --gitkit-dark: #1b222b;
-  --gitkit-tint: #eef0f3;
+  // GitKittie — neutral slate (shell). The umbrella mark is ink on the page,
+  // so the family itself contributes no hue; the products carry the colour.
+  --gitkittie: #2b3440;
+  --gitkittie-light: #4a5563;
+  --gitkittie-dark: #1b222b;
+  --gitkittie-tint: #eef0f3;
 
-  // GitFolder — app icon background from project-assets/GitKit/assets/icon.svg
+  // GitFolder — app icon background from project-assets/GitKittie/assets/icon.svg
   --gf: #bbd757;
   --gf-light: #d7e986;
   --gf-dark: #64a043;
   --gf-tint: #f2f8dd;
 
-  // GitKanban — app icon background from project-assets/GitKit/assets/icon.svg
+  // GitKanban — app icon background from project-assets/GitKittie/assets/icon.svg
   --gk: #efa835;
   --gk-light: #f9d023;
   --gk-dark: #a86616;
   --gk-tint: #fff1d6;
+
+  // GitBud — app icon background from project-assets/GitKittie/assets/icon_gitbud.svg.
+  // --gb-dark is the solid-fill shade and carries --color-light text (6.6:1).
+  --gb: #8ad4e4;
+  --gb-light: #b7e6f0;
+  --gb-dark: #1c6577;
+  --gb-tint: #e2f5fa;
 
   // Shared product-icon internals from the same source art.
   --app-icon-ink: #231f20;
   --app-icon-paper: #ffffff;
   --app-icon-card: #e8eaeb;
   --gf-icon-highlight: #f7f9ed;
+  // Darkest stop of the GitBud icon's white → grey feature gradient.
+  --gb-icon-feature: #b6b8ba;
 
   // ── Active accent (neutral shell by default) ──────────────────────────
-  --color-accent: var(--gitkit);
-  --color-accent-light: var(--gitkit-light);
-  --color-accent-dark: var(--gitkit-dark);
-  --color-accent-tint: var(--gitkit-tint);
+  --color-accent: var(--gitkittie);
+  --color-accent-light: var(--gitkittie-light);
+  --color-accent-dark: var(--gitkittie-dark);
+  --color-accent-tint: var(--gitkittie-tint);
 
   // A legible accent for text/icons: dark shade on light, light shade on dark.
   --accent-legible: var(--color-accent-dark);
@@ -136,6 +146,13 @@
   --color-accent-tint: var(--gk-tint);
 }
 
+[data-app="gitbud"] {
+  --color-accent: var(--gb);
+  --color-accent-light: var(--gb-light);
+  --color-accent-dark: var(--gb-dark);
+  --color-accent-tint: var(--gb-tint);
+}
+
 // ── Dark mode (site toggles [data-theme]; @sil/ui defaults also honours it) ──
 :root[data-theme="dark"] {
   --color-dark: #0f1117;
@@ -149,16 +166,17 @@
   // Brand tints darken; base hues stay vivid on dark surfaces.
   --gf-tint: #26330f;
   --gk-tint: #33230d;
-  --gitkit-tint: #1f2430;
+  --gb-tint: #10323b;
+  --gitkittie-tint: #1f2430;
 
   --app-icon-paper: #fcfcf5;
   --app-icon-card: #d7dadd;
 
-  // Neutral shell accent reads as a light slate in the dark. --gitkit-dark
+  // Neutral shell accent reads as a light slate in the dark. --gitkittie-dark
   // stays a fixed dark ink so neutral bands/buttons keep white-text contrast
   // (legible accent text uses --color-accent-light in dark, not -dark).
-  --gitkit: #c3ccd9;
-  --gitkit-light: #d8dee8;
+  --gitkittie: #c3ccd9;
+  --gitkittie-light: #d8dee8;
 
   // Legible accent flips to the light shade against dark backgrounds.
   --accent-legible: var(--color-accent-light);

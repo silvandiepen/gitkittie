@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @view SupportPage
- * Support and troubleshooting info for the GitKit apps.
+ * Support and troubleshooting info for the GitKittie apps.
  */
 import MarketingLayout from '@/components/MarketingLayout.vue'
 import { usePageMeta } from '@/lib/usePageMeta'
@@ -18,6 +18,7 @@ interface SupportContent {
     common: { title: string; items: StepItem[] }
   }
   gitkanban: { heading: string; title: string; bodyHtml: string }
+  gitbud: { heading: string; title: string; bodyHtml: string }
   stillStuck: { title: string; bodyHtml: string }
 }
 
@@ -66,6 +67,14 @@ usePageMeta({ title: t.meta.title, description: t.meta.description })
           <h2>{{ t.gitkanban.title }}</h2>
           <!-- eslint-disable-next-line vue/no-v-html -->
           <p v-html="t.gitkanban.bodyHtml"></p>
+        </section>
+
+        <h2 class="support__app-heading" data-app="gitbud">{{ t.gitbud.heading }}</h2>
+
+        <section class="support__section">
+          <h2>{{ t.gitbud.title }}</h2>
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <p v-html="t.gitbud.bodyHtml"></p>
         </section>
 
         <section class="support__section">

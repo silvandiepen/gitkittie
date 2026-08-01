@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://gitkit.app/sitemap.xml
+Sitemap: https://gitkittie.hakobs.com/sitemap.xml

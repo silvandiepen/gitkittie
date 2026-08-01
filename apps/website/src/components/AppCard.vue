@@ -6,9 +6,11 @@
  */
 import GitFolderMark from './GitFolderMark.vue'
 import GitKanbanMark from './GitKanbanMark.vue'
+import GitBudMark from './GitBudMark.vue'
+import type { AppSlug } from '@/lib/content'
 
 defineProps<{
-  app: 'gitfolder' | 'gitkanban'
+  app: AppSlug
   name: string
   tagline: string
   points: string[]
@@ -23,7 +25,8 @@ defineProps<{
     <div class="app-card__head">
       <span class="app-card__mark" aria-hidden="true">
         <GitFolderMark v-if="app === 'gitfolder'" :size="60" />
-        <GitKanbanMark v-else :size="60" />
+        <GitKanbanMark v-else-if="app === 'gitkanban'" :size="60" />
+        <GitBudMark v-else :size="60" />
       </span>
       <span v-if="badge" class="mkt__badge">{{ badge }}</span>
     </div>

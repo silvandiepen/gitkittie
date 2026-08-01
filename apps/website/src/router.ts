@@ -9,13 +9,14 @@ declare module 'vue-router' {
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'home', component: () => import('./pages/HomePage.vue'), meta: { title: 'GitKit — Small Mac apps built on your own git' } },
+    { path: '/', name: 'home', component: () => import('./pages/HomePage.vue'), meta: { title: 'GitKittie — Small Mac apps built on your own git' } },
     { path: '/gitfolder', name: 'gitfolder', component: () => import('./pages/GitFolderPage.vue'), meta: { title: 'GitFolder — Automatic version history for your folders' } },
     { path: '/gitkanban', name: 'gitkanban', component: () => import('./pages/GitKanbanPage.vue'), meta: { title: 'GitKanban — Your kanban board is a git repo' } },
+    { path: '/gitbud', name: 'gitbud', component: () => import('./pages/GitBudPage.vue'), meta: { title: 'GitBud — Rewriting git history, made visual' } },
     { path: '/docs', name: 'docs', component: () => import('./pages/DocsPage.vue'), meta: { title: 'Docs — GitFolder' } },
-    { path: '/support', name: 'support', component: () => import('./pages/SupportPage.vue'), meta: { title: 'Support — GitKit' } },
-    { path: '/privacy', name: 'privacy', component: () => import('./pages/PrivacyPage.vue'), meta: { title: 'Privacy — GitKit' } },
-    { path: '/terms', name: 'terms', component: () => import('./pages/TermsPage.vue'), meta: { title: 'Terms & Conditions — GitKit' } },
+    { path: '/support', name: 'support', component: () => import('./pages/SupportPage.vue'), meta: { title: 'Support — GitKittie' } },
+    { path: '/privacy', name: 'privacy', component: () => import('./pages/PrivacyPage.vue'), meta: { title: 'Privacy — GitKittie' } },
+    { path: '/terms', name: 'terms', component: () => import('./pages/TermsPage.vue'), meta: { title: 'Terms & Conditions — GitKittie' } },
   ],
   scrollBehavior(_to, _from, savedPosition) {
     if (savedPosition) return savedPosition

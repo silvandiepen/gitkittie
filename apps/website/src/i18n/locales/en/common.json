@@ -1,11 +1,17 @@
 {
   "brand": {
-    "name": "GitKit",
+    "name": "GitKittie",
     "tagline": "Small, local-first Mac apps built on your own git."
   },
   "nav": [
-    { "label": "GitFolder", "to": "/gitfolder" },
-    { "label": "GitKanban", "to": "/gitkanban" },
+    {
+      "label": "Apps",
+      "items": [
+        { "label": "GitFolder", "to": "/gitfolder", "description": "Automatic version history for your folders" },
+        { "label": "GitKanban", "to": "/gitkanban", "description": "A kanban board that is a git repo of markdown" },
+        { "label": "GitBud", "to": "/gitbud", "description": "Rewrite git history, visually and safely" }
+      ]
+    },
     { "label": "Docs", "to": "/docs" },
     { "label": "Support", "to": "/support" }
   ],
@@ -21,7 +27,8 @@
         "heading": "Products",
         "links": [
           { "label": "GitFolder", "to": "/gitfolder" },
-          { "label": "GitKanban", "to": "/gitkanban" }
+          { "label": "GitKanban", "to": "/gitkanban" },
+          { "label": "GitBud", "to": "/gitbud" }
         ]
       },
       {
@@ -29,7 +36,7 @@
         "links": [
           { "label": "Docs", "to": "/docs" },
           { "label": "Support", "to": "/support" },
-          { "label": "GitHub", "href": "https://github.com/silvandiepen/Gitfolder", "external": true }
+          { "label": "GitHub", "href": "https://github.com/silvandiepen/gitkittie", "external": true }
         ]
       },
       {
@@ -40,6 +47,6 @@
         ]
       }
     ],
-    "copy": "GitKit. All rights reserved."
+    "copy": "GitKittie. All rights reserved."
   }
 }

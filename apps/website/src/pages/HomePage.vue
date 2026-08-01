@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @view HomePage
- * GitKit family landing page — introduces the umbrella and both apps.
+ * GitKittie family landing page — introduces the umbrella and both apps.
  */
 import MarketingLayout from '@/components/MarketingLayout.vue'
 import AppCard from '@/components/AppCard.vue'
@@ -9,12 +9,20 @@ import FeatureGrid from '@/components/FeatureGrid.vue'
 import type { Feature, AppCardContent } from '@/lib/content'
 import GitFolderMark from '@/components/GitFolderMark.vue'
 import GitKanbanMark from '@/components/GitKanbanMark.vue'
+import GitBudMark from '@/components/GitBudMark.vue'
 import { usePageMeta } from '@/lib/usePageMeta'
 import { useContent } from '@/i18n'
 
 interface HomeContent {
   meta: { title: string; description: string }
-  hero: { eyebrow: string; title: string; subtitleHtml: string; ctaGitfolder: string; ctaGitkanban: string }
+  hero: {
+    eyebrow: string
+    title: string
+    subtitleHtml: string
+    ctaGitfolder: string
+    ctaGitkanban: string
+    ctaGitbud: string
+  }
   apps: { title: string; subtitle: string; items: AppCardContent[] }
   principles: { title: string; subtitle: string; features: Feature[] }
   cta: { title: string; subtitle: string; primary: string; secondary: string }
@@ -39,12 +47,14 @@ usePageMeta({ title: t.meta.title, description: t.meta.description })
             <div class="mkt__hero-actions">
               <router-link to="/gitfolder" class="mkt__btn-pill home__btn--gf">{{ t.hero.ctaGitfolder }}</router-link>
               <router-link to="/gitkanban" class="mkt__btn-pill home__btn--gk">{{ t.hero.ctaGitkanban }}</router-link>
+              <router-link to="/gitbud" class="mkt__btn-pill home__btn--gb">{{ t.hero.ctaGitbud }}</router-link>
             </div>
           </div>
 
           <div class="home__hero-art" aria-hidden="true">
-            <GitFolderMark class="home__hero-icon home__hero-icon--gf" :size="150" />
-            <GitKanbanMark class="home__hero-icon home__hero-icon--gk" :size="150" />
+            <GitFolderMark class="home__hero-icon home__hero-icon--gf" :size="132" />
+            <GitKanbanMark class="home__hero-icon home__hero-icon--gk" :size="132" />
+            <GitBudMark class="home__hero-icon home__hero-icon--gb" :size="132" />
           </div>
         </div>
       </section>
@@ -109,31 +119,37 @@ usePageMeta({ title: t.meta.title, description: t.meta.description })
     background: var(--gk-dark);
     &:hover { background: var(--gk-dark); }
   }
+  &__btn--gb {
+    background: var(--gb-dark);
+    &:hover { background: var(--gb-dark); }
+  }
 
   &__hero-art {
     display: flex;
-    gap: var(--space-l);
+    gap: var(--space);
     justify-content: center;
     align-items: center;
 
-    @include mobile { gap: var(--space); }
+    @include mobile { gap: var(--space-s); }
   }
 
   &__hero-icon {
     box-shadow: var(--shadow-l);
 
     @include mobile {
-      width: 112px;
-      height: 112px;
+      width: 88px;
+      height: 88px;
     }
   }
 
-  &__hero-icon--gf { transform: translateY(-14px) rotate(-4deg); }
-  &__hero-icon--gk { transform: translateY(14px) rotate(4deg); }
+  // Fan the three marks so the middle one reads as the front of the stack.
+  &__hero-icon--gf { transform: translateY(-16px) rotate(-5deg); }
+  &__hero-icon--gk { transform: translateY(6px) rotate(0deg); }
+  &__hero-icon--gb { transform: translateY(-16px) rotate(5deg); }
 
   &__cards {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--space-l);
 
     @include tablet { grid-template-columns: 1fr; }

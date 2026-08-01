@@ -1,0 +1,96 @@
+<script setup lang="ts">
+/**
+ * GitKittie umbrella mark — the family logo, traced from
+ * `project-assets/GitKittie/assets/gitkittie-icon.svg`.
+ *
+ * The source art is two-tone: a solid silhouette with knocked-out highlights
+ * (ear insides, eyes, nose). Rendering the silhouette as `currentColor` and the
+ * highlights as `--color-background` keeps it legible in both colour modes — on
+ * dark the whole mark inverts rather than disappearing, which a hardcoded white
+ * would not do.
+ *
+ * The art is taller than it is wide (13.83 × 18), so `size` sets the height and
+ * the width follows the aspect ratio. Square app marks take `size` as both.
+ */
+import { computed } from 'vue'
+
+const props = withDefaults(
+  defineProps<{
+    /** Rendered height in px. Width follows the mark's 13.83:18 aspect ratio. */
+    size?: number | string
+    title?: string
+  }>(),
+  {
+    size: 24,
+    title: 'GitKittie',
+  },
+)
+
+const ASPECT = 13.83 / 18
+
+const height = computed(() => Number(props.size))
+const width = computed(() => Math.round(height.value * ASPECT * 100) / 100)
+</script>
+
+<template>
+  <svg
+    class="gitkittie-mark"
+    :width="width"
+    :height="height"
+    viewBox="0 0 13.83 18"
+    role="img"
+    :aria-label="title"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <!-- Silhouette: head, ears, body and tail in one path. -->
+    <path
+      class="gitkittie-mark__ink"
+      d="M1.96,13.16c-.37,0-.64.29-.61.64l.04.4c0,.1-.03.28-.14.32-.23.08-.5.04-.71-.09-.39-.24-.57-.68-.54-1.13.05-.56.37-1.05.85-1.34.64-.39,1.38-.47,2.1-.27.44.12.81.36,1.07.74.28.4.44.85.47,1.34v1.02c-.02.4-.02.79.09,1.17.2.66.71.84,1.35.91.05-.29.09-.54.19-.79l.38-.96c.44-1.01.76-1.98.62-3.1-1.26-.09-2.51-.35-3.58-1.01-.94-.57-1.6-1.47-1.86-2.53-.28-1.15-.17-2.21.17-3.34.39-1.29.93-2.51,1.62-3.68.28-.47.68-1.07,1.11-1.36.38-.27.73.13,1.02.47.27.36.5.72.73,1.11l.8,1.52c.52-.02,1.03-.01,1.56.05.27-.41.55-.81.86-1.2.27-.32.53-.61.84-.88.38-.29.79-.58,1.16-.23.15.14.25.32.35.51.53,1.23.77,2.6.98,3.92.74.96,1.07,2.14.89,3.32-.13.89-.59,1.66-1.31,2.2-1.09.79-2.52,1.08-3.88,1.16.74.92,1.3,1.93,1.66,3.04.31.93.34,1.89.12,2.86-1.17.08-2.32.1-3.49.06-.52-.02-1-.06-1.51-.14-.88-.17-1.63-.48-2.01-1.33-.17-.39-.27-.8-.3-1.23l-.07-1.09c-.03-.56-.46-1.02-1.04-1.03ZM4.35,3.83c.64-.3,1.28-.47,1.98-.57-.36-.73-.73-1.39-1.15-2.05l-.27-.31-.18.21c-.67,1.07-1.12,2.26-1.58,3.47.39-.31.75-.55,1.2-.76ZM11.93,4.41c-.15-.77-.33-1.47-.57-2.18-.08-.23-.16-.42-.31-.63l-.46.49c-.35.41-.66.85-.98,1.29.86.21,1.6.52,2.32,1.03ZM7.59,6.46c-.51-.59-1.27-.87-2.04-.82-.83.06-1.55.54-1.94,1.21-.44.76-.42,1.68,0,2.41.78,1.35,2.59,1.64,3.76.63,1.01-.87,1.07-2.46.23-3.44ZM12.37,9.95c1.05-.85,1.02-2.51.09-3.36-.61-.55-1.48-.59-2.12-.06-.74.61-.93,1.68-.59,2.57.17.43.47.79.87,1.01.57.32,1.23.25,1.75-.17ZM9.4,9.25s.07-.1.07-.13c-.04-.3-.86-.29-.89,0-.02.19.47.41.82.13Z"
+    />
+    <!-- Knocked-out highlights: eye whites, ear insides, nose. -->
+    <path
+      class="gitkittie-mark__highlight"
+      d="M7.59,6.46c.85.98.78,2.57-.23,3.44-1.17,1.01-2.98.72-3.76-.63-.42-.73-.43-1.65,0-2.41.39-.68,1.11-1.15,1.94-1.21.77-.06,1.53.22,2.04.82ZM6.76,7.72c-.07-.14-.04-.32.1-.38l.27-.1c-.36-.35-.91-.43-1.39-.21-.4.18-.71.6-.72,1.09-.02.53.3,1,.76,1.19.49.21,1.03.09,1.4-.26s.48-.92.27-1.42l-.26.24c-.05.05-.18.06-.25.03-.06-.02-.14-.1-.17-.19Z"
+    />
+    <path
+      class="gitkittie-mark__highlight"
+      d="M12.37,9.95c-.52.42-1.18.49-1.75.17-.4-.23-.7-.58-.87-1.01-.34-.9-.15-1.96.59-2.57.64-.52,1.51-.49,2.12.06.93.84.96,2.5-.09,3.36ZM11.66,8.09c-.2,0-.29-.2-.26-.36.03-.17.19-.26.4-.25-.51-.48-1.37-.32-1.71.29-.2.37-.19.78.03,1.13.33.52,1,.68,1.52.38s.72-.96.42-1.5c-.08.17-.21.31-.4.31Z"
+    />
+    <path
+      class="gitkittie-mark__highlight"
+      d="M4.35,3.83c-.45.2-.81.45-1.2.76.45-1.21.9-2.4,1.58-3.47l.18-.21.27.31c.42.65.79,1.32,1.15,2.05-.69.1-1.34.27-1.98.57Z"
+    />
+    <path
+      class="gitkittie-mark__highlight"
+      d="M11.93,4.41c-.72-.51-1.45-.82-2.32-1.03.31-.45.62-.88.98-1.29l.46-.49c.15.2.23.4.31.63.24.71.42,1.41.57,2.18Z"
+    />
+    <path
+      class="gitkittie-mark__highlight"
+      d="M9.4,9.25c-.35.27-.84.06-.82-.13.03-.29.84-.3.89,0,0,.04-.03.11-.07.13Z"
+    />
+    <!-- Pupils, back in ink on top of the eye whites. -->
+    <path
+      class="gitkittie-mark__ink"
+      d="M6.76,7.72c.04.08.11.16.17.19.07.03.2.02.25-.03l.26-.24c.21.5.1,1.05-.27,1.42s-.9.47-1.4.26c-.45-.2-.77-.66-.76-1.19.02-.49.32-.91.72-1.09.48-.22,1.03-.14,1.39.21l-.27.1c-.15.05-.17.23-.1.38Z"
+    />
+    <path
+      class="gitkittie-mark__ink"
+      d="M11.66,8.09c.19,0,.32-.14.4-.31.3.54.09,1.2-.42,1.5s-1.19.14-1.52-.38c-.22-.34-.23-.76-.03-1.13.33-.61,1.2-.77,1.71-.29-.21-.01-.36.07-.4.25-.03.16.06.36.26.36Z"
+    />
+  </svg>
+</template>
+
+<style lang="scss">
+.gitkittie-mark {
+  display: block;
+  overflow: visible;
+
+  &__ink {
+    fill: currentColor;
+  }
+
+  &__highlight {
+    fill: var(--color-background);
+  }
+}
+</style>

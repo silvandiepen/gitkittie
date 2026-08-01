@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * GitFolder app icon derived from project-assets/GitKit/assets/icon.svg.
+ * GitFolder app icon derived from project-assets/GitKittie/assets/icon.svg.
  * Colours are mapped through the website brand tokens in _variables.scss.
  */
 withDefaults(
