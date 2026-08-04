@@ -30,11 +30,12 @@ struct RootView: View {
 /// per-server OAuth registration.
 private struct ConnectView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openURL) private var openURL
 
     @State private var choice: ProviderChoice = .github
     @State private var serverURL = ""
     @State private var token = ""
+    /// Presents GitHub's device-flow page in an in-app Safari View Controller.
+    @State private var showGitHubSignIn = false
 
     var body: some View {
         Form {
@@ -82,7 +83,7 @@ private struct ConnectView: View {
                         }
                         .disabled(model.isConnecting)
                     } footer: {
-                        Text("Opens github.com to authorise — no token to create.")
+                        Text("Authorise on github.com without leaving the app — no token to create.")
                     }
                 }
 
@@ -123,13 +124,30 @@ private struct ConnectView: View {
             }
         }
         .navigationTitle("Connect")
+        // Copy the code as soon as it arrives so it is ready to paste, but do not open
+        // GitHub yet — the page asks for the code immediately, and opening it first puts
+        // the code behind the browser the user needs it for. They open it themselves.
+        // The session going back to nil means sign-in finished, expired, or was
+        // cancelled — close the browser if it is still up.
+        .onChange(of: model.deviceAuth?.userCode) { _, userCode in
+            if let userCode {
+                UIPasteboard.general.string = userCode
+            } else {
+                showGitHubSignIn = false
+            }
+        }
+        .sheet(isPresented: $showGitHubSignIn) {
+            if let device = model.deviceAuth {
+                SafariView(url: device.verificationURI).ignoresSafeArea()
+            }
+        }
     }
 
-    /// Device-flow UI: show the user code, open the verification page, and wait.
+    /// Device-flow UI: show the user code, open the verification page in-app, and wait.
     private func deviceCodeSection(_ device: GitOAuthDeviceSession) -> some View {
         Section("Sign in with GitHub") {
             VStack(spacing: 12) {
-                Text("Enter this code at GitHub to authorise GitKanban:")
+                Text("Copied. Open GitHub, paste this code, and confirm to authorise GitKanban.")
                     .font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -147,7 +165,7 @@ private struct ConnectView: View {
                         .buttonStyle(.borderless)
                     Spacer()
                     Button {
-                        openURL(device.verificationURI)
+                        showGitHubSignIn = true
                     } label: { Label("Open GitHub", systemImage: "safari") }
                         .buttonStyle(.borderedProminent)
                 }
@@ -162,7 +180,6 @@ private struct ConnectView: View {
                 .padding(.top, 4)
             }
             .padding(.vertical, 4)
-            .onAppear { openURL(device.verificationURI) }
         }
     }
 }
