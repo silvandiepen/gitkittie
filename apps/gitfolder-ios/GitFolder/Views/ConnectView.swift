@@ -31,6 +31,7 @@ struct ConnectView: View {
             if let device = model.deviceAuth {
                 deviceCodeSection(device)
             } else {
+                demoSection
                 providerSection
                 if choice == .github { oauthSection }
                 tokenSection
@@ -43,17 +44,6 @@ struct ConnectView: View {
                 }
             }
 
-            if model.deviceAuth == nil {
-                Section {
-                    Button {
-                        model.loadDemo()
-                    } label: {
-                        Label("Preview a demo", systemImage: "sparkles")
-                    }
-                } footer: {
-                    Text("Explore GitFolder with sample repositories — no account needed.")
-                }
-            }
         }
         .navigationTitle("Connect")
         // Copy the code as soon as it arrives so it is ready to paste, but do not open
@@ -72,6 +62,32 @@ struct ConnectView: View {
             if let device = model.deviceAuth {
                 SafariView(url: device.verificationURI).ignoresSafeArea()
             }
+        }
+    }
+
+    // MARK: Demo
+
+    /// First thing on the screen, before any sign-in option. Someone without a GitHub
+    /// account — an App Store reviewer included — otherwise hits the sign-in wall and has
+    /// no way past it. The demo is the full app against an in-memory repo, not a preview,
+    /// so it is worth saying so plainly.
+    private var demoSection: some View {
+        Section {
+            Button {
+                model.loadDemo()
+            } label: {
+                HStack {
+                    Image(systemName: "sparkles")
+                    Text("Open the demo repositories").fontWeight(.semibold)
+                    Spacer()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        } header: {
+            Text("No account?")
+        } footer: {
+            Text("Sample repositories with every feature working — browse folders, open and edit files, save changes, offline. No account, no sign-in.")
         }
     }
 

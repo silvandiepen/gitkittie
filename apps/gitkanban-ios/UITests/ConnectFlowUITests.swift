@@ -28,6 +28,21 @@ final class ConnectFlowUITests: XCTestCase {
         )
     }
 
+    /// The reviewer's path. App Store review bounced 1.0 (3) under guideline 2.1(a)
+    /// because they could not get past sign-in — the demo was the last item on the
+    /// screen, below a token field. It must be reachable from a cold launch with no
+    /// account, without scrolling past the sign-in options.
+    func testDemoIsReachableWithoutAnAccount() {
+        let app = launchApp()
+
+        let demo = app.buttons["Open the demo board"]
+        XCTAssertTrue(demo.waitForExistence(timeout: 10), "The demo must be offered on the connect screen")
+        XCTAssertTrue(demo.isHittable, "The demo must be reachable without scrolling past sign-in")
+
+        demo.tap()
+        XCTAssertTrue(app.staticTexts["To do"].waitForExistence(timeout: 20), "The demo board should open")
+    }
+
     /// The regression guard for guideline 4: tapping sign-in must present GitHub inside
     /// the app rather than switching to Safari.
     ///
