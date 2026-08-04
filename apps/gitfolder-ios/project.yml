@@ -9,7 +9,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: 2
+    CURRENT_PROJECT_VERSION: 3
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: "38MGF83L2L"
 
@@ -65,3 +65,15 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+
+  GitFolderUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: GitFolder
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+        TEST_TARGET_NAME: GitFolder
