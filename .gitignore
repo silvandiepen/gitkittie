@@ -34,3 +34,5 @@ apps/gitfolder-ios/GitFolder/Info.plist
 apps/gitfolder-ios/GitFolder/GitFolder.entitlements
 swift/*/.build/
 .swiftpm/
+# Capture output from @sil/app-release (screenshots, promo videos, Deliver payloads).
+artifacts/

@@ -1,0 +1,32 @@
+{
+  "app": "gitkanban",
+  "name": "GitKit Kanban",
+  "platform": "macos",
+  "scheme": "GitKanban",
+  "project": "apps/gitkanban-macos/GitKanban.xcodeproj",
+  "productName": "GitKanban",
+  "bundleId": "app.hakobs.gitkanban",
+  "screenshots": {
+    "outputDir": "artifacts/screenshots/gitkanban-macos",
+    "configuration": "Debug",
+    "buildSettings": {
+      "CODE_SIGNING_ALLOWED": "NO"
+    },
+    "defaultWaitSeconds": 6,
+    "windowAppearTimeoutSeconds": 30,
+    "normalizeMacosScreenshots": false,
+    "env": {
+      "GITKANBAN_DEMO": "1",
+      "GITKANBAN_WINDOW_SIZE": "1280x748"
+    },
+    "colorModes": [
+      { "id": "light", "env": { "GITKANBAN_APPEARANCE": "light" } },
+      { "id": "dark", "env": { "GITKANBAN_APPEARANCE": "dark" } }
+    ],
+    "scenarios": [
+      { "id": "board", "filename": "01_mac_board-light.png", "colorModes": ["light"] },
+      { "id": "board", "filename": "02_mac_board-dark.png", "colorModes": ["dark"] }
+    ],
+    "scenarioBudgetPerDevice": 10
+  }
+}

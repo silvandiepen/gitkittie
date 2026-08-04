@@ -1,0 +1,96 @@
+{
+  "app": "gitkanban",
+  "name": "GitKit Kanban",
+  "scheme": "GitKanban",
+  "project": "apps/gitkanban-ios/GitKanban.xcodeproj",
+  "iosDir": "apps/gitkanban-ios",
+  "productName": "GitKanban",
+  "bundleId": "app.hakobs.gitkanban",
+  "validation": {
+    "command": "cd apps/gitkanban-ios && xcodegen generate && xcodebuild -quiet -project GitKanban.xcodeproj -scheme GitKanban -destination 'generic/platform=iOS Simulator' build"
+  },
+  "metadata": {
+    "sourceDir": "apps/gitkanban-ios/release/app-store",
+    "locales": ["en-US"],
+    "deliverDir": "artifacts/app-store/gitkanban-ios"
+  },
+  "screenshots": {
+    "outputDir": "artifacts/screenshots/gitkanban-ios",
+    "configuration": "Debug",
+    "eraseBeforeCapture": false,
+    "defaultWaitSeconds": 4,
+    "statusBar": {
+      "time": "9:41",
+      "wifiBars": 3,
+      "cellularBars": 4,
+      "batteryState": "charged",
+      "batteryLevel": 100
+    },
+    "devices": [
+      { "name": "iPhone 17 Pro Max", "os": "26.5", "displayType": "APP_IPHONE_67", "createIfMissing": false },
+      { "name": "iPad Pro 13-inch (M5)", "os": "26.5", "displayType": "APP_IPAD_PRO_13", "createIfMissing": false }
+    ],
+    "locales": [{ "id": "en-US", "appLanguage": "en" }],
+    "env": { "GITKANBAN_DEMO": "1" },
+    "colorModes": [
+      { "id": "light", "env": { "GITKANBAN_APPEARANCE": "light" } },
+      { "id": "dark", "env": { "GITKANBAN_APPEARANCE": "dark" } }
+    ],
+    "scenarios": [
+      {
+        "id": "board",
+        "filename": "01-{deviceSlug}-board-light.png",
+        "colorModes": ["light"],
+        "env": { "GITKANBAN_DEMO_ROUTE": "board" }
+      },
+      {
+        "id": "board",
+        "filename": "02-{deviceSlug}-board-dark.png",
+        "colorModes": ["dark"],
+        "env": { "GITKANBAN_DEMO_ROUTE": "board" }
+      },
+      {
+        "id": "card",
+        "filename": "03-{deviceSlug}-card-light.png",
+        "colorModes": ["light"],
+        "env": { "GITKANBAN_DEMO_ROUTE": "card" }
+      },
+      {
+        "id": "search",
+        "filename": "04-{deviceSlug}-search-light.png",
+        "colorModes": ["light"],
+        "env": { "GITKANBAN_DEMO_ROUTE": "search" }
+      },
+      {
+        "id": "connect",
+        "filename": "05-{deviceSlug}-connect-light.png",
+        "colorModes": ["light"],
+        "env": { "GITKANBAN_DEMO": "0" }
+      }
+    ],
+    "scenarioBudgetPerDevice": 10
+  },
+  "promoVideo": {
+    "deviceName": "iPhone 17 Pro Max",
+    "width": 1290,
+    "height": 2796,
+    "outputDir": "artifacts/videos/gitkanban-ios",
+    "outputLayout": "app-previews",
+    "locale": "en-US",
+    "eraseBeforeCapture": false,
+    "segments": [
+      { "type": "title", "durationSeconds": 1.5, "title": "GitKit Kanban", "subtitle": "Your kanban board is a git repo." },
+      { "type": "capture", "durationSeconds": 3.0, "scenarioId": "board", "colorMode": "light" },
+      { "type": "capture", "durationSeconds": 2.0, "scenarioId": "card", "colorMode": "light" },
+      { "type": "capture", "durationSeconds": 2.0, "scenarioId": "board", "colorMode": "dark" },
+      { "type": "cta", "durationSeconds": 1.5, "title": "GitKit Kanban", "subtitle": "Available on the App Store" }
+    ]
+  },
+  "archive": {
+    "configuration": "Release",
+    "archivePath": "/tmp/gitkit-gitkanban-ios/GitKanban.xcarchive",
+    "exportPath": "/tmp/gitkit-gitkanban-ios/export",
+    "exportOptionsPlist": null,
+    "allowProvisioningUpdates": false
+  }
+}
