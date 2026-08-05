@@ -1,23 +1,24 @@
 <script setup lang="ts">
 /**
  * @view GitKanbanPage
- * GitKanban product page — not yet shipped. Framed "Coming soon" with a notify /
- * star-on-GitHub CTA. Themed to the orange app icon background via data-app="gitkanban".
+ * GitKit Kanban product page. Shipped on iPhone and iPad; the Mac build is still in
+ * development, so the status band keeps a notify CTA for that one only. Themed to the
+ * orange app icon background via data-app="gitkanban".
  */
 import MarketingLayout from '@/components/MarketingLayout.vue'
 import FeatureGrid from '@/components/FeatureGrid.vue'
 import type { Feature } from '@/lib/content'
 import GitKanbanMark from '@/components/GitKanbanMark.vue'
 import { usePageMeta } from '@/lib/usePageMeta'
-import { githubRepoUrl, gitkanbanNotify } from '@/links'
+import { githubRepoUrl, gitkanbanAppStoreUrl, gitkanbanMacNotify } from '@/links'
 import { useContent } from '@/i18n'
 
 interface GitKanbanContent {
   meta: { title: string; description: string }
-  hero: { badge: string; title: string; subtitle: string; notify: string; github: string }
+  hero: { badge: string; title: string; subtitle: string; download: string; github: string }
   features: { title: string; subtitle: string; items: Feature[] }
   status: { badge: string; title: string; text: string; notify: string; github: string }
-  cta: { title: string; subtitle: string; notify: string; github: string }
+  cta: { title: string; subtitle: string; download: string; github: string }
 }
 
 const t = useContent<GitKanbanContent>('gitkanban')
@@ -38,7 +39,7 @@ usePageMeta({ title: t.meta.title, description: t.meta.description })
             <h1 class="mkt__hero-title">{{ t.hero.title }}</h1>
             <p class="mkt__hero-subtitle">{{ t.hero.subtitle }}</p>
             <div class="mkt__hero-actions">
-              <a :href="gitkanbanNotify" class="mkt__btn-pill">{{ t.hero.notify }}</a>
+              <a :href="gitkanbanAppStoreUrl" class="mkt__btn-pill" target="_blank" rel="noopener">{{ t.hero.download }}</a>
               <a :href="githubRepoUrl" class="mkt__btn-outline" target="_blank" rel="noopener">{{ t.hero.github }}</a>
             </div>
           </div>
@@ -66,7 +67,7 @@ usePageMeta({ title: t.meta.title, description: t.meta.description })
           <h2 class="gk-status__title">{{ t.status.title }}</h2>
           <p class="gk-status__text">{{ t.status.text }}</p>
           <div class="gk-status__actions">
-            <a :href="gitkanbanNotify" class="mkt__btn-pill">{{ t.status.notify }}</a>
+            <a :href="gitkanbanMacNotify" class="mkt__btn-outline">{{ t.status.notify }}</a>
             <a :href="githubRepoUrl" class="mkt__btn-outline" target="_blank" rel="noopener">{{ t.status.github }}</a>
           </div>
         </div>
@@ -78,7 +79,7 @@ usePageMeta({ title: t.meta.title, description: t.meta.description })
           <h2 class="mkt__cta-title">{{ t.cta.title }}</h2>
           <p class="mkt__cta-subtitle">{{ t.cta.subtitle }}</p>
           <div class="mkt__cta-actions">
-            <a :href="gitkanbanNotify" class="mkt__btn-pill mkt__btn-pill--lg">{{ t.cta.notify }}</a>
+            <a :href="gitkanbanAppStoreUrl" class="mkt__btn-pill mkt__btn-pill--lg" target="_blank" rel="noopener">{{ t.cta.download }}</a>
             <a :href="githubRepoUrl" class="mkt__btn-outline mkt__btn-outline--inverse" target="_blank" rel="noopener">{{ t.cta.github }}</a>
           </div>
         </div>

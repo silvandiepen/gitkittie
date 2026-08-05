@@ -1,0 +1,94 @@
+{
+  "app": "gitfolder",
+  "name": "GitFolder",
+  "scheme": "GitFolder",
+  "project": "apps/gitfolder-ios/GitFolder.xcodeproj",
+  "iosDir": "apps/gitfolder-ios",
+  "productName": "GitFolder",
+  "bundleId": "app.hakobs.gitfolder",
+  "validation": {
+    "command": "cd apps/gitfolder-ios && xcodegen generate && xcodebuild -quiet -project GitFolder.xcodeproj -scheme GitFolder -destination 'generic/platform=iOS Simulator' build"
+  },
+  "metadata": {
+    "sourceDir": "apps/gitfolder-ios/release/app-store",
+    "locales": ["en-US"],
+    "deliverDir": "artifacts/app-store/gitfolder-ios"
+  },
+  "screenshots": {
+    "outputDir": "artifacts/screenshots/gitfolder-ios",
+    "configuration": "Debug",
+    "eraseBeforeCapture": false,
+    "defaultWaitSeconds": 4,
+    "statusBar": {
+      "time": "9:41",
+      "wifiBars": 3,
+      "cellularBars": 4,
+      "batteryState": "charged",
+      "batteryLevel": 100
+    },
+    "devices": [
+      { "name": "iPhone 17 Pro Max", "os": "26.5", "displayType": "APP_IPHONE_67", "createIfMissing": false },
+      { "name": "iPad Pro 13-inch (M5)", "os": "26.5", "displayType": "APP_IPAD_PRO_13", "createIfMissing": false }
+    ],
+    "locales": [{ "id": "en-US", "appLanguage": "en" }],
+    "env": { "GITFOLDER_DEMO": "1" },
+    "colorModes": [
+      { "id": "light", "env": { "GITFOLDER_APPEARANCE": "light" } },
+      { "id": "dark", "env": { "GITFOLDER_APPEARANCE": "dark" } }
+    ],
+    "scenarios": [
+      {
+        "id": "repos",
+        "filename": "01-{deviceSlug}-repos-light.png",
+        "colorModes": ["light"]
+      },
+      {
+        "id": "repos",
+        "filename": "02-{deviceSlug}-repos-dark.png",
+        "colorModes": ["dark"]
+      },
+      {
+        "id": "files",
+        "filename": "03-{deviceSlug}-files-light.png",
+        "colorModes": ["light"],
+        "env": { "GITFOLDER_DEMO_OPEN": "demo/travel-journal" }
+      },
+      {
+        "id": "files",
+        "filename": "04-{deviceSlug}-files-dark.png",
+        "colorModes": ["dark"],
+        "env": { "GITFOLDER_DEMO_OPEN": "demo/travel-journal" }
+      },
+      {
+        "id": "connect",
+        "filename": "05-{deviceSlug}-connect-light.png",
+        "colorModes": ["light"],
+        "env": { "GITFOLDER_DEMO": "0" }
+      }
+    ],
+    "scenarioBudgetPerDevice": 10
+  },
+  "promoVideo": {
+    "deviceName": "iPhone 17 Pro Max",
+    "width": 1290,
+    "height": 2796,
+    "outputDir": "artifacts/videos/gitfolder-ios",
+    "outputLayout": "app-previews",
+    "locale": "en-US",
+    "eraseBeforeCapture": false,
+    "segments": [
+      { "type": "title", "durationSeconds": 1.5, "title": "GitFolder", "subtitle": "Your repositories, as folders." },
+      { "type": "capture", "durationSeconds": 3.0, "scenarioId": "repos", "colorMode": "light" },
+      { "type": "capture", "durationSeconds": 2.0, "scenarioId": "files", "colorMode": "light" },
+      { "type": "capture", "durationSeconds": 2.0, "scenarioId": "files", "colorMode": "dark" },
+      { "type": "cta", "durationSeconds": 1.5, "title": "GitFolder", "subtitle": "Available on the App Store" }
+    ]
+  },
+  "archive": {
+    "configuration": "Release",
+    "archivePath": "/tmp/gitkit-gitfolder-ios/GitFolder.xcarchive",
+    "exportPath": "/tmp/gitkit-gitfolder-ios/export",
+    "exportOptionsPlist": null,
+    "allowProvisioningUpdates": false
+  }
+}

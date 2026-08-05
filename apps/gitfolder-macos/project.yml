@@ -8,8 +8,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.1"
-    CURRENT_PROJECT_VERSION: 5
+    MARKETING_VERSION: "1.1.1"
+    CURRENT_PROJECT_VERSION: 6
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: "38MGF83L2L"
 
@@ -51,7 +51,7 @@ targets:
     info:
       path: GitFolder/Info.plist
       properties:
-        CFBundleDisplayName: GitFolder
+        CFBundleDisplayName: GitKittie Folder
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.developer-tools

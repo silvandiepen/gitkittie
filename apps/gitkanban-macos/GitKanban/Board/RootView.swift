@@ -130,7 +130,7 @@ private struct ConnectView: View {
                     Image("GitKanbanLines")
                         .resizable().scaledToFit().frame(width: 92, height: 84)
                         .foregroundStyle(.tint)
-                    Text("GitKanban").font(.title.bold())
+                    Text("GitKittie Kanban").font(.title.bold())
                     Text("Your kanban board is a git repo.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
@@ -212,7 +212,7 @@ private struct ConnectView: View {
     private func deviceCodeSection(_ device: GitOAuthDeviceSession) -> some View {
         Section("Sign in with GitHub") {
             VStack(spacing: 12) {
-                Text("Enter this code at GitHub to authorise GitKanban:")
+                Text("Enter this code at GitHub to authorise GitKittie Kanban:")
                     .font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(device.userCode)

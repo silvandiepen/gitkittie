@@ -6,11 +6,12 @@ import UIKit
 /// personal access token for any provider (GitHub, GitLab.com, self-hosted GitLab).
 struct ConnectView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openURL) private var openURL
 
     @State private var choice: ProviderChoice = .github
     @State private var serverURL = ""
     @State private var token = ""
+    /// Presents GitHub's device-flow page in an in-app Safari View Controller.
+    @State private var showGitHubSignIn = false
 
     var body: some View {
         Form {
@@ -18,7 +19,7 @@ struct ConnectView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "folder.fill")
                         .font(.system(size: 44)).foregroundStyle(.tint)
-                    Text("GitFolder").font(.title.bold())
+                    Text("GitKittie Folder").font(.title.bold())
                     Text("Your files, backed by git.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
@@ -30,6 +31,7 @@ struct ConnectView: View {
             if let device = model.deviceAuth {
                 deviceCodeSection(device)
             } else {
+                demoSection
                 providerSection
                 if choice == .github { oauthSection }
                 tokenSection
@@ -42,19 +44,51 @@ struct ConnectView: View {
                 }
             }
 
-            if model.deviceAuth == nil {
-                Section {
-                    Button {
-                        model.loadDemo()
-                    } label: {
-                        Label("Preview a demo", systemImage: "sparkles")
-                    }
-                } footer: {
-                    Text("Explore GitFolder with sample repositories — no account needed.")
-                }
-            }
         }
         .navigationTitle("Connect")
+        // Copy the code as soon as it arrives so it is ready to paste, but do not open
+        // GitHub yet — the page asks for the code immediately, and opening it first puts
+        // the code behind the browser the user needs it for. They open it themselves.
+        // The session going back to nil means sign-in finished, expired, or was
+        // cancelled — close the browser if it is still up.
+        .onChange(of: model.deviceAuth?.userCode) { _, userCode in
+            if let userCode {
+                UIPasteboard.general.string = userCode
+            } else {
+                showGitHubSignIn = false
+            }
+        }
+        .sheet(isPresented: $showGitHubSignIn) {
+            if let device = model.deviceAuth {
+                SafariView(url: device.verificationURI).ignoresSafeArea()
+            }
+        }
+    }
+
+    // MARK: Demo
+
+    /// First thing on the screen, before any sign-in option. Someone without a GitHub
+    /// account — an App Store reviewer included — otherwise hits the sign-in wall and has
+    /// no way past it. The demo is the full app against an in-memory repo, not a preview,
+    /// so it is worth saying so plainly.
+    private var demoSection: some View {
+        Section {
+            Button {
+                model.loadDemo()
+            } label: {
+                HStack {
+                    Image(systemName: "sparkles")
+                    Text("Open the demo repositories").fontWeight(.semibold)
+                    Spacer()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        } header: {
+            Text("No account?")
+        } footer: {
+            Text("Sample repositories with every feature working — browse folders, open and edit files, save changes, offline. No account, no sign-in.")
+        }
     }
 
     // MARK: Provider
@@ -90,15 +124,15 @@ struct ConnectView: View {
             }
             .disabled(model.isConnecting)
         } footer: {
-            Text("Opens github.com to authorise — no token to create.")
+            Text("Authorise on github.com without leaving the app — no token to create.")
         }
     }
 
-    /// Device-flow UI: show the user code, open the verification page, and wait.
+    /// Device-flow UI: show the user code, open the verification page in-app, and wait.
     private func deviceCodeSection(_ device: GitOAuthDeviceSession) -> some View {
         Section("Sign in with GitHub") {
             VStack(spacing: 12) {
-                Text("Enter this code at GitHub to authorise GitFolder:")
+                Text("Copied. Open GitHub, paste this code, and confirm to authorise GitKittie Folder.")
                     .font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -116,7 +150,7 @@ struct ConnectView: View {
                         .buttonStyle(.borderless)
                     Spacer()
                     Button {
-                        openURL(device.verificationURI)
+                        showGitHubSignIn = true
                     } label: { Label("Open GitHub", systemImage: "safari") }
                         .buttonStyle(.borderedProminent)
                 }
@@ -131,7 +165,6 @@ struct ConnectView: View {
                 .padding(.top, 4)
             }
             .padding(.vertical, 4)
-            .onAppear { openURL(device.verificationURI) }
         }
     }
 

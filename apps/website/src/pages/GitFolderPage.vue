@@ -8,15 +8,15 @@ import FeatureGrid from '@/components/FeatureGrid.vue'
 import type { Feature, Step } from '@/lib/content'
 import GitFolderMark from '@/components/GitFolderMark.vue'
 import { usePageMeta } from '@/lib/usePageMeta'
-import { appStoreUrl } from '@/links'
+import { gitfolderMacAppStoreUrl, gitfolderAppStoreUrl } from '@/links'
 import { useContent } from '@/i18n'
 
 interface GitFolderContent {
   meta: { title: string; description: string }
-  hero: { eyebrow: string; title: string; subtitle: string; download: string; docs: string }
+  hero: { eyebrow: string; title: string; subtitle: string; download: string; downloadIos: string; docs: string }
   steps: { title: string; subtitle: string; items: Step[] }
   features: { title: string; subtitle: string; items: Feature[] }
-  cta: { title: string; subtitle: string; download: string; docs: string }
+  cta: { title: string; subtitle: string; download: string; downloadIos: string; docs: string }
 }
 
 const t = useContent<GitFolderContent>('gitfolder')
@@ -35,10 +35,11 @@ usePageMeta({ title: t.meta.title, description: t.meta.description })
             <h1 class="mkt__hero-title">{{ t.hero.title }}</h1>
             <p class="mkt__hero-subtitle">{{ t.hero.subtitle }}</p>
             <div class="mkt__hero-actions">
-              <a :href="appStoreUrl" class="mkt__btn-pill" target="_blank" rel="noopener">
+              <a :href="gitfolderMacAppStoreUrl" class="mkt__btn-pill" target="_blank" rel="noopener">
                 {{ t.hero.download }}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
               </a>
+              <a :href="gitfolderAppStoreUrl" class="mkt__btn-outline" target="_blank" rel="noopener">{{ t.hero.downloadIos }}</a>
               <router-link to="/docs" class="mkt__btn-outline">{{ t.hero.docs }}</router-link>
             </div>
           </div>
@@ -84,10 +85,11 @@ usePageMeta({ title: t.meta.title, description: t.meta.description })
           <h2 class="mkt__cta-title">{{ t.cta.title }}</h2>
           <p class="mkt__cta-subtitle">{{ t.cta.subtitle }}</p>
           <div class="mkt__cta-actions">
-            <a :href="appStoreUrl" class="mkt__btn-pill mkt__btn-pill--lg" target="_blank" rel="noopener">
+            <a :href="gitfolderMacAppStoreUrl" class="mkt__btn-pill mkt__btn-pill--lg" target="_blank" rel="noopener">
               {{ t.cta.download }}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </a>
+            <a :href="gitfolderAppStoreUrl" class="mkt__btn-outline mkt__btn-outline--inverse" target="_blank" rel="noopener">{{ t.cta.downloadIos }}</a>
             <router-link to="/docs" class="mkt__btn-outline mkt__btn-outline--inverse">{{ t.cta.docs }}</router-link>
           </div>
         </div>

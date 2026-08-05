@@ -40,3 +40,5 @@ apps/gitbud-macos/GitBud/Info.plist
 apps/gitbud-macos/GitBud/GitBud.entitlements
 swift/*/.build/
 .swiftpm/
+# Capture output from @sil/app-release (screenshots, promo videos, Deliver payloads).
+artifacts/

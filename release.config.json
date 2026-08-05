@@ -1,0 +1,7 @@
+{
+  "apps": [
+    { "slug": "gitkanban-ios", "releaseConfig": "apps/gitkanban-ios/release/ios.json" },
+    { "slug": "gitfolder-ios", "releaseConfig": "apps/gitfolder-ios/release/ios.json" },
+    { "slug": "gitkanban-macos", "releaseConfig": "apps/gitkanban-macos/release/macos.json" }
+  ]
+}

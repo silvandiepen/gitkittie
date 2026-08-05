@@ -1,49 +1,49 @@
 {
   "meta": {
-    "title": "GitKittie — Small Mac apps built on your own git",
-    "description": "GitKittie makes GitFolder, GitKanban and GitBud: small, local-first macOS apps that use your own git and GitHub. No accounts, no servers — your data stays yours."
+    "title": "GitKittie — Small apps built on your own git",
+    "description": "GitKittie makes GitKittie Folder, GitKittie Kanban and GitKittie Bud: small, local-first apps for Mac, iPhone and iPad that use your own git and GitHub. No accounts, no servers — your data stays yours."
   },
   "hero": {
     "eyebrow": "The GitKittie family",
-    "title": "Small Mac apps, built on your own git.",
-    "subtitleHtml": "GitKittie makes three focused, local-first macOS apps — <strong>GitFolder</strong>, <strong>GitKanban</strong> and <strong>GitBud</strong>. All three use the git and GitHub setup you already have. No accounts, no servers, no lock-in.",
-    "ctaGitfolder": "Explore GitFolder",
-    "ctaGitkanban": "Explore GitKanban",
-    "ctaGitbud": "Explore GitBud"
+    "title": "Small apps, built on your own git.",
+    "subtitleHtml": "GitKittie makes three focused, local-first apps — <strong>GitKittie Folder</strong>, <strong>GitKittie Kanban</strong> and <strong>GitKittie Bud</strong>. All three use the git and GitHub setup you already have. No accounts, no servers, no lock-in.",
+    "ctaGitfolder": "Explore GitKittie Folder",
+    "ctaGitkanban": "Explore GitKittie Kanban",
+    "ctaGitbud": "Explore GitKittie Bud"
   },
   "apps": {
     "title": "Three apps, one idea",
-    "subtitle": "Keep your work in plain files under git — and get a native Mac app that makes it effortless. Pick the one you need; they share the same principles and the same engine.",
+    "subtitle": "Keep your work in plain files under git — and get a native app that makes it effortless. Pick the one you need; they share the same principles and the same engine.",
     "items": [
       {
         "app": "gitfolder",
-        "name": "GitFolder",
-        "tagline": "Automatic version history for the folders on your Mac.",
+        "name": "GitKittie Folder",
+        "tagline": "Version history for your folders on Mac, and your repos as folders on iPhone.",
         "points": [
           "Automatic snapshot commits when files change",
-          "Uses your existing GitHub + SSH setup",
-          "Lives quietly in the macOS menu bar"
+          "Browse and edit your repos on iPhone and iPad",
+          "Uses your existing GitHub + SSH setup"
         ],
         "to": "/gitfolder",
-        "cta": "Explore GitFolder",
-        "badge": "Available"
+        "cta": "Explore GitKittie Folder",
+        "badge": "Mac, iPhone & iPad"
       },
       {
         "app": "gitkanban",
-        "name": "GitKanban",
-        "tagline": "A native kanban board whose only data source is a git repo of markdown.",
+        "name": "GitKittie Kanban",
+        "tagline": "A kanban board whose only data source is a git repo of markdown.",
         "points": [
           "Your board is a git repo of markdown files",
           "One file = one card; history comes from git",
           "Agents and scripts can populate it headlessly"
         ],
         "to": "/gitkanban",
-        "cta": "Explore GitKanban",
-        "badge": "Coming soon"
+        "cta": "Explore GitKittie Kanban",
+        "badge": "iPhone & iPad"
       },
       {
         "app": "gitbud",
-        "name": "GitBud",
+        "name": "GitKittie Bud",
         "tagline": "A git client that makes rewriting history visual — and safe to undo.",
         "points": [
           "Rebase, split, squash and reorder by pointing at commits",
@@ -51,7 +51,7 @@
           "Branch graph, file history and pull requests in one window"
         ],
         "to": "/gitbud",
-        "cta": "Explore GitBud",
+        "cta": "Explore GitKittie Bud",
         "badge": "In development"
       }
     ]
@@ -63,7 +63,7 @@
       {
         "icon": "lock",
         "title": "Local-first & private",
-        "desc": "No GitKittie account, no cloud service. Your files move directly between your Mac and the git host you already use."
+        "desc": "No GitKittie account, no cloud service. Your files move directly between your device and the git host you already use."
       },
       {
         "icon": "git-branch",
@@ -73,19 +73,19 @@
       {
         "icon": "github",
         "title": "Built on GitHub",
-        "desc": "They lean on the Git and SSH configuration already on your Mac — the same repos, keys, and permissions you trust."
+        "desc": "They lean on the Git configuration you already trust — the same repos, keys, and permissions."
       },
       {
         "icon": "menu",
-        "title": "Native macOS",
-        "desc": "Small, focused, and Mac-native — each app does one thing well and stays out of your way."
+        "title": "Native, not a web wrapper",
+        "desc": "Small, focused apps built with SwiftUI for each platform — each does one thing well and stays out of your way."
       }
     ]
   },
   "cta": {
-    "title": "Own your data. Start with GitFolder.",
-    "subtitle": "Available on the Mac App Store today — GitKanban and GitBud are on the way.",
-    "primary": "Explore GitFolder",
-    "secondary": "See GitBud"
+    "title": "Own your data.",
+    "subtitle": "GitKittie Folder is on the Mac App Store and the App Store. GitKittie Kanban is on iPhone and iPad. GitKittie Bud is in development.",
+    "primary": "Explore GitKittie Folder",
+    "secondary": "See GitKittie Kanban"
   }
 }

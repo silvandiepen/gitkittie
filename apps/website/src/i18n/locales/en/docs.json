@@ -1,10 +1,10 @@
 {
   "meta": {
-    "title": "Docs — GitFolder",
-    "description": "GitFolder documentation: install, add folders, sync settings, SSH keys, troubleshooting and FAQ. GitKanban and GitBud docs live on GitHub."
+    "title": "Docs — GitKittie Folder",
+    "description": "GitKittie Folder documentation: install, add folders, sync settings, SSH keys, troubleshooting and FAQ. GitKittie Kanban and GitKittie Bud docs live on GitHub."
   },
-  "sidebarTitle": "GitFolder docs",
-  "sidebarNoteHtml": "Looking for GitKanban or GitBud? Both are still in development — their docs live on <a href=\"https://github.com/silvandiepen/gitkittie\" target=\"_blank\" rel=\"noopener\">GitHub</a>.",
+  "sidebarTitle": "GitKittie Folder docs",
+  "sidebarNoteHtml": "Looking for GitKittie Kanban or GitKittie Bud? Their board format and docs live on <a href=\"https://github.com/silvandiepen/gitkittie\" target=\"_blank\" rel=\"noopener\">GitHub</a>.",
   "sections": [
     {
       "id": "getting-started",
@@ -15,16 +15,16 @@
           "type": "steps",
           "items": [
             {
-              "title": "Install GitFolder",
-              "html": "<a href=\"https://apps.apple.com/app/id6784713824?mt=12\" target=\"_blank\" rel=\"noopener\">Download GitFolder from the Mac App Store</a>. It lives in your menu bar — no dock icon."
+              "title": "Install GitKittie Folder",
+              "html": "<a href=\"https://apps.apple.com/app/id6784713824?mt=12\" target=\"_blank\" rel=\"noopener\">Download GitKittie Folder from the Mac App Store</a>. It lives in your menu bar — no dock icon."
             },
             {
               "title": "Make sure Git is installed",
-              "html": "GitFolder uses your system Git. Open Terminal and run <code>git --version</code> to verify. If Git isn't installed, macOS will prompt you to install Xcode Command Line Tools."
+              "html": "GitKittie Folder uses your system Git. Open Terminal and run <code>git --version</code> to verify. If Git isn't installed, macOS will prompt you to install Xcode Command Line Tools."
             },
             {
               "title": "Set up GitHub SSH",
-              "html": "GitFolder pushes over SSH. Make sure <code>ssh -T git@github.com</code> works in Terminal. If you need to set up SSH keys, follow <a href=\"https://docs.github.com/en/authentication/connecting-to-github-with-ssh\" target=\"_blank\" rel=\"noopener\">GitHub's SSH guide</a>."
+              "html": "GitKittie Folder pushes over SSH. Make sure <code>ssh -T git@github.com</code> works in Terminal. If you need to set up SSH keys, follow <a href=\"https://docs.github.com/en/authentication/connecting-to-github-with-ssh\" target=\"_blank\" rel=\"noopener\">GitHub's SSH guide</a>."
             }
           ]
         }
@@ -40,7 +40,7 @@
           "items": [
             {
               "title": "Mac App Store",
-              "html": "<a href=\"https://apps.apple.com/app/id6784713824?mt=12\" target=\"_blank\" rel=\"noopener\">Get GitFolder from the Mac App Store</a>. It's a single purchase — no subscription."
+              "html": "<a href=\"https://apps.apple.com/app/id6784713824?mt=12\" target=\"_blank\" rel=\"noopener\">Get GitKittie Folder from the Mac App Store</a>. It's a single purchase — no subscription."
             },
             {
               "title": "Launch and open Settings",
@@ -64,7 +64,7 @@
             },
             {
               "title": "Choose a local folder",
-              "html": "Use the macOS folder picker to select the folder you want to version. GitFolder will request access to this folder."
+              "html": "Use the macOS folder picker to select the folder you want to version. GitKittie Folder will request access to this folder."
             },
             {
               "title": "Paste a GitHub SSH URL",
@@ -72,7 +72,7 @@
             },
             {
               "title": "Choose branch and interval",
-              "html": "Pick a branch name (default: <code>main</code>) and a sync interval (5, 15, 30, or 60 minutes). Click \"Add and Sync\" — GitFolder will run the first snapshot."
+              "html": "Pick a branch name (default: <code>main</code>) and a sync interval (5, 15, 30, or 60 minutes). Click \"Add and Sync\" — GitKittie Folder will run the first snapshot."
             }
           ]
         }
@@ -111,7 +111,7 @@
       "blocks": [
         {
           "type": "prose",
-          "html": "GitFolder uses SSH to push to GitHub. In most cases your existing SSH setup works out of the box."
+          "html": "GitKittie Folder uses SSH to push to GitHub. In most cases your existing SSH setup works out of the box."
         },
         {
           "type": "specs",
@@ -149,7 +149,7 @@
           "variant": "warning",
           "icon": "⚠️",
           "title": "Folder shows \"Error\" status",
-          "html": "<p>Check the error message in Settings → Repositories. Common causes:</p><ul class=\"docs__list\"><li>SSH key not configured or not accessible</li><li>Repository URL is wrong or you don't have push access</li><li>Branch doesn't exist yet and can't be created</li><li>Git conflict — resolve it manually in your Git client, then GitFolder will resume</li></ul>"
+          "html": "<p>Check the error message in Settings → Repositories. Common causes:</p><ul class=\"docs__list\"><li>SSH key not configured or not accessible</li><li>Repository URL is wrong or you don't have push access</li><li>Branch doesn't exist yet and can't be created</li><li>Git conflict — resolve it manually in your Git client, then GitKittie Folder will resume</li></ul>"
         },
         {
           "type": "steps",
@@ -164,7 +164,7 @@
             },
             {
               "title": "Check the repository URL",
-              "html": "Make sure the URL in GitFolder matches the SSH URL shown on your GitHub repository page. It should start with <code>git@github.com:</code>."
+              "html": "Make sure the URL in GitKittie Folder matches the SSH URL shown on your GitHub repository page. It should start with <code>git@github.com:</code>."
             }
           ]
         }
@@ -179,20 +179,20 @@
           "type": "faq",
           "items": [
             {
-              "q": "Does GitFolder read my file contents?",
-              "html": "No. GitFolder uses Git to track changes. Git creates commits from your files — GitFolder just triggers the process. Your file data goes directly to your GitHub repository over SSH."
+              "q": "Does GitKittie Folder read my file contents?",
+              "html": "No. GitKittie Folder uses Git to track changes. Git creates commits from your files — GitKittie Folder just triggers the process. Your file data goes directly to your GitHub repository over SSH."
             },
             {
               "q": "Can I use it with GitLab, Bitbucket, or self-hosted Git?",
-              "html": "GitFolder is designed for GitHub SSH URLs. Other Git hosts that support SSH may work if the URL format and authentication are compatible, but only GitHub is officially supported."
+              "html": "GitKittie Folder is designed for GitHub SSH URLs. Other Git hosts that support SSH may work if the URL format and authentication are compatible, but only GitHub is officially supported."
             },
             {
               "q": "What happens if there's a merge conflict?",
-              "html": "GitFolder pauses the folder and shows a \"Needs attention\" status. Resolve the conflict in your preferred Git client, then resume syncing in GitFolder."
+              "html": "GitKittie Folder pauses the folder and shows a \"Needs attention\" status. Resolve the conflict in your preferred Git client, then resume syncing in GitKittie Folder."
             },
             {
-              "q": "Does it need a GitFolder account?",
-              "html": "No. There is no GitFolder account, no cloud service, and no backend server. Everything runs locally on your Mac."
+              "q": "Does it need a GitKittie Folder account?",
+              "html": "No. There is no GitKittie Folder account, no cloud service, and no backend server. Everything runs locally on your Mac."
             }
           ]
         }

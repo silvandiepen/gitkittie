@@ -1,12 +1,12 @@
 {
   "meta": {
-    "title": "GitBud — Rewriting git history, made visual",
-    "description": "GitBud is a native macOS git client for the operations that keep history clean: interactive rebase, splitting, squashing, reordering and purging — each one previewed before it runs. In development."
+    "title": "GitKittie Bud — Rewriting git history, made visual",
+    "description": "GitKittie Bud is a native macOS git client for the operations that keep history clean: interactive rebase, splitting, squashing, reordering and purging — each one previewed before it runs. In development."
   },
   "hero": {
     "badge": "In development",
     "title": "Rewriting history, without the fear.",
-    "subtitle": "Interactive rebase, splitting a commit, squashing, reordering, fixing an old message — the operations that keep history readable are the ones people avoid, because you find out whether you got it right afterwards. GitBud shows you the result first, and always leaves a way back.",
+    "subtitle": "Interactive rebase, splitting a commit, squashing, reordering, fixing an old message — the operations that keep history readable are the ones people avoid, because you find out whether you got it right afterwards. GitKittie Bud shows you the result first, and always leaves a way back.",
     "notify": "Notify me when it's ready",
     "github": "Star on GitHub"
   },
@@ -24,7 +24,7 @@
   },
   "status": {
     "badge": "In development",
-    "title": "Where GitBud is today",
+    "title": "Where GitKittie Bud is today",
     "text": "The macOS app is real and under test: the commit graph, file history, blame, branch and tag management, worktrees, submodules, stashes, the rewrite workflows and the pull request review flow all run against actual repositories, covered by 110 passing tests. It isn't on the App Store yet. iPad and iPhone are planned as remote-only companions through GitPont, since history surgery needs a local clone.",
     "notify": "Notify me",
     "github": "Follow on GitHub"
@@ -32,12 +32,12 @@
   "magic": {
     "badge": "Bring your own key",
     "title": "Magic drafts the message, you keep the key",
-    "text": "GitBud can draft a commit title and description from the change itself. It calls the AI provider you configure with your own key, straight from the app — there is no GitBud account, no relay, and no key leaving your Keychain. Leave it unconfigured and the feature simply isn't there.",
+    "text": "GitKittie Bud can draft a commit title and description from the change itself. It calls the AI provider you configure with your own key, straight from the app — there is no GitKittie Bud account, no relay, and no key leaving your Keychain. Leave it unconfigured and the feature simply isn't there.",
     "notify": "Notify me",
     "github": "Read the spec"
   },
   "cta": {
-    "title": "GitBud is on the way.",
+    "title": "GitKittie Bud is on the way.",
     "subtitle": "Be the first to know when it's available on the Mac App Store.",
     "notify": "Notify me",
     "github": "Star on GitHub"

@@ -1,15 +1,15 @@
 {
   "brand": {
     "name": "GitKittie",
-    "tagline": "Small, local-first Mac apps built on your own git."
+    "tagline": "Small, local-first apps built on your own git."
   },
   "nav": [
     {
       "label": "Apps",
       "items": [
-        { "label": "GitFolder", "to": "/gitfolder", "description": "Automatic version history for your folders" },
-        { "label": "GitKanban", "to": "/gitkanban", "description": "A kanban board that is a git repo of markdown" },
-        { "label": "GitBud", "to": "/gitbud", "description": "Rewrite git history, visually and safely" }
+        { "label": "GitKittie Folder", "to": "/gitfolder", "description": "Automatic version history for your folders" },
+        { "label": "GitKittie Kanban", "to": "/gitkanban", "description": "A kanban board that is a git repo of markdown" },
+        { "label": "GitKittie Bud", "to": "/gitbud", "description": "Rewrite git history, visually and safely" }
       ]
     },
     { "label": "Docs", "to": "/docs" },
@@ -26,9 +26,9 @@
       {
         "heading": "Products",
         "links": [
-          { "label": "GitFolder", "to": "/gitfolder" },
-          { "label": "GitKanban", "to": "/gitkanban" },
-          { "label": "GitBud", "to": "/gitbud" }
+          { "label": "GitKittie Folder", "to": "/gitfolder" },
+          { "label": "GitKittie Kanban", "to": "/gitkanban" },
+          { "label": "GitKittie Bud", "to": "/gitbud" }
         ]
       },
       {
@@ -42,8 +42,14 @@
       {
         "heading": "Legal",
         "links": [
-          { "label": "Privacy", "to": "/privacy" },
-          { "label": "Terms", "to": "/terms" }
+          {
+            "label": "Privacy",
+            "to": "/privacy"
+          },
+          {
+            "label": "Terms",
+            "to": "/terms"
+          }
         ]
       }
     ],

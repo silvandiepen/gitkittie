@@ -1,18 +1,18 @@
 {
   "meta": {
-    "title": "GitKanban — Your kanban board is a git repo",
-    "description": "GitKanban is a native macOS kanban board whose only data source is a git repo of markdown files. One file = one card, history from git, agent-friendly. Coming soon."
+    "title": "GitKittie Kanban — Your kanban board is a git repo",
+    "description": "GitKittie Kanban is a kanban board whose only data source is a git repo of markdown files. One file = one card, history from git, agent-friendly. On iPhone and iPad now."
   },
   "hero": {
-    "badge": "Coming soon",
+    "badge": "On iPhone & iPad",
     "title": "Your kanban board is a git repo.",
-    "subtitle": "GitKanban is a native macOS kanban board whose only data source is a git repo of markdown files. Every edit is a change to a file and a commit; sync is a pull and a push against your own remote. No backend, no accounts.",
-    "notify": "Notify me when it's ready",
+    "subtitle": "GitKittie Kanban is a kanban board whose only data source is a git repo of markdown files. Every edit is a change to a file and a commit; sync is a pull and a push against your own remote. No backend, no accounts.",
+    "download": "Download on the App Store",
     "github": "Star on GitHub"
   },
   "features": {
     "title": "A board made of plain files",
-    "subtitle": "The board logic already exists as an open TypeScript core. The native Mac app is in development — here's what it renders.",
+    "subtitle": "The board logic is an open TypeScript core, shared with the app you can install today.",
     "items": [
       { "icon": "columns", "title": "Your board is a git repo", "desc": "Point it at a repo and folder of markdown files. There is no backend and no hosted database — the board is a folder you own." },
       { "icon": "file", "title": "One file = one card", "desc": "Each card is a markdown file: YAML frontmatter for machines, a markdown body for humans. Anything that reads a folder can read your board." },
@@ -23,16 +23,16 @@
     ]
   },
   "status": {
-    "badge": "In development",
-    "title": "Where GitKanban is today",
-    "text": "The board model — parsing, config inheritance, ordering, and validation — is implemented and tested in the shared core, and the git engine behind sync already ships in GitFolder. The native macOS app is being built on top. Want to know when it lands?",
-    "notify": "Notify me",
+    "badge": "Mac in development",
+    "title": "Where GitKittie Kanban is today",
+    "text": "The iPhone and iPad app is on the App Store now — connect a GitHub or GitLab repository, or open the built-in demo board and try the whole thing without an account. A native Mac version is still in development. Want to know when it lands?",
+    "notify": "Notify me about the Mac app",
     "github": "Follow on GitHub"
   },
   "cta": {
-    "title": "GitKanban is on the way.",
-    "subtitle": "Be the first to know when it's available on the Mac App Store.",
-    "notify": "Notify me",
+    "title": "Your board, in your own repo.",
+    "subtitle": "Available now on iPhone and iPad.",
+    "download": "Download on the App Store",
     "github": "Star on GitHub"
   }
 }
