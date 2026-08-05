@@ -17,7 +17,7 @@
     "normalizeMacosScreenshots": false,
     "env": {
       "GITKANBAN_DEMO": "1",
-      "GITKANBAN_WINDOW_SIZE": "1280x748"
+      "GITKANBAN_WINDOW_SIZE": "1280x800"
     },
     "colorModes": [
       { "id": "light", "env": { "GITKANBAN_APPEARANCE": "light" } },
