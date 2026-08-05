@@ -1,14 +1,14 @@
 {
   "meta": {
-    "title": "GitKit — Small apps built on your own git",
-    "description": "GitKit makes GitFolder and GitKit Kanban: small, local-first apps for Mac, iPhone and iPad that use your own git and GitHub. No accounts, no servers — your data stays yours."
+    "title": "GitKittie — Small apps built on your own git",
+    "description": "GitKittie makes GitKittie Folder and GitKittie Kanban: small, local-first apps for Mac, iPhone and iPad that use your own git and GitHub. No accounts, no servers — your data stays yours."
   },
   "hero": {
-    "eyebrow": "The GitKit family",
+    "eyebrow": "The GitKittie family",
     "title": "Small apps, built on your own git.",
-    "subtitleHtml": "GitKit makes two focused, local-first apps — <strong>GitFolder</strong> and <strong>GitKit Kanban</strong>. Both use the git and GitHub setup you already have. No accounts, no servers, no lock-in.",
-    "ctaGitfolder": "Explore GitFolder",
-    "ctaGitkanban": "Explore GitKit Kanban"
+    "subtitleHtml": "GitKittie makes two focused, local-first apps — <strong>GitKittie Folder</strong> and <strong>GitKittie Kanban</strong>. Both use the git and GitHub setup you already have. No accounts, no servers, no lock-in.",
+    "ctaGitfolder": "Explore GitKittie Folder",
+    "ctaGitkanban": "Explore GitKittie Kanban"
   },
   "apps": {
     "title": "Two apps, one idea",
@@ -16,7 +16,7 @@
     "items": [
       {
         "app": "gitfolder",
-        "name": "GitFolder",
+        "name": "GitKittie Folder",
         "tagline": "Version history for your folders on Mac, and your repos as folders on iPhone.",
         "points": [
           "Automatic snapshot commits when files change",
@@ -24,12 +24,12 @@
           "Uses your existing GitHub + SSH setup"
         ],
         "to": "/gitfolder",
-        "cta": "Explore GitFolder",
+        "cta": "Explore GitKittie Folder",
         "badge": "Mac, iPhone & iPad"
       },
       {
         "app": "gitkanban",
-        "name": "GitKit Kanban",
+        "name": "GitKittie Kanban",
         "tagline": "A kanban board whose only data source is a git repo of markdown.",
         "points": [
           "Your board is a git repo of markdown files",
@@ -37,19 +37,19 @@
           "Agents and scripts can populate it headlessly"
         ],
         "to": "/gitkanban",
-        "cta": "Explore GitKit Kanban",
+        "cta": "Explore GitKittie Kanban",
         "badge": "iPhone & iPad"
       }
     ]
   },
   "principles": {
-    "title": "What every GitKit app shares",
+    "title": "What every GitKittie app shares",
     "subtitle": "The same promises hold across the family — because the data is always just your files in your git.",
     "features": [
       {
         "icon": "lock",
         "title": "Local-first & private",
-        "desc": "No GitKit account, no cloud service. Your files move directly between your device and the git host you already use."
+        "desc": "No GitKittie account, no cloud service. Your files move directly between your device and the git host you already use."
       },
       {
         "icon": "git-branch",
@@ -70,8 +70,8 @@
   },
   "cta": {
     "title": "Own your data.",
-    "subtitle": "GitFolder is on the Mac App Store and the App Store. GitKit Kanban is on iPhone and iPad.",
-    "primary": "Explore GitFolder",
-    "secondary": "See GitKit Kanban"
+    "subtitle": "GitKittie Folder is on the Mac App Store and the App Store. GitKittie Kanban is on iPhone and iPad.",
+    "primary": "Explore GitKittie Folder",
+    "secondary": "See GitKittie Kanban"
   }
 }

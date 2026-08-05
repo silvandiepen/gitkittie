@@ -1,12 +1,12 @@
 {
   "meta": {
-    "title": "GitKit Kanban — Your kanban board is a git repo",
-    "description": "GitKit Kanban is a kanban board whose only data source is a git repo of markdown files. One file = one card, history from git, agent-friendly. On iPhone and iPad now."
+    "title": "GitKittie Kanban — Your kanban board is a git repo",
+    "description": "GitKittie Kanban is a kanban board whose only data source is a git repo of markdown files. One file = one card, history from git, agent-friendly. On iPhone and iPad now."
   },
   "hero": {
     "badge": "On iPhone & iPad",
     "title": "Your kanban board is a git repo.",
-    "subtitle": "GitKit Kanban is a kanban board whose only data source is a git repo of markdown files. Every edit is a change to a file and a commit; sync is a pull and a push against your own remote. No backend, no accounts.",
+    "subtitle": "GitKittie Kanban is a kanban board whose only data source is a git repo of markdown files. Every edit is a change to a file and a commit; sync is a pull and a push against your own remote. No backend, no accounts.",
     "download": "Download on the App Store",
     "github": "Star on GitHub"
   },
@@ -24,7 +24,7 @@
   },
   "status": {
     "badge": "Mac in development",
-    "title": "Where GitKit Kanban is today",
+    "title": "Where GitKittie Kanban is today",
     "text": "The iPhone and iPad app is on the App Store now — connect a GitHub or GitLab repository, or open the built-in demo board and try the whole thing without an account. A native Mac version is still in development. Want to know when it lands?",
     "notify": "Notify me about the Mac app",
     "github": "Follow on GitHub"

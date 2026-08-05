@@ -19,7 +19,7 @@ struct ConnectView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "folder.fill")
                         .font(.system(size: 44)).foregroundStyle(.tint)
-                    Text("GitFolder").font(.title.bold())
+                    Text("GitKittie Folder").font(.title.bold())
                     Text("Your files, backed by git.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
@@ -132,7 +132,7 @@ struct ConnectView: View {
     private func deviceCodeSection(_ device: GitOAuthDeviceSession) -> some View {
         Section("Sign in with GitHub") {
             VStack(spacing: 12) {
-                Text("Copied. Open GitHub, paste this code, and confirm to authorise GitFolder.")
+                Text("Copied. Open GitHub, paste this code, and confirm to authorise GitKittie Folder.")
                     .font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 

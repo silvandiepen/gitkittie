@@ -1,12 +1,12 @@
 {
   "meta": {
-    "title": "GitFolder — Automatic version history for your folders",
-    "description": "GitFolder watches selected folders on your Mac and creates quiet GitHub snapshot commits when files change. On iPhone and iPad it opens your repos as plain folders. Local-first, no account."
+    "title": "GitKittie Folder — Automatic version history for your folders",
+    "description": "GitKittie Folder watches selected folders on your Mac and creates quiet GitHub snapshot commits when files change. On iPhone and iPad it opens your repos as plain folders. Local-first, no account."
   },
   "hero": {
     "eyebrow": "Mac menu bar utility · iPhone & iPad app",
     "title": "Automatic version history for your folders.",
-    "subtitle": "On the Mac, GitFolder watches selected folders and creates quiet GitHub snapshot commits when files change. On iPhone and iPad, it opens the same repositories as plain folders you can browse and edit. No cloud service. No account.",
+    "subtitle": "On the Mac, GitKittie Folder watches selected folders and creates quiet GitHub snapshot commits when files change. On iPhone and iPad, it opens the same repositories as plain folders you can browse and edit. No cloud service. No account.",
     "download": "Download on the Mac App Store",
     "docs": "Read the docs",
     "downloadIos": "Also on iPhone & iPad"
@@ -39,22 +39,22 @@
       {
         "icon": "folder",
         "title": "Select your folders",
-        "desc": "Pick any folder on your Mac. GitFolder watches it and creates snapshot commits when files change."
+        "desc": "Pick any folder on your Mac. GitKittie Folder watches it and creates snapshot commits when files change."
       },
       {
         "icon": "github",
         "title": "Your GitHub, your repos",
-        "desc": "Uses your existing GitHub SSH setup. Files go only to repositories you choose — nothing touches GitFolder servers."
+        "desc": "Uses your existing GitHub SSH setup. Files go only to repositories you choose — nothing touches GitKittie Folder servers."
       },
       {
         "icon": "clock",
         "title": "Automatic intervals",
-        "desc": "Set sync intervals per folder — 5, 15, 30, or 60 minutes. GitFolder works quietly in the background."
+        "desc": "Set sync intervals per folder — 5, 15, 30, or 60 minutes. GitKittie Folder works quietly in the background."
       },
       {
         "icon": "lock",
         "title": "Local-first and private",
-        "desc": "No GitFolder account needed. No cloud service. Your files move directly from your Mac to your GitHub repos."
+        "desc": "No GitKittie Folder account needed. No cloud service. Your files move directly from your Mac to your GitHub repos."
       },
       {
         "icon": "terminal",

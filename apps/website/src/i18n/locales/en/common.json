@@ -1,13 +1,25 @@
 {
   "brand": {
-    "name": "GitKit",
-    "tagline": "Small, local-first Mac apps built on your own git."
+    "name": "GitKittie",
+    "tagline": "Small, local-first apps built on your own git."
   },
   "nav": [
-    { "label": "GitFolder", "to": "/gitfolder" },
-    { "label": "GitKanban", "to": "/gitkanban" },
-    { "label": "Docs", "to": "/docs" },
-    { "label": "Support", "to": "/support" }
+    {
+      "label": "GitKittie Folder",
+      "to": "/gitfolder"
+    },
+    {
+      "label": "GitKittie Kanban",
+      "to": "/gitkanban"
+    },
+    {
+      "label": "Docs",
+      "to": "/docs"
+    },
+    {
+      "label": "Support",
+      "to": "/support"
+    }
   ],
   "githubLabel": "GitHub",
   "skipToContent": "Skip to content",
@@ -20,26 +32,48 @@
       {
         "heading": "Products",
         "links": [
-          { "label": "GitFolder", "to": "/gitfolder" },
-          { "label": "GitKanban", "to": "/gitkanban" }
+          {
+            "label": "GitKittie Folder",
+            "to": "/gitfolder"
+          },
+          {
+            "label": "GitKittie Kanban",
+            "to": "/gitkanban"
+          }
         ]
       },
       {
         "heading": "Resources",
         "links": [
-          { "label": "Docs", "to": "/docs" },
-          { "label": "Support", "to": "/support" },
-          { "label": "GitHub", "href": "https://github.com/silvandiepen/Gitfolder", "external": true }
+          {
+            "label": "Docs",
+            "to": "/docs"
+          },
+          {
+            "label": "Support",
+            "to": "/support"
+          },
+          {
+            "label": "GitHub",
+            "href": "https://github.com/silvandiepen/Gitfolder",
+            "external": true
+          }
         ]
       },
       {
         "heading": "Legal",
         "links": [
-          { "label": "Privacy", "to": "/privacy" },
-          { "label": "Terms", "to": "/terms" }
+          {
+            "label": "Privacy",
+            "to": "/privacy"
+          },
+          {
+            "label": "Terms",
+            "to": "/terms"
+          }
         ]
       }
     ],
-    "copy": "GitKit. All rights reserved."
+    "copy": "GitKittie. All rights reserved."
   }
 }

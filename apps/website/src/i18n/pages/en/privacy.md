@@ -1,16 +1,16 @@
-This policy covers the GitKit apps — **GitFolder** and **GitKanban**. Both are local-first macOS utilities. They are designed so that your data never passes through GitKit servers, because there are none.
+This policy covers the GitKittie apps — **GitKittie Folder** and **GitKittie Kanban**. Both are local-first macOS utilities. They are designed so that your data never passes through GitKittie servers, because there are none.
 
 ## No cloud service
 
-GitKit does not run a cloud sync service. The apps read only the folders and repositories you explicitly select, and push changes directly to the git remotes you configure (such as GitHub).
+GitKittie does not run a cloud sync service. The apps read only the folders and repositories you explicitly select, and push changes directly to the git remotes you configure (such as GitHub).
 
-## No GitKit account
+## No GitKittie account
 
-There is no GitKit account. No email, no password, no user profile. The apps are local macOS utilities that talk directly to your git host.
+There is no GitKittie account. No email, no password, no user profile. The apps are local macOS utilities that talk directly to your git host.
 
 ## No data collection or telemetry
 
-The apps do not collect, transmit, or store any personal data on GitKit servers, and do not phone home with telemetry, analytics, or usage data. File contents move directly from your Mac to your own repositories.
+The apps do not collect, transmit, or store any personal data on GitKittie servers, and do not phone home with telemetry, analytics, or usage data. File contents move directly from your Mac to your own repositories.
 
 ## Local data
 
