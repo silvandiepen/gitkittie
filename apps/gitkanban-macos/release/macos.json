@@ -20,12 +20,34 @@
       "GITKANBAN_WINDOW_SIZE": "1280x800"
     },
     "colorModes": [
-      { "id": "light", "env": { "GITKANBAN_APPEARANCE": "light" } },
-      { "id": "dark", "env": { "GITKANBAN_APPEARANCE": "dark" } }
+      {
+        "id": "light",
+        "env": {
+          "GITKANBAN_APPEARANCE": "light"
+        }
+      },
+      {
+        "id": "dark",
+        "env": {
+          "GITKANBAN_APPEARANCE": "dark"
+        }
+      }
     ],
     "scenarios": [
-      { "id": "board", "filename": "01_mac_board-light.png", "colorModes": ["light"] },
-      { "id": "board", "filename": "02_mac_board-dark.png", "colorModes": ["dark"] }
+      {
+        "id": "board",
+        "filename": "01_mac_board-light.png",
+        "colorModes": [
+          "light"
+        ]
+      },
+      {
+        "id": "board",
+        "filename": "02_mac_board-dark.png",
+        "colorModes": [
+          "dark"
+        ]
+      }
     ],
     "scenarioBudgetPerDevice": 10
   }

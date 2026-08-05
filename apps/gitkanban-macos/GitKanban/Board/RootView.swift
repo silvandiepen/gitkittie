@@ -141,6 +141,27 @@ private struct ConnectView: View {
             if let device = model.deviceAuth {
                 deviceCodeSection(device)
             } else {
+                // First thing on the screen, before any sign-in option. Someone without a
+                // GitHub account — an App Store reviewer included — otherwise hits the
+                // sign-in wall and has no way past it. Review rejected the iOS apps under
+                // guideline 2.1(a) for exactly this layout.
+                Section {
+                    Button {
+                        Task { await model.loadDemo() }
+                    } label: {
+                        HStack {
+                            Image(systemName: "sparkles")
+                            Text("Open the demo board").fontWeight(.semibold)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                } header: {
+                    Text("No account?")
+                } footer: {
+                    Text("A sample board with every feature working — add, edit, move and delete cards, offline. No account, no sign-in.")
+                }
+
                 Section("Provider") {
                     Picker("Provider", selection: $choice) {
                         ForEach(ProviderChoice.allCases) { Text($0.title).tag($0) }
@@ -165,7 +186,7 @@ private struct ConnectView: View {
                         }
                         .disabled(model.isConnecting)
                     } footer: {
-                        Text("Opens github.com to authorise — no token to create.")
+                        Text("Authorise on github.com — no token to create.")
                     }
                 }
 
@@ -189,15 +210,6 @@ private struct ConnectView: View {
                     Text("Create a token with repository read/write scope in your provider's settings.")
                 }
 
-                Section {
-                    Button {
-                        Task { await model.loadDemo() }
-                    } label: {
-                        Label("Preview a demo board", systemImage: "sparkles")
-                    }
-                } footer: {
-                    Text("Explore the app offline with a sample board — no account needed.")
-                }
             }
 
             if let error = model.errorMessage {
