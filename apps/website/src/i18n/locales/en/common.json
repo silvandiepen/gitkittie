@@ -7,15 +7,32 @@
     {
       "label": "Apps",
       "items": [
-        { "label": "GitKittie Folder", "to": "/gitfolder", "description": "Automatic version history for your folders" },
-        { "label": "GitKittie Kanban", "to": "/gitkanban", "description": "A kanban board that is a git repo of markdown" },
-        { "label": "GitKittie Bud", "to": "/gitbud", "description": "Rewrite git history, visually and safely" }
+        {
+          "label": "GitKittie Folder",
+          "to": "/gitfolder",
+          "description": "Automatic version history for your folders"
+        },
+        {
+          "label": "GitKittie Kanban",
+          "to": "/gitkanban",
+          "description": "A kanban board that is a git repo of markdown"
+        },
+        {
+          "label": "GitKittie Bud",
+          "to": "/gitbud",
+          "description": "Rewrite git history, visually and safely"
+        }
       ]
     },
-    { "label": "Docs", "to": "/docs" },
-    { "label": "Support", "to": "/support" }
+    {
+      "label": "Docs",
+      "to": "/docs"
+    },
+    {
+      "label": "Support",
+      "to": "/support"
+    }
   ],
-  "githubLabel": "GitHub",
   "skipToContent": "Skip to content",
   "actions": {
     "toLight": "Switch to light mode",
@@ -26,17 +43,31 @@
       {
         "heading": "Products",
         "links": [
-          { "label": "GitKittie Folder", "to": "/gitfolder" },
-          { "label": "GitKittie Kanban", "to": "/gitkanban" },
-          { "label": "GitKittie Bud", "to": "/gitbud" }
+          {
+            "label": "GitKittie Folder",
+            "to": "/gitfolder"
+          },
+          {
+            "label": "GitKittie Kanban",
+            "to": "/gitkanban"
+          },
+          {
+            "label": "GitKittie Bud",
+            "to": "/gitbud"
+          }
         ]
       },
       {
         "heading": "Resources",
         "links": [
-          { "label": "Docs", "to": "/docs" },
-          { "label": "Support", "to": "/support" },
-          { "label": "GitHub", "href": "https://github.com/silvandiepen/gitkittie", "external": true }
+          {
+            "label": "Docs",
+            "to": "/docs"
+          },
+          {
+            "label": "Support",
+            "to": "/support"
+          }
         ]
       },
       {

@@ -1,19 +1,20 @@
 {
   "meta": {
     "title": "GitKittie Folder — Automatic version history for your folders",
-    "description": "GitKittie Folder watches selected folders on your Mac and creates quiet GitHub snapshot commits when files change. On iPhone and iPad it opens your repos as plain folders. Local-first, no account."
+    "description": "GitKittie Folder watches selected folders on your Mac and creates quiet snapshot commits when files change. On iPhone and iPad it opens your repos as plain folders. Works with GitHub, GitLab and any other git host. Local-first, no account."
   },
   "hero": {
     "eyebrow": "Mac menu bar utility · iPhone & iPad app",
-    "title": "Automatic version history for your folders.",
-    "subtitle": "On the Mac, GitKittie Folder watches selected folders and creates quiet GitHub snapshot commits when files change. On iPhone and iPad, it opens the same repositories as plain folders you can browse and edit. No cloud service. No account.",
+    "title": "Automatic version history for *your folders.*",
+    "subtitle": "On the Mac, GitKittie Folder watches selected folders and creates quiet snapshot commits when files change. On iPhone and iPad, it opens the same repositories as plain folders you can browse and edit. No cloud service. No account.",
     "download": "Download on the Mac App Store",
     "docs": "Read the docs",
     "downloadIos": "Also on iPhone & iPad"
   },
   "steps": {
-    "title": "Simple app, simple setup",
-    "subtitle": "Pick a folder, connect a GitHub repo, choose an interval. That's it.",
+    "eyebrow": "Setup",
+    "title": "Simple app, *simple setup.*",
+    "subtitle": "Pick a folder, connect a repository, choose an interval. That's it.",
     "items": [
       {
         "n": "1",
@@ -23,7 +24,7 @@
       {
         "n": "2",
         "title": "Connect a repo",
-        "desc": "Point it at a GitHub repository you own, using your existing SSH access."
+        "desc": "Point it at a repository you own on GitHub, GitLab or any other host, using your existing access."
       },
       {
         "n": "3",
@@ -33,7 +34,8 @@
     ]
   },
   "features": {
-    "title": "Everything it does",
+    "eyebrow": "Capabilities",
+    "title": "Everything *it does.*",
     "subtitle": "A small macOS app that does one thing well.",
     "items": [
       {
@@ -43,8 +45,8 @@
       },
       {
         "icon": "github",
-        "title": "Your GitHub, your repos",
-        "desc": "Uses your existing GitHub SSH setup. Files go only to repositories you choose — nothing touches GitKittie Folder servers."
+        "title": "Your host, your repos",
+        "desc": "Uses the SSH access you already have, on GitHub, GitLab or anywhere else. Files go only to repositories you choose — nothing touches GitKittie servers."
       },
       {
         "icon": "clock",
@@ -54,7 +56,7 @@
       {
         "icon": "lock",
         "title": "Local-first and private",
-        "desc": "No GitKittie Folder account needed. No cloud service. Your files move directly from your Mac to your GitHub repos."
+        "desc": "No GitKittie Folder account needed. No cloud service. Your files move directly from your Mac to your own repositories."
       },
       {
         "icon": "terminal",
@@ -69,7 +71,8 @@
     ]
   },
   "cta": {
-    "title": "Version your folders, quietly.",
+    "eyebrow": "On the App Store",
+    "title": "Version your folders, *quietly.*",
     "subtitle": "On the Mac App Store, and on the App Store for iPhone and iPad.",
     "download": "Download on the Mac App Store",
     "docs": "Read the docs",

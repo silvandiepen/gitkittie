@@ -4,7 +4,18 @@ import { defineConfig } from 'vite'
 import { ui } from '@sil/ui/vite'
 
 export default defineConfig({
-  plugins: [vue(), ui()],
+  plugins: [
+    vue({
+      template: {
+        compilerOptions: {
+          // <arlez-support> is a custom element from Arlez's web SDK, not a Vue
+          // component — the compiler must leave it alone.
+          isCustomElement: (tag) => tag.startsWith('arlez-'),
+        },
+      },
+    }),
+    ui(),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

@@ -13,20 +13,28 @@ export const gitfolderMacAppStoreUrl = `${gitfolderAppStoreUrl}?mt=12`
 /** Kept for older imports; points at the GitKittie Folder Mac listing as it always did. */
 export const appStoreUrl = gitfolderMacAppStoreUrl
 
-/** GitKittie Kanban — iPhone and iPad only for now; no Mac build exists yet. */
+/**
+ * GitKittie Kanban — like Folder, one App Store record covering macOS and iOS
+ * since the Mac build shipped at 1.0. Same `?mt=12` trick for the Mac listing.
+ */
 export const gitkanbanAppStoreUrl = 'https://apps.apple.com/app/id6792793088'
+export const gitkanbanMacAppStoreUrl = `${gitkanbanAppStoreUrl}?mt=12`
 
-/** Shared GitHub repository for the GitKittie family. */
-export const githubRepoUrl = 'https://github.com/silvandiepen/gitkittie'
+/**
+ * Arlez project for this site — `GitKittie Website · Web` in the GitKittie
+ * workspace. A `pub_…` product ID routes reports to a project and is explicitly
+ * not a credential, so it ships in the page. The founder `arlez_key_…` never
+ * does.
+ *
+ * Every origin the site is served from must be registered on the project in
+ * Arlez, or the support sheet fails with `origin_not_allowed`.
+ */
+export const arlezProjectId = 'pub_af0f09e38be86b7b39d91df6'
 
-/** GitKittie Kanban for Mac is still in development — "notify me" stays a static mailto. */
-export const gitkanbanMacNotify =
-  'mailto:me@sil.mt?subject=Notify%20me%20about%20GitKittie%20Kanban%20for%20Mac&body=Let%20me%20know%20when%20GitKittie%20Kanban%20for%20Mac%20is%20available.'
+/** Web SDK entry point. `/v1/` takes compatible updates; pin a version to freeze it. */
+export const arlezScriptUrl = 'https://cdn.arlez.app/v1/arlez.js'
 
-/** GitKittie Bud is not yet shipped either — same static mailto treatment. */
-export const gitbudNotify =
-  'mailto:me@sil.mt?subject=Notify%20me%20about%20GitKittie%20Bud&body=Let%20me%20know%20when%20GitKittie%20Bud%20is%20available.'
-
-/** Support contact. */
-export const supportEmail = 'me@sil.mt'
-export const supportMailto = 'mailto:me@sil.mt?subject=GitKittie%20support'
+// Nothing here exposes a personal email address any more. Every "notify me",
+// "ask about this" and support route goes through Arlez instead, so a message
+// arrives attached to the product it came from and the reply comes back on the
+// same thread — see `ArlezSupport.vue`.

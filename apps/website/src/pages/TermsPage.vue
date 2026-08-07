@@ -2,12 +2,11 @@
 /**
  * @view TermsPage
  * Terms & Conditions for the GitKittie apps. Body prose lives in
- * i18n/pages/<locale>/terms.md and is rendered with nizel.
+ * i18n/pages/<locale>/terms.md and is rendered by LegalDoc.
  */
 import MarketingLayout from '@/components/MarketingLayout.vue'
 import LegalDoc from '@/components/LegalDoc.vue'
 import { usePageMeta } from '@/lib/usePageMeta'
-import { useMarkdown } from '@/lib/useMarkdown'
 import { usePageMarkdown } from '@/i18n'
 
 usePageMeta({
@@ -16,14 +15,11 @@ usePageMeta({
     'The terms of use for the GitKittie apps, GitKittie Folder, GitKittie Kanban and GitKittie Bud — provided as-is, using your own git repositories and accounts.',
 })
 
-const body = useMarkdown(() => usePageMarkdown('terms'))
+const body = usePageMarkdown('terms')
 </script>
 
 <template>
   <MarketingLayout>
-    <LegalDoc title="Terms &amp; Conditions" updated="July 2026">
-      <!-- eslint-disable-next-line vue/no-v-html -->
-      <div v-html="body"></div>
-    </LegalDoc>
+    <LegalDoc title="Terms &amp; Conditions" updated="July 2026" :content="body" />
   </MarketingLayout>
 </template>

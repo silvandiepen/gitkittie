@@ -5,21 +5,45 @@
   },
   "hero": {
     "badge": "In development",
-    "title": "Rewriting history, without the fear.",
+    "title": "Rewriting history, *without the fear.*",
     "subtitle": "Interactive rebase, splitting a commit, squashing, reordering, fixing an old message — the operations that keep history readable are the ones people avoid, because you find out whether you got it right afterwards. GitKittie Bud shows you the result first, and always leaves a way back.",
-    "notify": "Notify me when it's ready",
-    "github": "Star on GitHub"
+    "notify": "Notify me when it's ready"
   },
   "features": {
-    "title": "Point at commits, not at flags",
+    "eyebrow": "The verbs",
+    "title": "Point at commits, *not at flags.*",
     "subtitle": "Every verb applies to whatever you've selected, and reaches you three ways: right-click it, use the toolbar in the detail pane, or press ⌘K.",
     "items": [
-      { "icon": "git-branch", "title": "A graph drawn from real parents", "desc": "Branches occupy their own lane, merges are ringed and fan out to each parent, and branch points show the lanes converging. History loads in windows and fetches older commits on demand instead of stopping at a fixed count." },
-      { "icon": "history", "title": "Rewrites you can read first", "desc": "Select a range and the detail pane shows the rewrite as a numbered plan — what will be squashed, dropped, reordered or reworded — before anything runs." },
-      { "icon": "lock", "title": "Protected by default", "desc": "A rewrite requires a clean tree and creates a safety ref before it touches anything, so the old history is still reachable by name if you change your mind." },
-      { "icon": "file", "title": "Split a commit by what changed", "desc": "Pick the files or hunks that belong somewhere else and move them into their own commit, instead of unpicking a rebase by hand." },
-      { "icon": "check", "title": "Force-push is a decision", "desc": "Pushing rewritten history is a separate, explicit step, and it pushes with a lease — if someone else moved the branch, the push fails instead of overwriting them. Purging a file from all history is its own deliberately loud workflow that writes backup refs first." },
-      { "icon": "github", "title": "Pull requests in the same window", "desc": "List open pull requests, read the review summary and per-file patches, reply to inline threads, leave new comments, and submit a review — without leaving the repository you're working in." }
+      {
+        "icon": "git-branch",
+        "title": "A graph drawn from real parents",
+        "desc": "Branches occupy their own lane, merges are ringed and fan out to each parent, and branch points show the lanes converging. History loads in windows and fetches older commits on demand instead of stopping at a fixed count."
+      },
+      {
+        "icon": "history",
+        "title": "Rewrites you can read first",
+        "desc": "Select a range and the detail pane shows the rewrite as a numbered plan — what will be squashed, dropped, reordered or reworded — before anything runs."
+      },
+      {
+        "icon": "lock",
+        "title": "Protected by default",
+        "desc": "A rewrite requires a clean tree and creates a safety ref before it touches anything, so the old history is still reachable by name if you change your mind."
+      },
+      {
+        "icon": "file",
+        "title": "Split a commit by what changed",
+        "desc": "Pick the files or hunks that belong somewhere else and move them into their own commit, instead of unpicking a rebase by hand."
+      },
+      {
+        "icon": "check",
+        "title": "Force-push is a decision",
+        "desc": "Pushing rewritten history is a separate, explicit step, and it pushes with a lease — if someone else moved the branch, the push fails instead of overwriting them. Purging a file from all history is its own deliberately loud workflow that writes backup refs first."
+      },
+      {
+        "icon": "github",
+        "title": "Pull requests in the same window",
+        "desc": "List open pull requests, read the review summary and per-file patches, reply to inline threads, leave new comments, and submit a review — without leaving the repository you're working in."
+      }
     ]
   },
   "status": {
@@ -27,19 +51,18 @@
     "title": "Where GitKittie Bud is today",
     "text": "The macOS app is real and under test: the commit graph, file history, blame, branch and tag management, worktrees, submodules, stashes, the rewrite workflows and the pull request review flow all run against actual repositories, covered by 110 passing tests. It isn't on the App Store yet. iPad and iPhone are planned as remote-only companions through GitPont, since history surgery needs a local clone.",
     "notify": "Notify me",
-    "github": "Follow on GitHub"
+    "support": "Ask about GitKittie Bud"
   },
   "magic": {
     "badge": "Bring your own key",
     "title": "Magic drafts the message, you keep the key",
     "text": "GitKittie Bud can draft a commit title and description from the change itself. It calls the AI provider you configure with your own key, straight from the app — there is no GitKittie Bud account, no relay, and no key leaving your Keychain. Leave it unconfigured and the feature simply isn't there.",
-    "notify": "Notify me",
-    "github": "Read the spec"
+    "notify": "Notify me"
   },
   "cta": {
-    "title": "GitKittie Bud is on the way.",
+    "eyebrow": "Coming to the Mac App Store",
+    "title": "GitKittie Bud is *on the way.*",
     "subtitle": "Be the first to know when it's available on the Mac App Store.",
-    "notify": "Notify me",
-    "github": "Star on GitHub"
+    "notify": "Notify me"
   }
 }

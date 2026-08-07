@@ -3,6 +3,7 @@
     "title": "Support — GitKittie",
     "description": "Support and troubleshooting for GitKittie Folder, GitKittie Kanban and GitKittie Bud. Most issues come down to git, token access, repository URLs, or folder permissions."
   },
+  "eyebrow": "Help",
   "title": "Support",
   "intro": "GitKittie Folder, GitKittie Kanban and GitKittie Bud are small, local-first apps. Most issues come down to git, token access, repository URLs, or folder permissions. Pick your app below.",
   "gitfolder": {
@@ -10,32 +11,53 @@
     "setup": {
       "title": "Check your setup",
       "steps": [
-        { "title": "Verify Git is installed", "descHtml": "Open Terminal and run <code>git --version</code>. If not found, install Xcode Command Line Tools: <code>xcode-select --install</code>." },
-        { "title": "Test GitHub access", "descHtml": "Open GitKittie Folder Settings, paste a fine-grained GitHub token, enter the repository URL, and run Test GitHub Access." },
-        { "title": "Check the repository URL", "descHtml": "Make sure the URL in GitKittie Folder matches the HTTPS URL on your GitHub repository page. It should start with <code>https://github.com/</code>. SSH URLs are available under Advanced settings." }
+        {
+          "title": "Verify Git is installed",
+          "desc": "Open Terminal and run `git --version`. If not found, install Xcode Command Line Tools: `xcode-select --install`."
+        },
+        {
+          "title": "Test GitHub access",
+          "desc": "Open GitKittie Folder Settings, paste a fine-grained GitHub token, enter the repository URL, and run Test GitHub Access."
+        },
+        {
+          "title": "Check the repository URL",
+          "desc": "Make sure the URL in GitKittie Folder matches the HTTPS URL on your GitHub repository page. It should start with `https://github.com/`. SSH URLs are available under Advanced settings."
+        }
       ]
     },
     "common": {
       "title": "Common issues",
       "items": [
-        { "title": "Folder shows \"Error\" status", "descHtml": "Open Settings and check the error message. The most common causes are a missing token, a token without repository access, an incorrect repository URL, or a folder permission that needs to be refreshed." },
-        { "title": "Folder shows \"Needs attention\"", "descHtml": "There's a Git conflict. Resolve it in your preferred Git client, then resume syncing in GitKittie Folder." },
-        { "title": "Changes not appearing on GitHub", "descHtml": "Check that the folder isn't paused, the sync interval hasn't elapsed yet, and the repository URL is correct. You can force a sync with \"Sync Now\"." }
+        {
+          "title": "Folder shows \"Error\" status",
+          "desc": "Open Settings and check the error message. The most common causes are a missing token, a token without repository access, an incorrect repository URL, or a folder permission that needs to be refreshed."
+        },
+        {
+          "title": "Folder shows \"Needs attention\"",
+          "desc": "There's a Git conflict. Resolve it in your preferred Git client, then resume syncing in GitKittie Folder."
+        },
+        {
+          "title": "Changes not appearing on GitHub",
+          "desc": "Check that the folder isn't paused, the sync interval hasn't elapsed yet, and the repository URL is correct. You can force a sync with \"Sync Now\"."
+        }
       ]
     }
   },
   "gitkanban": {
     "heading": "GitKittie Kanban",
-    "title": "In development",
-    "bodyHtml": "GitKittie Kanban's native macOS app is still being built, so there's nothing to install yet. The board format and core logic are open on <a href=\"https://github.com/silvandiepen/gitkittie\" target=\"_blank\" rel=\"noopener\">GitHub</a> — that's the best place to follow progress, report issues, or ask questions. Want a heads-up when it ships? <a href=\"mailto:me@sil.mt?subject=Notify%20me%20about%20GitKittie%20Kanban\">Notify me</a>."
+    "title": "Getting connected",
+    "body": "GitKittie Kanban is on the Mac App Store and the App Store for iPhone and iPad — one record, so the download button gives you the build for the device you're on. Open the demo board to try it without an account, or connect GitHub, GitLab.com or a self-hosted GitLab. If a repository doesn't show up, check that the token you pasted has repository read and write scope, and that self-hosted GitLab was given its server URL. Anything else — a board that won't load, a card that won't save — send a message and it lands against GitKittie Kanban.",
+    "action": "Message about GitKittie Kanban"
   },
   "gitbud": {
     "heading": "GitKittie Bud",
     "title": "In development",
-    "bodyHtml": "GitKittie Bud's macOS app isn't on the App Store yet, so there's nothing to install. Development happens in the open on <a href=\"https://github.com/silvandiepen/gitkittie\" target=\"_blank\" rel=\"noopener\">GitHub</a> — that's the place to follow progress, report issues, or ask questions. Want a heads-up when it ships? <a href=\"mailto:me@sil.mt?subject=Notify%20me%20about%20GitKittie%20Bud\">Notify me</a>."
+    "body": "GitKittie Bud's macOS app isn't on the App Store yet, so there's nothing to install. Send a message to be told when it ships, or to say what you'd want from it.",
+    "action": "Message about GitKittie Bud"
   },
   "stillStuck": {
     "title": "Still stuck?",
-    "bodyHtml": "Email <a href=\"mailto:me@sil.mt\">me@sil.mt</a> or open an issue on <a href=\"https://github.com/silvandiepen/gitkittie\" target=\"_blank\" rel=\"noopener\">GitHub</a> with the error message from Settings and your macOS version. Technical git output is kept in local logs so sync errors can be diagnosed without exposing details in the menu bar."
+    "body": "Send a message with the error text from Settings and your macOS version, and it arrives attached to the app it came from. Technical git output is kept in local logs, so sync errors can be diagnosed without exposing details in the menu bar.",
+    "action": "Send a message"
   }
 }

@@ -42,4 +42,4 @@ These terms may be updated from time to time. Continued use of the Software afte
 
 ## Contact
 
-Questions about these terms? Email [me@sil.mt](mailto:me@sil.mt) or open an issue on [GitHub](https://github.com/silvandiepen/gitkittie).
+Questions about these terms? Use the support form on the [Support](/support) page — it reaches a person directly.

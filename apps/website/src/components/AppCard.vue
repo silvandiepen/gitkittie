@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
  * @component AppCard
- * Home-page card for one product. Sets [data-app] so it themes itself to the
- * product's brand colour via --color-accent*.
+ * One product, as a full-bleed colour panel rather than a card on a background.
+ * Sets [data-app] so the panel fills with that product's own hue and everything
+ * inside it — badge border, rules, link underline — inherits the contrast text
+ * colour from `--color-accent-contrast`.
  */
 import GitFolderMark from './GitFolderMark.vue'
 import GitKanbanMark from './GitKanbanMark.vue'
@@ -17,117 +19,101 @@ defineProps<{
   to: string
   cta: string
   badge?: string
+  /** Mono index shown at the top of the panel, e.g. "01". */
+  marker?: string
 }>()
 </script>
 
 <template>
-  <article class="app-card" :data-app="app">
-    <div class="app-card__head">
-      <span class="app-card__mark" aria-hidden="true">
-        <GitFolderMark v-if="app === 'gitfolder'" :size="60" />
-        <GitKanbanMark v-else-if="app === 'gitkanban'" :size="60" />
-        <GitBudMark v-else :size="60" />
-      </span>
+  <article class="mkt__panel app-panel" :data-app="app">
+    <div class="app-panel__head">
+      <span v-if="marker" class="mkt__marker">{{ marker }}</span>
       <span v-if="badge" class="mkt__badge">{{ badge }}</span>
     </div>
 
-    <h3 class="app-card__name">{{ name }}</h3>
-    <p class="app-card__tagline">{{ tagline }}</p>
+    <span class="app-panel__mark" aria-hidden="true">
+      <GitFolderMark v-if="app === 'gitfolder'" :size="72" />
+      <GitKanbanMark v-else-if="app === 'gitkanban'" :size="72" />
+      <GitBudMark v-else :size="72" />
+    </span>
 
-    <ul class="app-card__points" role="list">
-      <li v-for="p in points" :key="p">
-        <svg class="app-card__tick" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-        <span>{{ p }}</span>
-      </li>
+    <div class="app-panel__copy">
+      <h3 class="mkt__display-s">{{ name }}</h3>
+      <p class="app-panel__tagline">{{ tagline }}</p>
+    </div>
+
+    <ul class="app-panel__points" role="list">
+      <li v-for="p in points" :key="p" class="app-panel__point">{{ p }}</li>
     </ul>
 
-    <RouterLink :to="to" class="mkt__btn-pill app-card__cta">
+    <RouterLink :to="to" class="mkt__link app-panel__cta">
       {{ cta }}
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      <svg class="app-panel__arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2 8h11m-4-4 4 4-4 4" />
+      </svg>
     </RouterLink>
   </article>
 </template>
 
 <style lang="scss">
-.app-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-l);
-  border-radius: var(--border-radius-xxl);
-  background: var(--surface);
-  border: var(--border-width) solid var(--color-border-light);
-  overflow: hidden;
-  transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+.app-panel {
+  gap: var(--space);
 
-  // Brand-tinted top accent bar.
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 5px;
-    background: linear-gradient(90deg, var(--color-accent), var(--color-accent-light));
-  }
-
-  &:hover {
-    transform: translateY(-3px);
-    border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
-    box-shadow: var(--shadow-l);
-  }
+  // A panel that spans the full grid — the odd one out of three — would
+  // otherwise stretch its copy across the whole viewport. The reading measure
+  // stays one column wide regardless of how many columns the panel occupies.
+  --app-panel-measure: 46ch;
 
   &__head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: var(--space);
+    gap: var(--space);
+    max-width: var(--app-panel-measure);
   }
 
   &__mark {
     display: inline-flex;
-    box-shadow: var(--shadow-s);
-    border-radius: 22%;
+    margin-top: auto;
   }
 
-  &__name {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    letter-spacing: -0.02em;
-    margin-bottom: var(--space-xs);
+  &__copy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
+    max-width: var(--app-panel-measure);
   }
 
   &__tagline {
-    font-size: var(--font-size);
-    color: var(--color-muted);
-    line-height: var(--line-height-relaxed);
-    margin-bottom: var(--space);
+    font-size: var(--font-size-m);
+    line-height: 1.45;
+    max-width: 30ch;
+    color: color-mix(in srgb, currentColor 80%, transparent);
   }
 
   &__points {
     display: flex;
     flex-direction: column;
-    gap: var(--space-s);
-    margin: 0 0 var(--space-l);
     padding: 0;
-
-    li {
-      display: flex;
-      align-items: flex-start;
-      gap: var(--space-s);
-      font-size: var(--font-size-s);
-      color: var(--color-foreground);
-      line-height: var(--line-height-normal);
-    }
+    max-width: var(--app-panel-measure);
   }
 
-  &__tick {
-    flex: 0 0 auto;
-    margin-top: var(--space-xs);
-    color: var(--accent-legible);
+  // The hairline between points is the panel's own text colour, faded — on a
+  // filled panel a neutral --color-rule would read as a foreign grey.
+  &__point {
+    padding: var(--space-s) 0;
+    border-top: var(--border-width) solid color-mix(in srgb, currentColor 25%, transparent);
+    font-size: var(--font-size-s);
+    line-height: var(--line-height-normal);
   }
 
   &__cta {
-    margin-top: auto;
-    align-self: flex-start;
+    margin-top: var(--space-s);
+  }
+
+  &__arrow {
+    width: 14px;
+    height: 14px;
   }
 }
 </style>

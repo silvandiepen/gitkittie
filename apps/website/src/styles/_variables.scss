@@ -34,7 +34,7 @@
   --border-width: 1px;
   --radius-pill: 999px;
 
-  // ── Font sizes (mirrors @sil/ui global) + display ─────────────────────
+  // ── Font sizes (mirrors @sil/ui global) + editorial display ───────────
   --font-size-xs: calc(var(--font-size) * 0.75);
   --font-size-s: calc(var(--font-size) * 0.875);
   --font-size: 1rem;
@@ -42,7 +42,18 @@
   --font-size-l: calc(var(--font-size) * 1.25);
   --font-size-xl: calc(var(--font-size) * 1.5);
   --font-size-xxl: calc(var(--font-size) * 2);
-  --font-size-display: clamp(var(--font-size-xxl), 5vw, calc(var(--font-size-xxl) * 1.45));
+
+  // Editorial scale. The site has no condensed display face (Inter only), so
+  // the hierarchy comes from size, negative tracking and whitespace instead.
+  // Fluid rather than stepped — `design-conventions.md` prefers clamp() over
+  // adding breakpoints.
+  --font-size-display: clamp(2.5rem, 7.5vw, 5.5rem);
+  --font-size-display-s: clamp(2rem, 5vw, 3.5rem);
+
+  // Tracking pairs: tighten big text, loosen small caps. Applied together.
+  --tracking-display: -0.04em;
+  --tracking-heading: -0.025em;
+  --tracking-eyebrow: 0.12em;
 
   // ── Font weights (mirrors @sil/ui global) ─────────────────────────────
   --font-weight-light: 300;
@@ -68,14 +79,29 @@
   --transition-fast: 0.12s ease;
 
   // ── Neutral surfaces (GitKittie shell) ────────────────────────────────
-  --color-dark: #12151b;
+  // Warm paper and near-black ink rather than cool grey-blue. The editorial
+  // layout puts large flat areas of the page background on screen at once, and
+  // a cool grey reads as "unstyled panel" at that size where a warm one reads
+  // as paper.
+  --color-dark: #16150f;
   --color-light: #ffffff;
-  --color-background: #f4f5f7;
-  --color-foreground: #12151b;
+  --color-paper: #f7f6f1;
+  --color-background: var(--color-paper);
+  --color-foreground: #16150f;
   --surface: #ffffff;
-  --surface-raised: #fbfcfd;
-  --color-border: #e4e7ec;
-  --color-border-light: #eef0f3;
+  --surface-raised: #fbfaf6;
+  --color-border: #dedbd0;
+  --color-border-light: #e9e6dd;
+
+  // The hairline that separates editorial rows. Full-strength ink, unlike the
+  // faint card borders it replaces — it is structure, not decoration.
+  --color-rule: color-mix(in srgb, var(--color-foreground) 88%, transparent);
+
+  // ── Semantic status ───────────────────────────────────────────────────
+  // Kept separate from the brand accents on purpose: a docs warning must not
+  // change colour depending on which product page it happens to sit on.
+  --color-warning: #b8791a;
+  --color-warning-tint: #fdf3dd;
 
   // Derived text tones (auto-adapt to the active foreground/background).
   --color-muted: color-mix(in srgb, var(--color-foreground) 62%, var(--color-background));
@@ -87,11 +113,15 @@
   --shadow-l: 0 12px 32px color-mix(in srgb, var(--color-dark), transparent 86%);
 
   // ── Brand palettes (single source of brand hex) ───────────────────────
-  // GitKittie — neutral slate (shell). The umbrella mark is ink on the page,
-  // so the family itself contributes no hue; the products carry the colour.
+  // GitKittie — neutral slate (shell). The umbrella mark is ink on the page, so
+  // the family contributes no hue of its own; the products carry the colour.
+  // What separates the family's highlighted phrases from body ink is therefore
+  // temperature, not hue: the page ink is warm, this slate is cool. That only
+  // works if the slate is far enough off the ink to be seen — a near-black
+  // slate on a warm near-black heading reads as a rendering bug.
   --gitkittie: #2b3440;
-  --gitkittie-light: #4a5563;
-  --gitkittie-dark: #1b222b;
+  --gitkittie-light: #5c6b80;
+  --gitkittie-dark: #3f4b5c;
   --gitkittie-tint: #eef0f3;
 
   // GitFolder — app icon background from project-assets/GitKittie/assets/icon.svg
@@ -129,14 +159,23 @@
 
   // A legible accent for text/icons: dark shade on light, light shade on dark.
   --accent-legible: var(--color-accent-dark);
+
+  // Text colour for a panel filled with --color-accent. The three product hues
+  // are light enough to take ink and set this to --color-dark themselves; the
+  // neutral shell accent is a dark slate in light mode, so it needs paper.
+  --color-accent-contrast: var(--color-light);
 }
 
 // ── Per-app accent remap ──────────────────────────────────────────────────
+// Setting [data-app] on any element themes everything inside it, which is what
+// lets one panel be GitFolder green and the next GitKanban orange without
+// either knowing about the other.
 [data-app="gitfolder"] {
   --color-accent: var(--gf);
   --color-accent-light: var(--gf-light);
   --color-accent-dark: var(--gf-dark);
   --color-accent-tint: var(--gf-tint);
+  --color-accent-contrast: var(--color-dark);
 }
 
 [data-app="gitkanban"] {
@@ -144,6 +183,7 @@
   --color-accent-light: var(--gk-light);
   --color-accent-dark: var(--gk-dark);
   --color-accent-tint: var(--gk-tint);
+  --color-accent-contrast: var(--color-dark);
 }
 
 [data-app="gitbud"] {
@@ -151,17 +191,23 @@
   --color-accent-light: var(--gb-light);
   --color-accent-dark: var(--gb-dark);
   --color-accent-tint: var(--gb-tint);
+  --color-accent-contrast: var(--color-dark);
 }
 
 // ── Dark mode (site toggles [data-theme]; @sil/ui defaults also honours it) ──
+// Same structure, inverted neutrals — not a different design. The product hues
+// keep their light values so the colour panels stay as vivid in the dark as in
+// the light, which is where the editorial layout gets its energy.
 :root[data-theme="dark"] {
-  --color-dark: #0f1117;
-  --color-background: #0f1117;
-  --color-foreground: #e8eaf0;
-  --surface: #1a1d27;
-  --surface-raised: #242733;
-  --color-border: #2a2d3a;
-  --color-border-light: #1f2230;
+  --color-dark: #101010;
+  --color-paper: #131211;
+  --color-background: var(--color-paper);
+  --color-foreground: #f2f0ea;
+  --surface: #1c1a18;
+  --surface-raised: #232120;
+  --color-border: #34312c;
+  --color-border-light: #262421;
+  --color-rule: color-mix(in srgb, var(--color-foreground) 70%, transparent);
 
   // Brand tints darken; base hues stay vivid on dark surfaces.
   --gf-tint: #26330f;
@@ -172,14 +218,23 @@
   --app-icon-paper: #fcfcf5;
   --app-icon-card: #d7dadd;
 
+  --color-warning: #e0a84a;
+  --color-warning-tint: #2e2413;
+
   // Neutral shell accent reads as a light slate in the dark. --gitkittie-dark
   // stays a fixed dark ink so neutral bands/buttons keep white-text contrast
   // (legible accent text uses --color-accent-light in dark, not -dark).
+  // -light stops short of the paper foreground for the same reason it does in
+  // light mode: a highlight that matches the body ink is not a highlight.
   --gitkittie: #c3ccd9;
-  --gitkittie-light: #d8dee8;
+  --gitkittie-light: #9db0cc;
 
   // Legible accent flips to the light shade against dark backgrounds.
   --accent-legible: var(--color-accent-light);
+
+  // The shell accent is a light slate here, so a panel filled with it takes ink
+  // rather than paper — the inverse of light mode.
+  --color-accent-contrast: var(--color-dark);
 
   --shadow-s: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-m: 0 4px 16px rgba(0, 0, 0, 0.4);

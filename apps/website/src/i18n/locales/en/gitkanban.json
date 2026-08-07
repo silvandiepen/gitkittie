@@ -1,38 +1,63 @@
 {
   "meta": {
     "title": "GitKittie Kanban — Your kanban board is a git repo",
-    "description": "GitKittie Kanban is a kanban board whose only data source is a git repo of markdown files. One file = one card, history from git, agent-friendly. On iPhone and iPad now."
+    "description": "GitKittie Kanban is a kanban board whose only data source is a git repo of markdown files. One file = one card, history from git, agent-friendly. On Mac, iPhone and iPad now."
   },
   "hero": {
-    "badge": "On iPhone & iPad",
-    "title": "Your kanban board is a git repo.",
+    "badge": "On Mac, iPhone & iPad",
+    "title": "Your kanban board *is a git repo.*",
     "subtitle": "GitKittie Kanban is a kanban board whose only data source is a git repo of markdown files. Every edit is a change to a file and a commit; sync is a pull and a push against your own remote. No backend, no accounts.",
-    "download": "Download on the App Store",
-    "github": "Star on GitHub"
+    "download": "Download on the Mac App Store",
+    "downloadIos": "Also on iPhone & iPad"
   },
   "features": {
-    "title": "A board made of plain files",
-    "subtitle": "The board logic is an open TypeScript core, shared with the app you can install today.",
+    "eyebrow": "How it works",
+    "title": "A board made of *plain files.*",
+    "subtitle": "The board logic is an open TypeScript core, shared by the Mac, iPhone and iPad apps.",
     "items": [
-      { "icon": "columns", "title": "Your board is a git repo", "desc": "Point it at a repo and folder of markdown files. There is no backend and no hosted database — the board is a folder you own." },
-      { "icon": "file", "title": "One file = one card", "desc": "Each card is a markdown file: YAML frontmatter for machines, a markdown body for humans. Anything that reads a folder can read your board." },
-      { "icon": "git-branch", "title": "A column is a field", "desc": "Moving a card changes one line in one file (status: todo → done). The file never moves, so git history stays continuous and diffs stay tiny." },
-      { "icon": "history", "title": "History from git", "desc": "Every card's journey — who moved it and when — is read straight from git log. No separate activity database to trust." },
-      { "icon": "bot", "title": "Agent-friendly by design", "desc": "Because the board is just files, agents, CI, and scripts write cards and push like any other client. A human curates; a fleet populates." },
-      { "icon": "check", "title": "Validated & lenient", "desc": "Cards are validated against a board config with root → project inheritance, while unknown frontmatter round-trips untouched." }
+      {
+        "icon": "columns",
+        "title": "Your board is a git repo",
+        "desc": "Point it at a repo and folder of markdown files. There is no backend and no hosted database — the board is a folder you own."
+      },
+      {
+        "icon": "file",
+        "title": "One file = one card",
+        "desc": "Each card is a markdown file: YAML frontmatter for machines, a markdown body for humans. Anything that reads a folder can read your board."
+      },
+      {
+        "icon": "git-branch",
+        "title": "A column is a field",
+        "desc": "Moving a card changes one line in one file (status: todo → done). The file never moves, so git history stays continuous and diffs stay tiny."
+      },
+      {
+        "icon": "history",
+        "title": "History from git",
+        "desc": "Every card's journey — who moved it and when — is read straight from git log. No separate activity database to trust."
+      },
+      {
+        "icon": "bot",
+        "title": "Agent-friendly by design",
+        "desc": "Because the board is just files, agents, CI, and scripts write cards and push like any other client. A human curates; a fleet populates."
+      },
+      {
+        "icon": "check",
+        "title": "Validated & lenient",
+        "desc": "Cards are validated against a board config with root → project inheritance, while unknown frontmatter round-trips untouched."
+      }
     ]
   },
   "status": {
-    "badge": "Mac in development",
-    "title": "Where GitKittie Kanban is today",
-    "text": "The iPhone and iPad app is on the App Store now — connect a GitHub or GitLab repository, or open the built-in demo board and try the whole thing without an account. A native Mac version is still in development. Want to know when it lands?",
-    "notify": "Notify me about the Mac app",
-    "github": "Follow on GitHub"
+    "badge": "Now on Mac",
+    "title": "The same board, on every device",
+    "text": "The Mac app is on the Mac App Store alongside the iPhone and iPad app — one purchase, one board, the same repository. Connect GitHub, GitLab.com or a self-hosted GitLab with a token, sign in to GitHub without one, or open the built-in demo board and try the whole thing without an account.",
+    "support": "Ask about GitKittie Kanban"
   },
   "cta": {
-    "title": "Your board, in your own repo.",
-    "subtitle": "Available now on iPhone and iPad.",
-    "download": "Download on the App Store",
-    "github": "Star on GitHub"
+    "eyebrow": "Available now",
+    "title": "Your board, *in your own repo.*",
+    "subtitle": "Available now on Mac, iPhone and iPad.",
+    "download": "Download on the Mac App Store",
+    "downloadIos": "Get it for iPhone & iPad"
   }
 }

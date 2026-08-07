@@ -1,87 +1,97 @@
 <script setup lang="ts">
 /**
  * @component LegalDoc
- * Shared reader layout for legal / policy pages (Privacy, Terms). Neutral shell.
- * Provide a title + last-updated string; put the sections in the default slot as
- * <section><h2>…</h2><p>…</p></section> blocks.
+ * Reader layout for the legal pages (Privacy, Terms). The body is markdown from
+ * `i18n/pages/<locale>/<name>.md`, rendered through @sil/ui's Markdown — the
+ * page passes the source, not HTML.
  */
+import { Markdown } from '@sil/ui'
+
 defineProps<{
   title: string
   updated: string
+  /** Markdown source for the document body. */
+  content: string
 }>()
 </script>
 
 <template>
-  <div class="legal">
-    <div class="legal__container">
-      <h1 class="legal__title">{{ title }}</h1>
-      <p class="legal__updated">Last updated: {{ updated }}</p>
-      <div class="legal__body">
-        <slot />
+  <article class="legal">
+    <header class="legal__header">
+      <div class="mkt__container-narrow legal__header-inner">
+        <span class="mkt__eyebrow">Last updated: {{ updated }}</span>
+        <h1 class="mkt__display-s">{{ title }}</h1>
       </div>
+    </header>
+
+    <div class="mkt__container-narrow legal__body-wrap">
+      <Markdown class="legal__body" tag="div" :content="content" />
     </div>
-  </div>
+  </article>
 </template>
 
 <style lang="scss">
 .legal {
-  &__container {
-    max-width: 760px;
-    margin: 0 auto;
-    padding: var(--space-xl) var(--space-l) var(--space-xxl);
+  padding-bottom: var(--space-xxl);
 
-    @include mobile { padding: var(--space-l) var(--space) var(--space-xl); }
+  &__header {
+    padding: clamp(var(--space-xl), 8vw, var(--space-xxl)) 0 var(--space-l);
   }
 
-  &__title {
-    font-size: var(--font-size-xxl);
-    font-weight: var(--font-weight-bold);
-    letter-spacing: -0.02em;
-    margin-bottom: var(--space-s);
+  &__header-inner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space);
   }
 
-  &__updated {
-    font-size: var(--font-size-s);
-    color: var(--color-subtle);
-    margin-bottom: var(--space-xl);
+  &__body-wrap {
+    padding-top: var(--space-l);
+    border-top: var(--border-width) solid var(--color-rule);
   }
 
+  // Rendered markdown: the elements come from the renderer, so bare selectors
+  // are the only way to reach them. Everything else on the site uses classes.
   &__body {
-    section {
-      margin-bottom: var(--space-l);
-    }
+    display: flex;
+    flex-direction: column;
+    gap: var(--space);
+    max-width: 68ch;
 
     h2 {
-      font-size: var(--font-size-l);
+      padding-top: var(--space-l);
+      font-size: var(--font-size-xl);
       font-weight: var(--font-weight-semibold);
-      margin-bottom: var(--space-s);
+      letter-spacing: var(--tracking-heading);
     }
 
-    p {
-      font-size: var(--font-size);
-      color: var(--color-muted);
+    h3 {
+      font-size: var(--font-size-m);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    p,
+    li {
+      font-size: var(--font-size-m);
       line-height: var(--line-height-relaxed);
-      margin-bottom: var(--space-s);
+      color: color-mix(in srgb, var(--color-foreground) 78%, transparent);
     }
 
     ul {
-      margin: 0 0 var(--space-s);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-s);
       padding-left: var(--space);
-      list-style: disc;
-
-      li {
-        font-size: var(--font-size);
-        color: var(--color-muted);
-        line-height: var(--line-height-relaxed);
-        margin-bottom: var(--space-xs);
-      }
     }
+
+    li { list-style: disc; }
 
     a {
       color: var(--accent-legible);
       text-decoration: underline;
       text-underline-offset: 2px;
     }
+
+    strong { font-weight: var(--font-weight-semibold); }
   }
 }
 </style>

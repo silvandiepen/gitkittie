@@ -1,198 +1,447 @@
 {
   "meta": {
-    "title": "Docs — GitKittie Folder",
-    "description": "GitKittie Folder documentation: install, add folders, sync settings, SSH keys, troubleshooting and FAQ. GitKittie Kanban and GitKittie Bud docs live on GitHub."
+    "title": "Docs — GitKittie",
+    "description": "Documentation for GitKittie Folder, GitKittie Kanban and GitKittie Bud: install, setup, board format, history rewriting, troubleshooting and FAQ."
   },
-  "sidebarTitle": "GitKittie Folder docs",
-  "sidebarNoteHtml": "Looking for GitKittie Kanban or GitKittie Bud? Their board format and docs live on <a href=\"https://github.com/silvandiepen/gitkittie\" target=\"_blank\" rel=\"noopener\">GitHub</a>.",
-  "sections": [
+  "sidebarNote": "Documentation covers all three apps. Anything missing? Send a message.",
+  "products": [
     {
-      "id": "getting-started",
-      "label": "Getting Started",
-      "title": "Getting Started",
-      "blocks": [
+      "id": "gitfolder",
+      "label": "Folder",
+      "name": "GitKittie Folder",
+      "sections": [
         {
-          "type": "steps",
-          "items": [
+          "id": "getting-started",
+          "label": "Getting Started",
+          "title": "Getting Started",
+          "blocks": [
             {
-              "title": "Install GitKittie Folder",
-              "html": "<a href=\"https://apps.apple.com/app/id6784713824?mt=12\" target=\"_blank\" rel=\"noopener\">Download GitKittie Folder from the Mac App Store</a>. It lives in your menu bar — no dock icon."
+              "type": "steps",
+              "items": [
+                {
+                  "title": "Install GitKittie Folder",
+                  "md": "[Download GitKittie Folder from the Mac App Store](https://apps.apple.com/app/id6784713824?mt=12). It lives in your menu bar — no dock icon."
+                },
+                {
+                  "title": "Make sure Git is installed",
+                  "md": "GitKittie Folder uses your system Git. Open Terminal and run `git --version` to verify. If Git isn't installed, macOS will prompt you to install Xcode Command Line Tools."
+                },
+                {
+                  "title": "Set up GitHub SSH",
+                  "md": "GitKittie Folder pushes over SSH. Make sure `ssh -T git@github.com` works in Terminal. If you need to set up SSH keys, follow [GitHub's SSH guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh)."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "install",
+          "label": "Installation",
+          "title": "Installation",
+          "blocks": [
+            {
+              "type": "steps",
+              "items": [
+                {
+                  "title": "Mac App Store",
+                  "md": "[Get GitKittie Folder from the Mac App Store](https://apps.apple.com/app/id6784713824?mt=12). It's a single purchase — no subscription."
+                },
+                {
+                  "title": "Launch and open Settings",
+                  "md": "Click the folder icon in the menu bar, then click the gear icon to open Settings. This is where you configure Git identity and add folders."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "adding-folders",
+          "label": "Adding Folders",
+          "title": "Adding Folders",
+          "blocks": [
+            {
+              "type": "steps",
+              "items": [
+                {
+                  "title": "Open Settings → Repositories",
+                  "md": "Click the folder icon in the menu bar, then the gear icon. Go to the Repositories tab and click \"Add Repository…\"."
+                },
+                {
+                  "title": "Choose a local folder",
+                  "md": "Use the macOS folder picker to select the folder you want to version. GitKittie Folder will request access to this folder."
+                },
+                {
+                  "title": "Paste a GitHub SSH URL",
+                  "md": "Enter the SSH URL of the repository you want to push to, like `git@github.com:yourname/my-folder-backup.git`."
+                },
+                {
+                  "title": "Choose branch and interval",
+                  "md": "Pick a branch name (default: `main`) and a sync interval (5, 15, 30, or 60 minutes). Click \"Add and Sync\" — GitKittie Folder will run the first snapshot."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sync-settings",
+          "label": "Sync Settings",
+          "title": "Sync Settings",
+          "blocks": [
+            {
+              "type": "prose",
+              "md": "Configure syncing behavior in Settings → General:"
             },
             {
-              "title": "Make sure Git is installed",
-              "html": "GitKittie Folder uses your system Git. Open Terminal and run <code>git --version</code> to verify. If Git isn't installed, macOS will prompt you to install Xcode Command Line Tools."
+              "type": "list",
+              "items": [
+                "**Pause all syncing** — temporarily stop all folder snapshots",
+                "**Default interval** — the default sync interval for new folders (5, 15, 30, or 60 minutes)",
+                "**Per-folder override** — each folder can have its own interval, branch, and pause state"
+              ]
             },
             {
-              "title": "Set up GitHub SSH",
-              "html": "GitKittie Folder pushes over SSH. Make sure <code>ssh -T git@github.com</code> works in Terminal. If you need to set up SSH keys, follow <a href=\"https://docs.github.com/en/authentication/connecting-to-github-with-ssh\" target=\"_blank\" rel=\"noopener\">GitHub's SSH guide</a>."
+              "type": "callout",
+              "variant": "info",
+              "icon": "💡",
+              "title": "Sync All Now",
+              "md": "Click \"Sync All Now\" in the General tab or in the menu bar to trigger an immediate snapshot for all active folders, regardless of their interval."
+            }
+          ]
+        },
+        {
+          "id": "ssh-keys",
+          "label": "SSH Keys",
+          "title": "SSH Keys",
+          "blocks": [
+            {
+              "type": "prose",
+              "md": "GitKittie Folder uses SSH to push to GitHub. In most cases your existing SSH setup works out of the box."
+            },
+            {
+              "type": "specs",
+              "items": [
+                {
+                  "term": "Default",
+                  "md": "Uses system `~/.ssh`"
+                },
+                {
+                  "term": "Custom key",
+                  "md": "Choose a specific key in Settings → SSH"
+                },
+                {
+                  "term": "Sandbox",
+                  "md": "Mac App Store builds may need explicit key selection"
+                }
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "warning",
+              "icon": "⚠️",
+              "title": "Mac App Store sandbox",
+              "md": "Sandboxed apps can't access `~/.ssh` directly. If you're using the Mac App Store version, go to Settings → SSH and choose your SSH private key file explicitly."
+            }
+          ]
+        },
+        {
+          "id": "troubleshooting",
+          "label": "Troubleshooting",
+          "title": "Troubleshooting",
+          "blocks": [
+            {
+              "type": "callout",
+              "variant": "warning",
+              "icon": "⚠️",
+              "title": "Folder shows \"Error\" status",
+              "md": "Check the error message in Settings → Repositories. Common causes:\n\n\n\n- SSH key not configured or not accessible\n- Repository URL is wrong or you don't have push access\n- Branch doesn't exist yet and can't be created\n- Git conflict — resolve it manually in your Git client, then GitKittie Folder will resume"
+            },
+            {
+              "type": "steps",
+              "items": [
+                {
+                  "title": "Verify Git is installed",
+                  "md": "Open Terminal and run `git --version`. If not found, install Xcode Command Line Tools with `xcode-select --install`."
+                },
+                {
+                  "title": "Test SSH access",
+                  "md": "Run `ssh -T git@github.com` in Terminal. You should see your GitHub username in the response."
+                },
+                {
+                  "title": "Check the repository URL",
+                  "md": "Make sure the URL in GitKittie Folder matches the SSH URL shown on your GitHub repository page. It should start with `git@github.com:`."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "faq",
+          "label": "FAQ",
+          "title": "FAQ",
+          "blocks": [
+            {
+              "type": "faq",
+              "items": [
+                {
+                  "q": "Does GitKittie Folder read my file contents?",
+                  "md": "No. GitKittie Folder uses Git to track changes. Git creates commits from your files — GitKittie Folder just triggers the process. Your file data goes directly to your GitHub repository over SSH."
+                },
+                {
+                  "q": "Can I use it with GitLab, Bitbucket, or self-hosted Git?",
+                  "md": "GitKittie Folder is designed for GitHub SSH URLs. Other Git hosts that support SSH may work if the URL format and authentication are compatible, but only GitHub is officially supported."
+                },
+                {
+                  "q": "What happens if there's a merge conflict?",
+                  "md": "GitKittie Folder pauses the folder and shows a \"Needs attention\" status. Resolve the conflict in your preferred Git client, then resume syncing in GitKittie Folder."
+                },
+                {
+                  "q": "Does it need a GitKittie Folder account?",
+                  "md": "No. There is no GitKittie Folder account, no cloud service, and no backend server. Everything runs locally on your Mac."
+                }
+              ]
             }
           ]
         }
       ]
     },
     {
-      "id": "install",
-      "label": "Installation",
-      "title": "Installation",
-      "blocks": [
+      "id": "gitkanban",
+      "label": "Kanban",
+      "name": "GitKittie Kanban",
+      "sections": [
         {
-          "type": "steps",
-          "items": [
+          "id": "kanban-start",
+          "label": "Getting Started",
+          "title": "Getting Started",
+          "blocks": [
             {
-              "title": "Mac App Store",
-              "html": "<a href=\"https://apps.apple.com/app/id6784713824?mt=12\" target=\"_blank\" rel=\"noopener\">Get GitKittie Folder from the Mac App Store</a>. It's a single purchase — no subscription."
+              "type": "prose",
+              "md": "GitKittie Kanban runs on Mac, iPhone and iPad, from one App Store record and one purchase. All three are the same app against the same board."
             },
             {
-              "title": "Launch and open Settings",
-              "html": "Click the folder icon in the menu bar, then click the gear icon to open Settings. This is where you configure Git identity and add folders."
+              "type": "steps",
+              "items": [
+                {
+                  "title": "Install it",
+                  "md": "[Get GitKittie Kanban from the Mac App Store](https://apps.apple.com/app/id6792793088?mt=12), or [from the App Store for iPhone and iPad](https://apps.apple.com/app/id6792793088)."
+                },
+                {
+                  "title": "Try it without an account",
+                  "md": "Open the built-in demo board. Nothing is connected and nothing leaves the device — it exists so you can see whether the model suits you before wiring up a repository."
+                },
+                {
+                  "title": "Connect a host",
+                  "md": "GitHub, GitLab.com, or a self-hosted GitLab. Sign in with GitHub and authorise on github.com — no token to create — or paste a personal access token for any of the three. Either way the credential is stored in the system Keychain and the provider choice is remembered, so you connect once."
+                },
+                {
+                  "title": "Pick a repository and board",
+                  "md": "Search your repositories, choose one, and open a board. If the repository holds several projects, switch between them from the board screen."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "kanban-format",
+          "label": "Board Format",
+          "title": "The board format",
+          "blocks": [
+            {
+              "type": "prose",
+              "md": "There is no database. A board **is** a git repository of markdown, and the rules are small enough to hold in your head:"
+            },
+            {
+              "type": "list",
+              "items": [
+                "**A lane is a folder.** A card's `status` and the folder it sits in must agree.",
+                "**One card is one file** — YAML frontmatter for the fields, markdown below for the description.",
+                "**Config inherits**, root to project: lanes replace, vocabularies merge.",
+                "**Unknown keys survive.** Anything the app does not recognise is preserved on round-trip rather than dropped."
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "info",
+              "icon": "💡",
+              "title": "Anything can write to it",
+              "md": "Because a board is only files and folders, scripts and agents can populate it headlessly — no API, no integration. The board logic is an open TypeScript core shared with the app."
+            }
+          ]
+        },
+        {
+          "id": "kanban-cards",
+          "label": "Cards",
+          "title": "Working with cards",
+          "blocks": [
+            {
+              "type": "specs",
+              "items": [
+                {
+                  "term": "Create",
+                  "md": "A new markdown file with frontmatter and a slug id, committed to the lane folder."
+                },
+                {
+                  "term": "Edit",
+                  "md": "Fields and body. The description renders as markdown in the card detail."
+                },
+                {
+                  "term": "Move lanes",
+                  "md": "Drag a card onto another lane on the Mac; pick a lane from the card on iPhone and iPad. Either way it rewrites `status`, writes the file to the new path, and deletes the old one."
+                },
+                {
+                  "term": "Reorder",
+                  "md": "Drag within a lane. Only the cards whose `order` actually changed are committed."
+                },
+                {
+                  "term": "Delete",
+                  "md": "Right-click a card on the Mac, or swipe on iPhone and iPad — then confirm."
+                }
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "warning",
+              "icon": "⚠️",
+              "title": "Writes are immediate and last-writer-wins",
+              "md": "Every change is its own commit, sent straight away. There is no conflict detection yet — if two people edit the same card at once, the later write wins. Offline editing and conflict surfacing are planned, not built."
+            }
+          ]
+        },
+        {
+          "id": "kanban-faq",
+          "label": "FAQ",
+          "title": "FAQ",
+          "blocks": [
+            {
+              "type": "faq",
+              "items": [
+                {
+                  "q": "Does it need a local clone?",
+                  "md": "No, on any platform. The app talks to your host's REST API over HTTPS — it reads directories and files, and commits changes back. Nothing is cloned to the device, the Mac included."
+                },
+                {
+                  "q": "Which hosts work?",
+                  "md": "GitHub, GitLab.com, and self-hosted GitLab, using a personal access token you supply."
+                },
+                {
+                  "q": "Is there a Mac app?",
+                  "md": "Yes — it shipped at 1.0 and is on the Mac App Store. It is the same App Store record as the iPhone and iPad app, so one purchase covers all three, and they share the same board contract: a board authored on one platform renders on the others."
+                },
+                {
+                  "q": "Is there realtime collaboration?",
+                  "md": "No, and it is not planned. There is no hosted service and no account — you bring your own host and token."
+                }
+              ]
             }
           ]
         }
       ]
     },
     {
-      "id": "adding-folders",
-      "label": "Adding Folders",
-      "title": "Adding Folders",
-      "blocks": [
+      "id": "gitbud",
+      "label": "Bud",
+      "name": "GitKittie Bud",
+      "sections": [
         {
-          "type": "steps",
-          "items": [
+          "id": "bud-start",
+          "label": "Getting Started",
+          "title": "Getting Started",
+          "blocks": [
             {
-              "title": "Open Settings → Repositories",
-              "html": "Click the folder icon in the menu bar, then the gear icon. Go to the Repositories tab and click \"Add Repository…\"."
+              "type": "callout",
+              "variant": "warning",
+              "icon": "⚠️",
+              "title": "Not released yet",
+              "md": "GitKittie Bud is not on the App Store. This documents what the macOS app does today, under test, so you can judge whether it is the tool you want."
             },
             {
-              "title": "Choose a local folder",
-              "html": "Use the macOS folder picker to select the folder you want to version. GitKittie Folder will request access to this folder."
-            },
-            {
-              "title": "Paste a GitHub SSH URL",
-              "html": "Enter the SSH URL of the repository you want to push to, like <code>git@github.com:yourname/my-folder-backup.git</code>."
-            },
-            {
-              "title": "Choose branch and interval",
-              "html": "Pick a branch name (default: <code>main</code>) and a sync interval (5, 15, 30, or 60 minutes). Click \"Add and Sync\" — GitKittie Folder will run the first snapshot."
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "sync-settings",
-      "label": "Sync Settings",
-      "title": "Sync Settings",
-      "blocks": [
-        {
-          "type": "prose",
-          "html": "Configure syncing behavior in Settings → General:"
-        },
-        {
-          "type": "list",
-          "items": [
-            "<strong>Pause all syncing</strong> — temporarily stop all folder snapshots",
-            "<strong>Default interval</strong> — the default sync interval for new folders (5, 15, 30, or 60 minutes)",
-            "<strong>Per-folder override</strong> — each folder can have its own interval, branch, and pause state"
-          ]
-        },
-        {
-          "type": "callout",
-          "variant": "info",
-          "icon": "💡",
-          "title": "Sync All Now",
-          "html": "<p>Click \"Sync All Now\" in the General tab or in the menu bar to trigger an immediate snapshot for all active folders, regardless of their interval.</p>"
-        }
-      ]
-    },
-    {
-      "id": "ssh-keys",
-      "label": "SSH Keys",
-      "title": "SSH Keys",
-      "blocks": [
-        {
-          "type": "prose",
-          "html": "GitKittie Folder uses SSH to push to GitHub. In most cases your existing SSH setup works out of the box."
-        },
-        {
-          "type": "specs",
-          "items": [
-            {
-              "term": "Default",
-              "html": "Uses system <code>~/.ssh</code>"
-            },
-            {
-              "term": "Custom key",
-              "html": "Choose a specific key in Settings → SSH"
-            },
-            {
-              "term": "Sandbox",
-              "html": "Mac App Store builds may need explicit key selection"
+              "type": "prose",
+              "md": "GitKittie Bud is a native macOS git client for understanding and repairing history without living in git terminology. It opens a local repository you already have, or clones a repository from a connected provider account into a checkout it manages."
             }
           ]
         },
         {
-          "type": "callout",
-          "variant": "warning",
-          "icon": "⚠️",
-          "title": "Mac App Store sandbox",
-          "html": "<p>Sandboxed apps can't access <code>~/.ssh</code> directly. If you're using the Mac App Store version, go to Settings → SSH and choose your SSH private key file explicitly.</p>"
-        }
-      ]
-    },
-    {
-      "id": "troubleshooting",
-      "label": "Troubleshooting",
-      "title": "Troubleshooting",
-      "blocks": [
-        {
-          "type": "callout",
-          "variant": "warning",
-          "icon": "⚠️",
-          "title": "Folder shows \"Error\" status",
-          "html": "<p>Check the error message in Settings → Repositories. Common causes:</p><ul class=\"docs__list\"><li>SSH key not configured or not accessible</li><li>Repository URL is wrong or you don't have push access</li><li>Branch doesn't exist yet and can't be created</li><li>Git conflict — resolve it manually in your Git client, then GitKittie Folder will resume</li></ul>"
-        },
-        {
-          "type": "steps",
-          "items": [
+          "id": "bud-surfaces",
+          "label": "Surfaces",
+          "title": "The four surfaces",
+          "blocks": [
             {
-              "title": "Verify Git is installed",
-              "html": "Open Terminal and run <code>git --version</code>. If not found, install Xcode Command Line Tools with <code>xcode-select --install</code>."
+              "type": "prose",
+              "md": "There are four places to navigate to. Everything else is a verb on whatever you have selected."
             },
             {
-              "title": "Test SSH access",
-              "html": "Run <code>ssh -T git@github.com</code> in Terminal. You should see your GitHub username in the response."
+              "type": "specs",
+              "items": [
+                {
+                  "term": "History (⌘1)",
+                  "md": "The multi-lane commit graph, search, and the detail pane — message, files, diff, blame, file history."
+                },
+                {
+                  "term": "Changes (⌘2)",
+                  "md": "The working copy: file selection, the commit box, amend, message drafting, and stashes."
+                },
+                {
+                  "term": "Branches (⌘3)",
+                  "md": "Local and remote branches, most recently updated first, plus tags."
+                },
+                {
+                  "term": "Pull Requests (⌘4)",
+                  "md": "The provider's open PRs, review summaries, per-file patches, inline threads, and review submission."
+                }
+              ]
             },
             {
-              "title": "Check the repository URL",
-              "html": "Make sure the URL in GitKittie Folder matches the SSH URL shown on your GitHub repository page. It should start with <code>git@github.com:</code>."
+              "type": "callout",
+              "variant": "info",
+              "icon": "💡",
+              "title": "Three ways to reach every verb",
+              "md": "Right-click the item, use the toolbar in the detail pane, or press ⌘K. The command palette lists only what applies to the current selection, so you never scan a menu of things that cannot run."
             }
           ]
-        }
-      ]
-    },
-    {
-      "id": "faq",
-      "label": "FAQ",
-      "title": "FAQ",
-      "blocks": [
+        },
         {
-          "type": "faq",
-          "items": [
+          "id": "bud-rewrite",
+          "label": "Rewriting",
+          "title": "Rewriting history safely",
+          "blocks": [
             {
-              "q": "Does GitKittie Folder read my file contents?",
-              "html": "No. GitKittie Folder uses Git to track changes. Git creates commits from your files — GitKittie Folder just triggers the process. Your file data goes directly to your GitHub repository over SSH."
+              "type": "prose",
+              "md": "The operations that keep history readable are the ones people avoid, because you normally find out whether you got it right afterwards. Every rewrite here is previewed first and leaves a way back."
             },
             {
-              "q": "Can I use it with GitLab, Bitbucket, or self-hosted Git?",
-              "html": "GitKittie Folder is designed for GitHub SSH URLs. Other Git hosts that support SSH may work if the URL format and authentication are compatible, but only GitHub is officially supported."
+              "type": "list",
+              "items": [
+                "**Select a range** and the detail pane shows the rewrite as a numbered plan — what will be squashed, dropped, reordered or reworded — before anything runs.",
+                "**A clean tree is required**, and a safety ref is created before the rewrite touches anything, so the old history stays reachable by name.",
+                "**Split a commit** by picking the files or hunks that belong somewhere else, instead of unpicking a rebase by hand.",
+                "**Undo** restores the previous HEAD from the safety ref."
+              ]
             },
             {
-              "q": "What happens if there's a merge conflict?",
-              "html": "GitKittie Folder pauses the folder and shows a \"Needs attention\" status. Resolve the conflict in your preferred Git client, then resume syncing in GitKittie Folder."
+              "type": "callout",
+              "variant": "warning",
+              "icon": "⚠️",
+              "title": "Pushing a rewrite is a separate decision",
+              "md": "Force-pushing is its own explicit step and uses a lease: if someone else moved the branch, the push fails rather than overwriting them. Purging a file from all history is a deliberately loud workflow that writes backup refs first."
+            }
+          ]
+        },
+        {
+          "id": "bud-magic",
+          "label": "Magic",
+          "title": "Drafting a commit message",
+          "blocks": [
+            {
+              "type": "prose",
+              "md": "GitKittie Bud can draft a commit title and description from the change itself. You supply your own API key for the AI provider you choose, and the app calls that provider directly."
             },
             {
-              "q": "Does it need a GitKittie Folder account?",
-              "html": "No. There is no GitKittie Folder account, no cloud service, and no backend server. Everything runs locally on your Mac."
+              "type": "list",
+              "items": [
+                "There is no GitKittie account and no relay — the request goes from the app to the provider.",
+                "Your key is stored in the macOS Keychain and never leaves it.",
+                "Leave it unconfigured and the feature is simply not there."
+              ]
             }
           ]
         }

@@ -10,7 +10,6 @@ import { useRoute } from 'vue-router'
 import { PillHeader } from '@sil/ui'
 import type { PillHeaderAction, PillHeaderNavItem } from '@sil/ui'
 import GitKittieMark from './GitKittieMark.vue'
-import { githubRepoUrl } from '@/links'
 import { useContent } from '@/i18n'
 
 /** A nav entry is either a link or a parent that only opens a submenu. */
@@ -25,7 +24,6 @@ interface FooterColumn { heading: string; links: FooterLink[] }
 interface CommonContent {
   brand: { name: string; tagline: string }
   nav: NavLink[]
-  githubLabel: string
   skipToContent: string
   actions: { toLight: string; toDark: string }
   footer: { columns: FooterColumn[]; copy: string }
@@ -49,10 +47,7 @@ function toNavItem(n: NavLink): PillHeaderNavItem {
   }
 }
 
-const navItems = computed<PillHeaderNavItem[]>(() => [
-  ...t.nav.map(toNavItem),
-  { label: t.githubLabel, href: githubRepoUrl, external: true },
-])
+const navItems = computed<PillHeaderNavItem[]>(() => t.nav.map(toNavItem))
 
 const actions = computed<PillHeaderAction[]>(() => [
   {
@@ -113,7 +108,7 @@ const year = new Date().getFullYear()
     </main>
 
     <footer class="mlayout__footer">
-      <div class="mlayout__container mlayout__footer-inner">
+      <div class="mkt__container mlayout__footer-inner">
         <div class="mlayout__footer-brand-col">
           <router-link to="/" class="mlayout__footer-brand">
             <GitKittieMark class="mlayout__footer-mark" :size="20" :title="t.brand.name" />
@@ -124,16 +119,16 @@ const year = new Date().getFullYear()
 
         <nav class="mlayout__footer-cols" aria-label="Footer">
           <div v-for="col in t.footer.columns" :key="col.heading" class="mlayout__footer-col">
-            <h2 class="mlayout__footer-heading">{{ col.heading }}</h2>
+            <h2 class="mkt__eyebrow">{{ col.heading }}</h2>
             <template v-for="l in col.links" :key="l.label">
-              <a v-if="l.external" :href="l.href" target="_blank" rel="noopener">{{ l.label }}</a>
-              <router-link v-else :to="l.to!">{{ l.label }}</router-link>
+              <a v-if="l.external" class="mlayout__footer-link" :href="l.href" target="_blank" rel="noopener">{{ l.label }}</a>
+              <router-link v-else class="mlayout__footer-link" :to="l.to!">{{ l.label }}</router-link>
             </template>
           </div>
         </nav>
       </div>
 
-      <div class="mlayout__container mlayout__footer-base">
+      <div class="mkt__container mlayout__footer-base">
         <p class="mlayout__footer-copy">&copy; {{ year }} {{ t.footer.copy }}</p>
       </div>
     </footer>
@@ -146,15 +141,6 @@ const year = new Date().getFullYear()
   background: var(--color-background);
   display: flex;
   flex-direction: column;
-
-  &__container {
-    max-width: 1120px;
-    margin: 0 auto;
-    padding: 0 32px;
-    width: 100%;
-
-    @include mobile { padding: 0 20px; }
-  }
 
   &__pill-header {
     --pill-header-position: fixed;
@@ -176,20 +162,28 @@ const year = new Date().getFullYear()
   }
 
   // ── Footer ─────────────────────────────────────────────────────────────
+  // Ink, like the closing band it sits under, so the page ends in one dark
+  // block rather than a grey strip below a dark one.
   &__footer {
     padding: var(--space-xl) 0 var(--space-l);
-    border-top: var(--border-width) solid var(--color-border-light);
     margin-top: auto;
-    background: var(--surface-raised);
+    background: var(--color-dark);
+    color: var(--color-light);
   }
 
   &__footer-inner {
     display: grid;
     grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr);
     gap: var(--space-xl);
-    padding-bottom: var(--space-l);
+    padding-bottom: var(--space-xl);
 
     @include tablet { grid-template-columns: 1fr; gap: var(--space-l); }
+  }
+
+  &__footer-brand-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-s);
   }
 
   &__footer-brand {
@@ -197,17 +191,20 @@ const year = new Date().getFullYear()
     align-items: center;
     gap: var(--space-s);
     text-decoration: none;
-    font-weight: var(--font-weight-bold);
+    font-weight: var(--font-weight-semibold);
     font-size: var(--font-size-m);
-    color: var(--color-foreground);
+    letter-spacing: var(--tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-light);
+
+    &:hover { color: var(--color-light); }
   }
 
   &__footer-tagline {
-    margin-top: var(--space-s);
     font-size: var(--font-size-s);
-    color: var(--color-muted);
-    max-width: 320px;
     line-height: var(--line-height-relaxed);
+    max-width: 32ch;
+    color: color-mix(in srgb, var(--color-light) 70%, transparent);
   }
 
   &__footer-cols {
@@ -222,35 +219,26 @@ const year = new Date().getFullYear()
     display: flex;
     flex-direction: column;
     gap: var(--space-s);
-
-    a {
-      font-size: var(--font-size-s);
-      color: var(--color-muted);
-      text-decoration: none;
-      transition: color var(--transition-fast);
-      width: fit-content;
-
-      &:hover { color: var(--color-foreground); }
-    }
   }
 
-  &__footer-heading {
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--color-subtle);
-    margin-bottom: var(--space-xs);
+  &__footer-link {
+    width: fit-content;
+    font-size: var(--font-size-s);
+    text-decoration: none;
+    color: color-mix(in srgb, var(--color-light) 72%, transparent);
+    transition: color var(--transition-fast);
+
+    &:hover { color: var(--color-light); }
   }
 
   &__footer-base {
     padding-top: var(--space-l);
-    border-top: var(--border-width) solid var(--color-border-light);
+    border-top: var(--border-width) solid color-mix(in srgb, var(--color-light) 20%, transparent);
   }
 
   &__footer-copy {
     font-size: var(--font-size-xs);
-    color: var(--color-subtle);
+    color: color-mix(in srgb, var(--color-light) 55%, transparent);
   }
 }
 

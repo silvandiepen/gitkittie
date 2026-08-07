@@ -1,18 +1,23 @@
 {
   "meta": {
     "title": "GitKittie — Small apps built on your own git",
-    "description": "GitKittie makes GitKittie Folder, GitKittie Kanban and GitKittie Bud: small, local-first apps for Mac, iPhone and iPad that use your own git and GitHub. No accounts, no servers — your data stays yours."
+    "description": "GitKittie makes GitKittie Folder, GitKittie Kanban and GitKittie Bud: small, local-first apps for Mac, iPhone and iPad that use your own git — GitHub, GitLab, or wherever your repositories already live. No accounts, no servers."
   },
   "hero": {
     "eyebrow": "The GitKittie family",
-    "title": "Small apps, built on your own git.",
-    "subtitleHtml": "GitKittie makes three focused, local-first apps — <strong>GitKittie Folder</strong>, <strong>GitKittie Kanban</strong> and <strong>GitKittie Bud</strong>. All three use the git and GitHub setup you already have. No accounts, no servers, no lock-in.",
+    "title": "Small apps, built on *your own git.*",
+    "subtitle": "Three focused, local-first apps that use the git setup you already have — GitHub, GitLab, or wherever your repositories live. No accounts, no servers, no lock-in.",
     "ctaGitfolder": "Explore GitKittie Folder",
     "ctaGitkanban": "Explore GitKittie Kanban",
     "ctaGitbud": "Explore GitKittie Bud"
   },
+  "statement": {
+    "eyebrow": "What GitKittie is",
+    "text": "Your files, in your repositories, on the machines you own. GitKittie builds the small native apps that sit on top of that."
+  },
   "apps": {
-    "title": "Three apps, one idea",
+    "eyebrow": "The apps",
+    "title": "Three apps, *one idea.*",
     "subtitle": "Keep your work in plain files under git — and get a native app that makes it effortless. Pick the one you need; they share the same principles and the same engine.",
     "items": [
       {
@@ -22,7 +27,7 @@
         "points": [
           "Automatic snapshot commits when files change",
           "Browse and edit your repos on iPhone and iPad",
-          "Uses your existing GitHub + SSH setup"
+          "Uses the GitHub or GitLab access you already have"
         ],
         "to": "/gitfolder",
         "cta": "Explore GitKittie Folder",
@@ -39,7 +44,7 @@
         ],
         "to": "/gitkanban",
         "cta": "Explore GitKittie Kanban",
-        "badge": "iPhone & iPad"
+        "badge": "Mac, iPhone & iPad"
       },
       {
         "app": "gitbud",
@@ -57,8 +62,9 @@
     ]
   },
   "principles": {
-    "title": "What every GitKittie app shares",
-    "subtitle": "The same promises hold across the family — because the data is always just your files in your git.",
+    "eyebrow": "Shared across the family",
+    "title": "The same promises, *in every app.*",
+    "subtitle": "They hold across the family because the data is always the same thing — your files, in your git.",
     "features": [
       {
         "icon": "lock",
@@ -72,8 +78,8 @@
       },
       {
         "icon": "github",
-        "title": "Built on GitHub",
-        "desc": "They lean on the Git configuration you already trust — the same repos, keys, and permissions."
+        "title": "Built on your git host",
+        "desc": "They lean on the git configuration you already trust — the same repositories, keys and permissions, on GitHub, GitLab or anywhere else."
       },
       {
         "icon": "menu",
@@ -83,8 +89,9 @@
     ]
   },
   "cta": {
-    "title": "Own your data.",
-    "subtitle": "GitKittie Folder is on the Mac App Store and the App Store. GitKittie Kanban is on iPhone and iPad. GitKittie Bud is in development.",
+    "eyebrow": "No accounts. No servers.",
+    "title": "Own your data. *Keep owning it.*",
+    "subtitle": "GitKittie Folder and GitKittie Kanban are on the Mac App Store and the App Store. GitKittie Bud is in development.",
     "primary": "Explore GitKittie Folder",
     "secondary": "See GitKittie Kanban"
   }
