@@ -9,14 +9,42 @@ struct RootView: View {
 
     var body: some View {
         if model.isRestoring {
-            ProgressView("Loading…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            SplashView()
         } else if model.isDemo {
             NavigationStack { BoardScreen() }
         } else if !model.isConnected {
-            NavigationStack { ConnectView() }
+            ConnectView()
         } else {
             WorkspaceSplit()
         }
+    }
+}
+
+/// Clean splash screen shown while restoring session.
+private struct SplashView: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+
+            Image("GitKanbanLines")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 72, height: 72)
+                .foregroundStyle(.primary.opacity(0.7))
+
+            Text("GitKittie Kanban")
+                .font(.title2.weight(.medium))
+                .foregroundStyle(.primary.opacity(0.8))
+
+            ProgressView()
+                .controlSize(.small)
+                .padding(.top, 8)
+
+            Spacer()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
@@ -42,56 +70,91 @@ private struct WorkspaceSplit: View {
         )
     }
 
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: selection) {
                 ForEach(model.addedRepos) { repo in
                     Section {
                         if repo.boards.isEmpty {
                             Button { browseRepo = repo } label: {
-                                Label("Browse boards…", systemImage: "square.grid.2x2")
+                                Text("Browse boards…")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
                             }
+                            .buttonStyle(.plain)
                         } else {
                             ForEach(repo.boards) { board in
-                                Label(board.name, systemImage: "square.stack.3d.up.fill")
-                                    .tag("\(repo.id)|\(board.folder)")
+                                HStack(spacing: 10) {
+                                    Image(systemName: "square.stack.3d.up.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.tint)
+                                    Text(board.name)
+                                        .font(.callout)
+                                }
+                                .tag("\(repo.id)|\(board.folder)")
                             }
                         }
                     } header: {
-                        HStack(spacing: 6) {
-                            Image(systemName: repo.isPrivate ? "lock.fill" : "book.closed").font(.caption2)
-                            Text(repo.fullName).font(.caption)
+                        HStack(spacing: 8) {
+                            Image(systemName: repo.isPrivate ? "lock.fill" : "book.closed")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            Text(repo.name)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
                             Spacer()
                             Menu {
                                 Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
+                                Divider()
                                 Button("Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
-                            } label: { Image(systemName: "ellipsis") }
-                                .menuStyle(.borderlessButton).fixedSize()
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .menuStyle(.borderlessButton)
+                            .fixedSize()
                         }
                     }
                 }
             }
-            .navigationSplitViewColumnWidth(min: 220, ideal: 260)
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .overlay {
                 if model.addedRepos.isEmpty {
-                    ContentUnavailableView {
-                        Label("No Boards", systemImage: "square.stack.3d.up")
-                    } description: {
-                        Text("Add a repository, then browse it to pick boards.")
-                    } actions: {
+                    VStack(spacing: 16) {
+                        Image(systemName: "square.stack.3d.up")
+                            .font(.largeTitle)
+                            .foregroundStyle(.tertiary)
+                        Text("No Boards")
+                            .font(.headline)
+                        Text("Add a repository to get started.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                         Button("Add Repository") { showAdd = true }
+                            .buttonStyle(.bordered)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showAdd = true } label: { Label("Add Repository", systemImage: "plus") }
+                    Button { showAdd = true } label: {
+                        Image(systemName: "plus")
+                    }
                 }
                 ToolbarItem(placement: .navigation) {
                     Menu {
-                        if let login = model.connection?.login { Text("Signed in as \(login)") }
+                        if let login = model.connection?.login {
+                            Text("Signed in as \(login)")
+                        }
+                        Divider()
                         Button("Sign Out", role: .destructive) { model.signOut() }
-                    } label: { Image(systemName: "person.crop.circle") }
+                    } label: {
+                        Image(systemName: "person.crop.circle")
+                    }
                 }
             }
         } detail: {
@@ -109,12 +172,13 @@ private struct WorkspaceSplit: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showAdd) { NavigationStack { AddRepoView() }.environment(model).frame(minWidth: 460, minHeight: 480) }
         .sheet(item: $browseRepo) { repo in NavigationStack { BoardPickerView(repo: repo) }.environment(model).frame(minWidth: 460, minHeight: 480) }
     }
 }
 
-/// Provider-agnostic connect: GitHub (OAuth or token), GitLab.com, or self-hosted GitLab.
+/// Clean splash/connect screen with minimal, luxurious design.
 private struct ConnectView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
@@ -122,134 +186,173 @@ private struct ConnectView: View {
     @State private var choice: ProviderChoice = .github
     @State private var serverURL = ""
     @State private var token = ""
+    @State private var showTokenField = false
 
     var body: some View {
-        Form {
-            Section {
-                VStack(spacing: 8) {
-                    Image("GitKanbanLines")
-                        .resizable().scaledToFit().frame(width: 92, height: 84)
-                        .foregroundStyle(.tint)
-                    Text("GitKittie Kanban").font(.title.bold())
+        VStack(spacing: 0) {
+            Spacer()
+
+            // Logo and title
+            VStack(spacing: 16) {
+                Image("GitKanbanLines")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 80, height: 80)
+                    .foregroundStyle(.primary.opacity(0.8))
+
+                VStack(spacing: 6) {
+                    Text("GitKittie Kanban")
+                        .font(.largeTitle.weight(.semibold))
                     Text("Your kanban board is a git repo.")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
             }
 
+            Spacer()
+
+            // Actions
             if let device = model.deviceAuth {
-                deviceCodeSection(device)
+                deviceCodeView(device)
             } else {
-                // First thing on the screen, before any sign-in option. Someone without a
-                // GitHub account — an App Store reviewer included — otherwise hits the
-                // sign-in wall and has no way past it. Review rejected the iOS apps under
-                // guideline 2.1(a) for exactly this layout.
-                Section {
+                VStack(spacing: 16) {
+                    // Demo button - primary action for no-account users
                     Button {
                         Task { await model.loadDemo() }
                     } label: {
                         HStack {
                             Image(systemName: "sparkles")
-                            Text("Open the demo board").fontWeight(.semibold)
-                            Spacer()
+                            Text("Try the Demo")
                         }
+                        .font(.body.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
                     }
                     .buttonStyle(.borderedProminent)
-                } header: {
-                    Text("No account?")
-                } footer: {
-                    Text("A sample board with every feature working — add, edit, move and delete cards, offline. No account, no sign-in.")
-                }
+                    .controlSize(.large)
 
-                Section("Provider") {
-                    Picker("Provider", selection: $choice) {
-                        ForEach(ProviderChoice.allCases) { Text($0.title).tag($0) }
-                    }
-                    if choice.needsServerURL {
-                        TextField("GitLab server URL (e.g. git.acme.com)", text: $serverURL)
-                            .autocorrectionDisabled()
-                    }
-                }
-
-                if choice == .github {
-                    Section {
-                        Button {
-                            Task { await model.startGitHubOAuth() }
-                        } label: {
-                            HStack {
-                                Image(systemName: "person.badge.key.fill")
-                                Text("Sign in with GitHub")
-                                Spacer()
-                                if model.isConnecting { ProgressView().controlSize(.small) }
-                            }
-                        }
-                        .disabled(model.isConnecting)
-                    } footer: {
-                        Text("Authorise on github.com — no token to create.")
-                    }
-                }
-
-                Section {
-                    SecureField("Personal access token", text: $token)
-                        .autocorrectionDisabled()
+                    // Sign in with GitHub
                     Button {
-                        Task { await model.connect(choice: choice, serverURL: serverURL, token: token) }
+                        Task { await model.startGitHubOAuth() }
                     } label: {
                         HStack {
-                            Spacer()
-                            if model.isConnecting && model.deviceAuth == nil { ProgressView().controlSize(.small) }
-                            else { Text("Connect with Token").fontWeight(.semibold) }
-                            Spacer()
+                            Image(systemName: "person.badge.key.fill")
+                            Text("Sign in with GitHub")
+                            if model.isConnecting && model.deviceAuth == nil {
+                                Spacer()
+                                ProgressView().controlSize(.small)
+                            }
                         }
+                        .font(.body.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
                     }
-                    .disabled(model.isConnecting || token.trimmingCharacters(in: .whitespaces).isEmpty)
-                } header: {
-                    Text(choice == .github ? "Or use a token" : "Personal access token")
-                } footer: {
-                    Text("Create a token with repository read/write scope in your provider's settings.")
+                    .buttonStyle(.bordered)
+                    .disabled(model.isConnecting)
+
+                    // Token / other providers - collapsed by default
+                    if showTokenField {
+                        VStack(spacing: 12) {
+                            Picker("Provider", selection: $choice) {
+                                ForEach(ProviderChoice.allCases) { Text($0.title).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+
+                            if choice.needsServerURL {
+                                TextField("Server URL (e.g. git.acme.com)", text: $serverURL)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+
+                            SecureField("Personal access token", text: $token)
+                                .textFieldStyle(.roundedBorder)
+
+                            Button {
+                                Task { await model.connect(choice: choice, serverURL: serverURL, token: token) }
+                            } label: {
+                                HStack {
+                                    Text("Connect")
+                                    if model.isConnecting { ProgressView().controlSize(.small) }
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(model.isConnecting || token.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                        .padding(.top, 8)
+                    } else {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { showTokenField = true }
+                        } label: {
+                            Text("Use a token instead")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-
+                .frame(maxWidth: 320)
             }
 
+            Spacer()
+
+            // Error message
             if let error = model.errorMessage {
-                Section { Text(error).font(.callout).foregroundStyle(.red) }
+                Text(error)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .padding()
             }
+
+            // Footer
+            Text("No data leaves your device without your permission.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.bottom, 24)
         }
-        .formStyle(.grouped)
-        .frame(maxWidth: 520)
-        .navigationTitle("Connect")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func deviceCodeSection(_ device: GitOAuthDeviceSession) -> some View {
-        Section("Sign in with GitHub") {
-            VStack(spacing: 12) {
-                Text("Enter this code at GitHub to authorise GitKittie Kanban:")
-                    .font(.callout).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(device.userCode)
-                    .font(.system(.largeTitle, design: .monospaced).weight(.bold))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                HStack {
-                    Button { Platform.copy(device.userCode) } label: { Label("Copy Code", systemImage: "doc.on.doc") }
-                    Spacer()
-                    Button { openURL(device.verificationURI) } label: { Label("Open GitHub", systemImage: "safari") }
-                        .buttonStyle(.borderedProminent)
+    private func deviceCodeView(_ device: GitOAuthDeviceSession) -> some View {
+        VStack(spacing: 20) {
+            Text("Enter this code on GitHub")
+                .font(.headline)
+
+            Text(device.userCode)
+                .font(.system(size: 36, weight: .bold, design: .monospaced))
+                .tracking(4)
+                .textSelection(.enabled)
+                .padding(.vertical, 16)
+                .padding(.horizontal, 32)
+                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+
+            HStack(spacing: 16) {
+                Button { Platform.copy(device.userCode) } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
                 }
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Waiting for authorisation…").font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Cancel", role: .cancel) { model.cancelOAuth() }
+                .buttonStyle(.bordered)
+
+                Button { openURL(device.verificationURI) } label: {
+                    Label("Open GitHub", systemImage: "arrow.up.right")
                 }
-                .padding(.top, 4)
+                .buttonStyle(.borderedProminent)
             }
-            .padding(.vertical, 4)
-            .onAppear { openURL(device.verificationURI) }
+
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Waiting for authorization…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 8)
+
+            Button("Cancel") { model.cancelOAuth() }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: 360)
+        .onAppear { openURL(device.verificationURI) }
     }
 }
 

@@ -12,7 +12,7 @@ struct RootView: View {
         NavigationStack {
             Group {
                 if model.isRestoring {
-                    ProgressView("Loading…")
+                    SplashView()
                 } else if model.activeRepo != nil || model.isDemo {
                     BoardScreen()
                 } else if !model.isConnected {
@@ -22,6 +22,34 @@ struct RootView: View {
                 }
             }
         }
+    }
+}
+
+/// Clean splash screen shown while restoring session.
+private struct SplashView: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+
+            Image("GitKanbanLines")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 72, height: 72)
+                .foregroundStyle(.primary.opacity(0.7))
+
+            Text("GitKittie Kanban")
+                .font(.title2.weight(.medium))
+                .foregroundStyle(.primary.opacity(0.8))
+
+            ProgressView()
+                .controlSize(.regular)
+                .padding(.top, 8)
+
+            Spacer()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(uiColor: .systemBackground))
     }
 }
 

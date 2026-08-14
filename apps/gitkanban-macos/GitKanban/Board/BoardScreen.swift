@@ -13,34 +13,48 @@ struct BoardScreen: View {
     @State private var setupProject: BoardProject?
     @State private var setupConfig: DetectedBoardConfig?
     @State private var offeredSetup: Set<String> = []
+    @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
 
     private var projects: [BoardProject] { model.workspace?.projects ?? [] }
 
     var body: some View {
         @Bindable var model = model
-        return Group {
-            if model.isLoadingBoard && model.board == nil {
-                ProgressView("Loading board…")
-            } else if let board = model.board {
-                switch model.boardViewMode {
-                case .lanes: LanesView(columns: displayColumns(board))
-                case .list: ListBoardView(columns: displayColumns(board))
-                }
-            } else {
-                ContentUnavailableView("No board", systemImage: "square.stack.3d.up",
-                                       description: Text("This repo has no project boards."))
+        return boardContent
+        .inspector(isPresented: Binding(
+            get: { model.selectedCard != nil },
+            set: { if !$0 { model.selectedCard = nil } }
+        )) {
+            if let card = model.selectedCard {
+                CardDetailInspector(card: card)
+                    .environment(model)
+                    .inspectorColumnWidth(min: 340, ideal: 400, max: 500)
             }
         }
         .navigationTitle(model.selectedProject?.name ?? model.activeRepo?.name ?? "Board")
         .overlay(alignment: .top) { savingBanner }
         .toolbar { toolbarContent }
-        .sheet(item: $model.selectedCard) { card in CardDetailSheet(card: card).environment(model) }
         .sheet(item: $model.newTaskLane) { lane in NewTaskSheet(lane: lane).environment(model) }
+        .sheet(item: $model.sheetCard) { card in CardDetailSheet(card: card).environment(model) }
         .sheet(isPresented: $model.isShowingSearch) { SearchSheet().environment(model) }
+        .sheet(isPresented: $model.showQuickCreate) { QuickCreateSheet().environment(model) }
         .sheet(isPresented: $showNewProject) { ProjectSheet(editing: nil).environment(model) }
         .sheet(item: $settingsProject) { project in ProjectSheet(editing: project).environment(model) }
         .sheet(item: $setupProject) { project in ProjectSheet(editing: project, prefill: setupConfig).environment(model) }
         .task(id: model.selectedProject?.id) { await maybeOfferSetup() }
+    }
+
+    @ViewBuilder private var boardContent: some View {
+        if model.isLoadingBoard && model.board == nil {
+            ProgressView("Loading board…")
+        } else if let board = model.board {
+            switch model.boardViewMode {
+            case .lanes: LanesView(columns: displayColumns(board))
+            case .list: ListBoardView(columns: displayColumns(board))
+            }
+        } else {
+            ContentUnavailableView("No board", systemImage: "square.stack.3d.up",
+                                   description: Text("This repo has no project boards."))
+        }
     }
 
     @ViewBuilder private var savingBanner: some View {
@@ -63,6 +77,8 @@ struct BoardScreen: View {
                 Button { model.newTaskLane = lane } label: { Image(systemName: "plus") }
                     .help("New task")
             }
+            Button { model.showQuickCreate = true } label: { Image(systemName: "sparkles") }
+                .help("Quick Create with AI")
             Button { model.isShowingSearch = true } label: { Image(systemName: "magnifyingglass") }
                 .help("Search")
             filterMenu
@@ -186,9 +202,9 @@ private struct LanesView: View {
         GeometryReader { geo in
             let viewport = geo.size.width
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 16) {
+                HStack(alignment: .top, spacing: 24) {
                     ForEach(columns) { column in
-                        LaneColumn(column: column, maxHeight: geo.size.height - 24)
+                        LaneColumn(column: column, maxHeight: geo.size.height - 32)
                             .visualEffect { content, proxy in
                                 content.scaleEffect(
                                     laneScale(frame: proxy.frame(in: .scrollView(axis: .horizontal)), viewport: viewport),
@@ -196,7 +212,7 @@ private struct LanesView: View {
                             }
                     }
                 }
-                .padding(.horizontal, 20).padding(.vertical, 16)
+                .padding(.horizontal, 24).padding(.vertical, 20)
                 .scrollTargetLayout()
             }
             .scrollTargetBehavior(.viewAligned)
@@ -204,12 +220,12 @@ private struct LanesView: View {
     }
 }
 
-/// 1.0 when a lane is fully inside the viewport; shrinks toward 0.5 as it scrolls off
-/// either edge, so the focused lanes stay large and the rest recede.
+/// 1.0 when a lane is fully inside the viewport; shrinks toward 0.85 as it scrolls off
+/// either edge, so the focused lanes stay large and the rest recede subtly.
 private func laneScale(frame: CGRect, viewport: CGFloat) -> CGFloat {
     let overflow = max(max(0, -frame.minX), max(0, frame.maxX - viewport))
     let width = frame.width > 0 ? frame.width : 1
-    return 1 - min(1, overflow / width) * 0.5
+    return 1 - min(1, overflow / width) * 0.15
 }
 
 private struct LaneColumn: View {
@@ -222,16 +238,27 @@ private struct LaneColumn: View {
     private var isLane: Bool { !column.lane.folder.isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 7) {
-                Circle().fill(color).frame(width: 9, height: 9)
-                Text(column.lane.name).font(.subheadline).fontWeight(.semibold)
-                Spacer()
+        VStack(alignment: .leading, spacing: 16) {
+            // Minimal header: dot + name + count
+            HStack(spacing: 10) {
+                Circle().fill(color).frame(width: 10, height: 10)
+                Text(column.lane.name)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
                 Text("\(column.cards.count)")
-                    .font(.caption).fontWeight(.medium).foregroundStyle(color)
-                    .padding(.horizontal, 6).padding(.vertical, 1)
-                    .background(color.opacity(0.16), in: Capsule())
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if isLane {
+                    Button { model.newTaskLane = column.lane } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
+
             if column.lane.isBacklog && !model.loadedBacklogLanes.contains(column.lane.id) {
                 Button {
                     Task { await model.loadBacklogLane(column.lane) }
@@ -239,11 +266,14 @@ private struct LaneColumn: View {
                     if model.loadingBacklogLane == column.lane.id {
                         ProgressView().controlSize(.small).frame(maxWidth: .infinity)
                     } else {
-                        Label("Load Backlog", systemImage: "tray.and.arrow.down").frame(maxWidth: .infinity)
+                        Label("Load Backlog", systemImage: "tray.and.arrow.down")
+                            .font(.callout)
+                            .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.bordered)
-                .padding(.top, 20)
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 24)
                 Spacer(minLength: 0)
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
@@ -251,21 +281,25 @@ private struct LaneColumn: View {
                         ForEach(column.cards) { card in LaneCardCell(card: card) }
                         if isLane {
                             Button { model.newTaskLane = column.lane } label: {
-                                Label("Add Task", systemImage: "plus").font(.caption).frame(maxWidth: .infinity).padding(.vertical, 6)
+                                HStack(spacing: 6) {
+                                    Image(systemName: "plus")
+                                    Text("Add task")
+                                }
+                                .font(.callout)
+                                .foregroundStyle(.tertiary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
                             }
-                            .buttonStyle(.plain).foregroundStyle(.secondary)
-                            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                            .buttonStyle(.plain)
                         }
                     }
                 }
             }
         }
-        .padding(12)
-        .frame(width: 300)
+        .frame(width: 280)
         .frame(maxHeight: maxHeight, alignment: .top)
-        .background((isTargeted ? color.opacity(0.14) : Color.clear), in: RoundedRectangle(cornerRadius: 14))
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(isTargeted ? color : color.opacity(0.3), lineWidth: isTargeted ? 2 : 1))
+        .padding(.vertical, 4)
+        .background(isTargeted ? color.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 12))
         .dropDestination(for: String.self) { ids, _ in handleDrop(ids) } isTargeted: { isTargeted = $0 }
     }
 
@@ -287,31 +321,41 @@ private struct LaneCardCell: View {
     @Environment(AppModel.self) private var model
     let card: Card
     private var priorities: [Priority] { model.board?.config.priorities ?? [] }
+    private var isSelected: Bool { model.selectedCard?.id == card.id }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(card.fields.title.isEmpty ? card.fields.id : card.fields.title)
-                .font(.callout).lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 6) {
+                .font(.callout)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 8) {
                 if let p = card.fields.priority, let color = PriorityPalette.color(p, priorities) {
-                    Text(p).font(.caption2.weight(.medium))
-                        .padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(color.opacity(0.18), in: Capsule()).foregroundStyle(color)
+                    Text(p)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(color)
                 }
                 if let a = card.fields.assignee {
-                    Text("@\(a)").font(.caption2).foregroundStyle(.secondary)
+                    Text("@\(a)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
             }
         }
-        .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary, lineWidth: 1))
+        .padding(12)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(isSelected ? 1 : 0.6), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+        )
         .contentShape(Rectangle())
+        .onTapGesture(count: 2) { model.sheetCard = card }
         .onTapGesture { model.selectedCard = card }
         .draggable(card.fields.id) {
             Text(card.fields.title.isEmpty ? card.fields.id : card.fields.title)
-                .font(.callout).lineLimit(1).padding(10)
+                .font(.callout).lineLimit(1).padding(12)
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
         }
         .contextMenu { cardMenu(card, model: model) }
@@ -408,7 +452,7 @@ struct CardRow: View {
 func cardMenu(_ card: Card, model: AppModel) -> some View {
     let config = model.board?.config ?? EffectiveConfig()
 
-    Button("Open", systemImage: "arrow.up.forward.square") { model.selectedCard = card }
+    Button("Open in Panel", systemImage: "arrow.up.forward.square") { model.sheetCard = card }
     Divider()
 
     if !config.lanes.isEmpty {
