@@ -326,6 +326,265 @@ struct NewTaskSheet: View {
     }
 }
 
+/// AI Quick Create: type natural language, AI generates tickets.
+struct QuickCreateSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var input = ""
+    @State private var showSettings = false
+    @State private var selectedLaneID: String = ""
+
+    private var lanes: [Lane] {
+        model.board?.config.lanes.filter { !$0.folder.isEmpty } ?? []
+    }
+
+    private var selectedLane: Lane? {
+        lanes.first { $0.id == selectedLaneID }
+    }
+
+    var body: some View {
+        @Bindable var model = model
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Input area
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Describe what you need")
+                        .font(.headline)
+                    TextEditor(text: $input)
+                        .font(.body)
+                        .frame(minHeight: 100)
+                        .padding(8)
+                        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+                    Text("AI will analyze your input and create one or more tickets with appropriate fields.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+
+                Divider()
+
+                // Results area
+                if model.isGeneratingTickets {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Generating tickets…").font(.callout).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let error = model.aiError {
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundStyle(.orange)
+                        Text(error)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        if !model.isAIConfigured {
+                            Button("Configure AI") { showSettings = true }
+                                .buttonStyle(.borderedProminent)
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if model.generatedTickets.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("Enter a description and tap Generate")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    VStack(spacing: 0) {
+                        // Lane picker when tickets are generated
+                        HStack {
+                            Text("Create in:")
+                                .font(.subheadline)
+                            Picker("Lane", selection: $selectedLaneID) {
+                                ForEach(lanes) { lane in
+                                    Text(lane.name).tag(lane.id)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(maxWidth: 200)
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                        .background(.bar)
+
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                ForEach(model.generatedTickets) { ticket in
+                                    GeneratedTicketRow(ticket: ticket, targetLane: selectedLane)
+                                }
+                            }
+                            .padding()
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Quick Create")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if model.generatedTickets.isEmpty {
+                        Button("Generate") {
+                            Task { await model.generateTicketsFromInput(input) }
+                        }
+                        .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isGeneratingTickets)
+                    } else {
+                        Button("Create All") {
+                            Task {
+                                await model.createAllGeneratedTickets(in: selectedLane)
+                                dismiss()
+                            }
+                        }
+                    }
+                }
+                ToolbarItem(placement: .automatic) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .help("AI Settings")
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                AISettingsSheet().environment(model)
+            }
+            .onAppear {
+                // Set default lane
+                if selectedLaneID.isEmpty, let defaultLane = model.quickCreateDefaultLane {
+                    selectedLaneID = defaultLane.id
+                }
+            }
+        }
+        .frame(minWidth: 520, minHeight: 480)
+    }
+}
+
+/// A row showing a generated ticket with create/remove actions.
+private struct GeneratedTicketRow: View {
+    @Environment(AppModel.self) private var model
+    let ticket: AIGeneratedTicket
+    var targetLane: Lane?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(ticket.title)
+                    .font(.headline)
+                Spacer()
+                Button {
+                    Task { await model.createFromGeneratedTicket(ticket, in: targetLane) }
+                } label: {
+                    Label("Create", systemImage: "plus.circle.fill")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                Button {
+                    model.generatedTickets.removeAll { $0.title == ticket.title }
+                } label: {
+                    Label("Remove", systemImage: "xmark.circle")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+            }
+
+            if !ticket.description.isEmpty {
+                Text(ticket.description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+
+            HStack(spacing: 8) {
+                if let priority = ticket.priority {
+                    chip(priority, color: .orange)
+                }
+                if let type = ticket.type {
+                    chip(type, color: .blue)
+                }
+                if let lane = ticket.lane {
+                    chip(lane, color: .purple)
+                }
+                if let epic = ticket.epic {
+                    chip(epic, color: .green)
+                }
+            }
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func chip(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(color.opacity(0.16), in: Capsule())
+            .foregroundStyle(color)
+    }
+}
+
+/// Settings sheet for AI configuration.
+struct AISettingsSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        @Bindable var model = model
+        NavigationStack {
+            Form {
+                Section("Provider") {
+                    Picker("AI Provider", selection: $model.aiProvider) {
+                        ForEach(AIPontProvider.allCases, id: \.self) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
+                    }
+                    .onChange(of: model.aiProvider) { _, newProvider in
+                        // Auto-select default model when provider changes
+                        model.aiModel = newProvider.defaultModel
+                    }
+                }
+                Section("Model") {
+                    Picker("Model", selection: $model.aiModel) {
+                        ForEach(model.aiProvider.recommendedModels, id: \.self) { m in
+                            Text(m).tag(m)
+                        }
+                    }
+                }
+                Section("API Key") {
+                    SecureField("API Key", text: $model.aiAPIKey)
+                        .textFieldStyle(.roundedBorder)
+                    Text("Your API key is stored locally and never shared.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("AI Settings")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        model.saveAIConfig()
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 400, minHeight: 320)
+    }
+}
+
 /// A single attachment row with a thumbnail (for images) or a file icon.
 private struct AttachmentRow: View {
     @Environment(AppModel.self) private var model

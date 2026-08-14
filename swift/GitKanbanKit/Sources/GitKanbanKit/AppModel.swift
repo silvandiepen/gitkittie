@@ -82,8 +82,18 @@ public final class AppModel {
 
     // MARK: Presentation
     public var selectedCard: Card?
+    public var sheetCard: Card?  // Opens card in full sheet/panel
     public var newTaskLane: Lane?
     public var boardViewMode: BoardViewMode = .lanes
+    public var showQuickCreate = false
+
+    // MARK: AI Configuration
+    public var aiProvider: AIPontProvider = .anthropic
+    public var aiModel: String = AIPontProvider.anthropic.defaultModel
+    public var aiAPIKey: String = ""
+    public var isGeneratingTickets = false
+    public var generatedTickets: [AIGeneratedTicket] = []
+    public var aiError: String?
 
     // MARK: Filters + search
     public var filterAssignee: String?
@@ -128,6 +138,9 @@ public final class AppModel {
     @ObservationIgnored private let addedReposKey = "gitkanban.addedReposV2"
     @ObservationIgnored private let activeRepoKey = "gitkanban.activeRepo"
     @ObservationIgnored private let activeBoardKey = "gitkanban.activeBoard"
+    @ObservationIgnored private let aiProviderKey = "gitkanban.aiProvider"
+    @ObservationIgnored private let aiModelKey = "gitkanban.aiModel"
+    @ObservationIgnored private let aiAPIKeyKey = "gitkanban.aiAPIKey"
 
     @ObservationIgnored private var source: (any BoardWritable)?
     /// True when viewing the offline in-memory demo board (no provider connection).
@@ -138,6 +151,7 @@ public final class AppModel {
     public func restore() async {
         defer { isRestoring = false }
         loadAddedRepos()
+        loadAIConfig()
         guard let data = defaults.data(forKey: connectionKey),
               let stored = try? JSONDecoder().decode(StoredConnection.self, from: data),
               let token = ((try? keychain.load()) ?? nil)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -842,5 +856,136 @@ public final class AppModel {
     private struct StoredConnection: Codable {
         let choice: ProviderChoice
         let serverURL: String?
+    }
+
+    // MARK: - AI Quick Create
+
+    private func loadAIConfig() {
+        if let providerRaw = defaults.string(forKey: aiProviderKey),
+           let provider = AIPontProvider(rawValue: providerRaw) {
+            aiProvider = provider
+        }
+        if let model = defaults.string(forKey: aiModelKey), !model.isEmpty {
+            aiModel = model
+        }
+        if let apiKey = defaults.string(forKey: aiAPIKeyKey) {
+            aiAPIKey = apiKey
+        }
+    }
+
+    public func saveAIConfig() {
+        defaults.set(aiProvider.rawValue, forKey: aiProviderKey)
+        defaults.set(aiModel, forKey: aiModelKey)
+        defaults.set(aiAPIKey, forKey: aiAPIKeyKey)
+    }
+
+    /// Whether AI quick create is configured (has an API key).
+    public var isAIConfigured: Bool {
+        !aiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Generate tickets from natural language input using AI.
+    public func generateTicketsFromInput(_ input: String) async {
+        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard isAIConfigured else {
+            aiError = "Configure your AI API key in settings to use quick create."
+            return
+        }
+
+        isGeneratingTickets = true
+        aiError = nil
+        generatedTickets = []
+
+        let config = AIPontMagicConfiguration(
+            provider: aiProvider,
+            apiKey: aiAPIKey,
+            model: aiModel
+        )
+
+        // Collect sample tickets to show the AI the style
+        let samples = allCards.prefix(5).map { card in
+            AITicketSample(
+                title: card.fields.title,
+                description: card.body.trimmingCharacters(in: .whitespacesAndNewlines),
+                priority: card.fields.priority,
+                type: card.fields.type
+            )
+        }
+
+        let context = AITicketContext(
+            projectName: selectedProject?.name ?? "Board",
+            lanes: board?.config.lanes.map(\.name) ?? [],
+            priorities: board?.config.priorities.map(\.id) ?? [],
+            types: board?.config.types ?? [],
+            epics: board?.config.epics.map(\.id) ?? [],
+            existingTicketTitles: allCards.map(\.fields.title),
+            sampleTickets: Array(samples)
+        )
+
+        do {
+            let service = AITicketService()
+            generatedTickets = try await service.generateTickets(
+                configuration: config,
+                input: input,
+                context: context
+            )
+            if generatedTickets.isEmpty {
+                aiError = "Could not parse tickets from input. Try being more specific."
+            }
+        } catch {
+            aiError = error.localizedDescription
+        }
+
+        isGeneratingTickets = false
+    }
+
+    /// The default lane for quick create (backlog or first "To do" lane).
+    public var quickCreateDefaultLane: Lane? {
+        guard let config = board?.config else { return nil }
+        // Prefer backlog lane
+        if let backlog = config.lanes.first(where: { $0.isBacklog && !$0.folder.isEmpty }) {
+            return backlog
+        }
+        // Fall back to first non-empty lane (usually "To do")
+        return config.lanes.first { !$0.folder.isEmpty }
+    }
+
+    /// Create a ticket from an AI-generated ticket into a specific lane.
+    public func createFromGeneratedTicket(_ ticket: AIGeneratedTicket, in targetLane: Lane? = nil) async {
+        guard let config = board?.config else { return }
+
+        // Use target lane, or find lane from ticket, or use default
+        let lane: Lane
+        if let target = targetLane {
+            lane = target
+        } else if let laneName = ticket.lane,
+           let matchedLane = config.lanes.first(where: { $0.name == laneName || $0.id == laneName }) {
+            lane = matchedLane
+        } else if let defaultLane = quickCreateDefaultLane {
+            lane = defaultLane
+        } else {
+            return
+        }
+
+        await createTask(
+            title: ticket.title,
+            lane: lane,
+            priority: ticket.priority,
+            type: ticket.type,
+            assignee: nil,
+            epic: ticket.epic,
+            body: ticket.description
+        )
+
+        // Remove from generated list
+        generatedTickets.removeAll { $0.title == ticket.title }
+    }
+
+    /// Create all generated tickets at once into a specific lane.
+    public func createAllGeneratedTickets(in targetLane: Lane? = nil) async {
+        let tickets = generatedTickets
+        for ticket in tickets {
+            await createFromGeneratedTicket(ticket, in: targetLane)
+        }
     }
 }

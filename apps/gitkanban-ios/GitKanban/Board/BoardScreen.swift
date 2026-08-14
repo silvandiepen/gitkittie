@@ -39,6 +39,7 @@ struct BoardScreen: View {
         .sheet(item: $model.selectedCard) { card in CardDetailSheet(card: card).environment(model) }
         .sheet(item: $model.newTaskLane) { lane in NewTaskSheet(lane: lane).environment(model) }
         .sheet(isPresented: $model.isShowingSearch) { SearchSheet().environment(model) }
+        .sheet(isPresented: $model.showQuickCreate) { QuickCreateSheet().environment(model) }
         .sheet(isPresented: $showNewProject) { ProjectSheet(editing: nil).environment(model) }
         .sheet(item: $settingsProject) { project in ProjectSheet(editing: project).environment(model) }
         .sheet(item: $setupProject) { project in ProjectSheet(editing: project, prefill: setupConfig).environment(model) }
@@ -65,6 +66,8 @@ struct BoardScreen: View {
                 Button { model.newTaskLane = lane } label: { Image(systemName: "plus") }
                     .help("New task")
             }
+            Button { model.showQuickCreate = true } label: { Image(systemName: "sparkles") }
+                .help("Quick Create with AI")
             Button { model.isShowingSearch = true } label: { Image(systemName: "magnifyingglass") }
             filterMenu
             overflowMenu
