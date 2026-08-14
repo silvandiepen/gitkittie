@@ -385,6 +385,28 @@ private struct FolderLevel: View {
         else { selected[folderPath] = name(for: folderPath) }
     }
 
+    /// Whether all subfolders are currently selected.
+    private var allSubfoldersSelected: Bool {
+        guard let folders, !folders.isEmpty else { return false }
+        return folders.allSatisfy { selected[$0.path] != nil }
+    }
+
+    /// Select or deselect all immediate subfolders.
+    private func toggleAllSubfolders() {
+        guard let folders else { return }
+        if allSubfoldersSelected {
+            // Deselect all
+            for folder in folders {
+                selected[folder.path] = nil
+            }
+        } else {
+            // Select all
+            for folder in folders {
+                selected[folder.path] = name(for: folder.path)
+            }
+        }
+    }
+
     var body: some View {
         List {
             Section {
@@ -392,38 +414,53 @@ private struct FolderLevel: View {
                     HStack(spacing: 12) {
                         Image(systemName: selected[path] != nil ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(selected[path] != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                        Text(path.isEmpty ? "Use repository root as a board" : "Use “\(title)” as a board")
+                        Text(path.isEmpty ? "Use repository root as a board" : "Use \"\(title)\" as a board")
                         Spacer()
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
-            Section("Folders") {
+            Section {
                 if let folders {
                     if folders.isEmpty {
                         Text("No subfolders").foregroundStyle(.secondary)
-                    }
-                    ForEach(folders, id: \.path) { entry in
-                        HStack(spacing: 12) {
-                            Button { toggle(entry.path) } label: {
-                                Image(systemName: selected[entry.path] != nil ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(selected[entry.path] != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                            }
-                            .buttonStyle(.plain)
-                            NavigationLink {
-                                FolderLevel(repo: repo, path: entry.path, title: entry.name, selected: $selected, commit: commit)
-                                    .environment(model)
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "folder.fill").foregroundStyle(.tint)
-                                    Text(entry.name)
+                    } else {
+                        ForEach(folders, id: \.path) { entry in
+                            HStack(spacing: 12) {
+                                // Larger tap target for checkbox only
+                                Button { toggle(entry.path) } label: {
+                                    Image(systemName: selected[entry.path] != nil ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(selected[entry.path] != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                                        .frame(width: 28, height: 28)
+                                }
+                                .buttonStyle(.plain)
+                                NavigationLink {
+                                    FolderLevel(repo: repo, path: entry.path, title: entry.name, selected: $selected, commit: commit)
+                                        .environment(model)
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "folder.fill").foregroundStyle(.tint)
+                                        Text(entry.name)
+                                    }
                                 }
                             }
                         }
                     }
                 } else {
                     HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Loading…").foregroundStyle(.secondary) }
+                }
+            } header: {
+                HStack {
+                    Text("Folders")
+                    Spacer()
+                    if let folders, !folders.isEmpty {
+                        Button(allSubfoldersSelected ? "Deselect All" : "Select All") {
+                            toggleAllSubfolders()
+                        }
+                        .font(.caption)
+                        .textCase(nil)
+                    }
                 }
             }
         }
