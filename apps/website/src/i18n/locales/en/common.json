@@ -25,6 +25,10 @@
       ]
     },
     {
+      "label": "Writing",
+      "to": "/blog"
+    },
+    {
       "label": "Docs",
       "to": "/docs"
     },
@@ -60,6 +64,10 @@
       {
         "heading": "Resources",
         "links": [
+          {
+            "label": "Writing",
+            "to": "/blog"
+          },
           {
             "label": "Docs",
             "to": "/docs"

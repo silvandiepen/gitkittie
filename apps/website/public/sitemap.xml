@@ -4,6 +4,10 @@
   <url><loc>https://gitkittie.hakobs.com/gitfolder</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
   <url><loc>https://gitkittie.hakobs.com/gitkanban</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
   <url><loc>https://gitkittie.hakobs.com/gitbud</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://gitkittie.hakobs.com/blog</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitkittie.hakobs.com/blog/markdown-kanban-in-git</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://gitkittie.hakobs.com/blog/one-task-one-file</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://gitkittie.hakobs.com/blog/git-backed-task-folder</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://gitkittie.hakobs.com/docs</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://gitkittie.hakobs.com/support</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://gitkittie.hakobs.com/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
