@@ -18,6 +18,7 @@ struct SyncedFolder: Codable, Identifiable, Equatable, Sendable {
     var lastCheckedAt: Date?
     var lastStatus: SyncStatus
     var lastError: UserFacingError?
+    var storage: BucketStorageSettings? = nil
 
     var authModeValue: AuthMode {
         AuthMode(rawValue: authMode) ?? .ssh
@@ -113,8 +114,86 @@ struct SyncedFolder: Codable, Identifiable, Equatable, Sendable {
             lastSuccessfulSyncAt: nil,
             lastCheckedAt: nil,
             lastStatus: .idle,
-            lastError: nil
+            lastError: nil,
+            storage: nil
         )
+    }
+}
+
+struct BucketStorageSettings: Codable, Equatable, Sendable {
+    var provider: StorageProvider
+    var enabled: Bool
+    var endpoint: String
+    var bucket: String
+    var region: String
+    var publicBaseURL: String
+    var minimumFileSizeMB: Int
+    var offloadExtensions: [String]
+    var keepDownloadedPatterns: [String]
+
+    init(
+        provider: StorageProvider = .manual,
+        enabled: Bool,
+        endpoint: String,
+        bucket: String,
+        region: String = "auto",
+        publicBaseURL: String,
+        minimumFileSizeMB: Int,
+        offloadExtensions: [String],
+        keepDownloadedPatterns: [String]
+    ) {
+        self.provider = provider
+        self.enabled = enabled
+        self.endpoint = endpoint
+        self.bucket = bucket
+        self.region = region
+        self.publicBaseURL = publicBaseURL
+        self.minimumFileSizeMB = minimumFileSizeMB
+        self.offloadExtensions = offloadExtensions
+        self.keepDownloadedPatterns = keepDownloadedPatterns
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case provider, enabled, endpoint, bucket, region, publicBaseURL, minimumFileSizeMB, offloadExtensions, keepDownloadedPatterns
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try container.decodeIfPresent(StorageProvider.self, forKey: .provider) ?? .manual
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        endpoint = try container.decode(String.self, forKey: .endpoint)
+        bucket = try container.decode(String.self, forKey: .bucket)
+        region = try container.decodeIfPresent(String.self, forKey: .region) ?? "auto"
+        publicBaseURL = try container.decode(String.self, forKey: .publicBaseURL)
+        minimumFileSizeMB = try container.decode(Int.self, forKey: .minimumFileSizeMB)
+        offloadExtensions = try container.decode([String].self, forKey: .offloadExtensions)
+        keepDownloadedPatterns = try container.decode([String].self, forKey: .keepDownloadedPatterns)
+    }
+
+    static let defaults = BucketStorageSettings(
+        provider: .manual,
+        enabled: false,
+        endpoint: "https://8cef251b5fdcf6c6f63db98b7aa49f9a.r2.cloudflarestorage.com",
+        bucket: "project-assets",
+        region: "auto",
+        publicBaseURL: "https://project-data.hakobs.com",
+        minimumFileSizeMB: 25,
+        offloadExtensions: ["psd", "psb", "mov", "mp4", "blend", "c4d", "zip"],
+        keepDownloadedPatterns: ["**/*.md", "Tasks/**"]
+    )
+}
+
+enum StorageProvider: String, Codable, CaseIterable, Equatable, Sendable {
+    case cloudflare
+    case aws
+    case manual
+
+    var title: String {
+        switch self {
+        case .cloudflare: "Cloudflare"
+        case .aws: "Amazon Web Services"
+        case .manual: "Manual"
+        }
     }
 }
 

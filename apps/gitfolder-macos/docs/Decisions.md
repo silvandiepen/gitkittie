@@ -302,3 +302,26 @@ failed conflict be aborted back to an attached, usable branch. Fetch-first statu
 “Up to date” describe both the working tree and the remote branch.
 
 **Status:** accepted (GITKIT-164 / GITKIT-102).
+
+---
+
+### 17. Bucket configuration is repository-owned; secrets stay device-owned
+
+**Decision:** GitFolder exposes per-folder S3-compatible storage settings. Portable
+rules are written to `.gitfolder.yml` in the synced repository, while access and
+secret keys are stored only in the macOS Keychain. The engine uploads eligible
+files to content-addressed objects, verifies their SHA-256 metadata, supports
+multipart uploads, and updates a Git-versioned manifest only after verification.
+
+**Context:** Large media repositories can exceed practical Git working-copy sizes
+and GitHub's 100 MB per-file limit. The configured R2 deployment uses a private S3
+API endpoint and a separate public download domain, so both values must be modeled.
+
+**Rationale:** Versioned rules keep multiple Macs consistent without leaking
+credentials. Separating configuration from activation also avoids silently moving
+or deleting files before the upload, integrity, and placeholder lifecycle is built
+and verified.
+
+**Status:** accepted for configuration and verified upload/restore. Local eviction
+remains disabled until a File Provider domain can preserve Finder-visible,
+on-demand files safely (#10).
