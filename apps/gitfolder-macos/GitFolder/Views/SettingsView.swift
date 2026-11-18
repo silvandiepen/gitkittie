@@ -840,6 +840,14 @@ private struct BucketSettingsRow: View {
 
             SettingsDivider()
 
+            StorageFieldRow(systemImage: "map", title: "Region") {
+                TextField("auto", text: $settings.region)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 470)
+            }
+
+            SettingsDivider()
+
             StorageFieldRow(systemImage: "globe", title: "Public domain") {
                 TextField("https://project-data.hakobs.com", text: $settings.publicBaseURL)
                     .textFieldStyle(.roundedBorder)
@@ -905,15 +913,35 @@ private struct BucketSettingsRow: View {
                     }
                 }
 
-                Button("Save to .gitfolder.yml", systemImage: "square.and.arrow.down") {
+                Button("Test Connection", systemImage: "checkmark.shield") {
                     save()
+                    appModel.testBucketConnection(folderID: folder.id)
+                }
+                .disabled(appModel.isRunningStorage || !settings.enabled)
+
+                Button("Upload Now", systemImage: "arrow.up.circle.fill") {
+                    save()
+                    appModel.uploadBucketFiles(folderID: folder.id)
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(appModel.isRunningStorage || !settings.enabled)
+
+                Button("Save", systemImage: "square.and.arrow.down") {
+                    save()
+                }
                 .disabled(settings.endpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || settings.bucket.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(18)
 
-            Text("The configuration and rules are versioned in Git. Secrets never enter the repository. Object upload and Finder placeholders are the next storage-engine milestone and are not active in this build yet.")
+            if let message = appModel.storageMessage {
+                Label(message, systemImage: appModel.isRunningStorage ? "arrow.triangle.2.circlepath" : "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 16)
+            }
+
+            Text("Uploads are content-addressed and checksum-verified before the Git manifest is updated. Secrets stay in Keychain. Finder on-demand placeholders require the File Provider extension and are not enabled until that domain is installed.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 18)
@@ -924,6 +952,7 @@ private struct BucketSettingsRow: View {
     private func save() {
         settings.endpoint = settings.endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.bucket = settings.bucket.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.region = settings.region.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.publicBaseURL = settings.publicBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.offloadExtensions = extensionsText
             .split(separator: ",")

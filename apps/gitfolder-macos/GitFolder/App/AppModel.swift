@@ -13,12 +13,15 @@ final class AppModel {
     var focusedFolderID: UUID?
     var hasGitHubToken = false
     var gitHubLogin: String?
+    var isRunningStorage = false
+    var storageMessage: String?
 
     @ObservationIgnored private let configStore: ConfigStore
     @ObservationIgnored private let syncEngine: GitSyncEngine
     @ObservationIgnored private let keychainService: KeychainService
     @ObservationIgnored private let gitHubOAuthService: GitHubOAuthService
     @ObservationIgnored private let loginItemService: LoginItemManaging
+    @ObservationIgnored private let bucketStorageEngine: BucketStorageEngine
     @ObservationIgnored private let userDefaults: UserDefaults
     @ObservationIgnored private var scheduler: Timer?
     @ObservationIgnored private var didLoad = false
@@ -35,6 +38,7 @@ final class AppModel {
             userAgent: "GitFolder"
         ),
         loginItemService: LoginItemManaging = LoginItemService(),
+        bucketStorageEngine: BucketStorageEngine = BucketStorageEngine(),
         userDefaults: UserDefaults = .standard
     ) {
         self.configStore = configStore
@@ -42,6 +46,7 @@ final class AppModel {
         self.keychainService = keychainService
         self.gitHubOAuthService = gitHubOAuthService
         self.loginItemService = loginItemService
+        self.bucketStorageEngine = bucketStorageEngine
         self.userDefaults = userDefaults
     }
 
@@ -189,6 +194,64 @@ final class AppModel {
         }
     }
 
+    func testBucketConnection(folderID: UUID) {
+        guard !isRunningStorage, let folder = config.folders.first(where: { $0.id == folderID }) else { return }
+        isRunningStorage = true
+        storageMessage = "Connecting to \(folder.storage?.bucket ?? "bucket")…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let credentials = try storageCredentials(folderID: folderID)
+                try await bucketStorageEngine.testConnection(folder: folder, credentials: credentials)
+                storageMessage = "Bucket connection verified"
+                lastMessage = storageMessage ?? "Bucket connected"
+            } catch {
+                storageMessage = "Connection failed: \(error.localizedDescription)"
+                lastMessage = storageMessage ?? "Bucket connection failed"
+            }
+        }
+    }
+
+    func uploadBucketFiles(folderID: UUID) {
+        guard !isRunningStorage, let folder = config.folders.first(where: { $0.id == folderID }) else { return }
+        isRunningStorage = true
+        storageMessage = "Scanning \(folder.name) for eligible assets…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let credentials = try storageCredentials(folderID: folderID)
+                let outcome = try await bucketStorageEngine.uploadEligibleFiles(folder: folder, credentials: credentials)
+                let bytes = ByteCountFormatter.string(fromByteCount: outcome.uploadedBytes, countStyle: .file)
+                storageMessage = outcome.uploadedCount == 0
+                    ? "All eligible assets are already uploaded"
+                    : "Uploaded \(outcome.uploadedCount) asset\(outcome.uploadedCount == 1 ? "" : "s") (\(bytes))"
+                lastMessage = storageMessage ?? "Storage upload complete"
+                syncNow(folderID: folderID)
+            } catch {
+                storageMessage = "Upload failed: \(error.localizedDescription)"
+                lastMessage = storageMessage ?? "Storage upload failed"
+            }
+        }
+    }
+
+    func restoreBucketFile(relativePath: String, folderID: UUID) {
+        guard !isRunningStorage, let folder = config.folders.first(where: { $0.id == folderID }) else { return }
+        isRunningStorage = true
+        storageMessage = "Restoring \(relativePath)…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let credentials = try storageCredentials(folderID: folderID)
+                try await bucketStorageEngine.restore(relativePath: relativePath, folder: folder, credentials: credentials)
+                storageMessage = "Restored \(relativePath)"
+                lastMessage = storageMessage ?? "Restore complete"
+            } catch {
+                storageMessage = "Restore failed: \(error.localizedDescription)"
+                lastMessage = storageMessage ?? "Restore failed"
+            }
+        }
+    }
+
     func removeFolder(id: UUID) {
         guard let folder = config.folders.first(where: { $0.id == id }) else { return }
         config.folders.removeAll { $0.id == id }
@@ -300,6 +363,15 @@ final class AppModel {
         )
     }
 
+    private func storageCredentials(folderID: UUID) throws -> S3Credentials {
+        let stores = storageCredentialStores(folderID: folderID)
+        guard let accessKey = try stores.accessKey.load()?.nilIfEmpty,
+              let secretKey = try stores.secretKey.load()?.nilIfEmpty else {
+            throw S3StorageError.missingCredentials
+        }
+        return S3Credentials(accessKeyID: accessKey, secretAccessKey: secretKey)
+    }
+
     private func writeRepositoryStorageConfig(for folder: SyncedFolder, settings: BucketStorageSettings) throws {
         let folderAccess = FolderAccessService()
         try folderAccess.withSecurityScopedAccess(for: folder) { folderURL in
@@ -310,6 +382,7 @@ final class AppModel {
               provider: s3
               endpoint: \(yamlQuoted(settings.endpoint))
               bucket: \(yamlQuoted(settings.bucket))
+              region: \(yamlQuoted(settings.region))
               publicBaseURL: \(yamlQuoted(settings.publicBaseURL))
               mode: tiered
               offload:

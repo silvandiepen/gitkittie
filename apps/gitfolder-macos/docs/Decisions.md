@@ -309,9 +309,9 @@ failed conflict be aborted back to an attached, usable branch. Fetch-first statu
 
 **Decision:** GitFolder exposes per-folder S3-compatible storage settings. Portable
 rules are written to `.gitfolder.yml` in the synced repository, while access and
-secret keys are stored only in the macOS Keychain. The initial UI configures the
-future tiered-storage engine but does not claim that object upload or Finder File
-Provider placeholders are already active.
+secret keys are stored only in the macOS Keychain. The engine uploads eligible
+files to content-addressed objects, verifies their SHA-256 metadata, supports
+multipart uploads, and updates a Git-versioned manifest only after verification.
 
 **Context:** Large media repositories can exceed practical Git working-copy sizes
 and GitHub's 100 MB per-file limit. The configured R2 deployment uses a private S3
@@ -322,4 +322,6 @@ credentials. Separating configuration from activation also avoids silently movin
 or deleting files before the upload, integrity, and placeholder lifecycle is built
 and verified.
 
-**Status:** accepted for configuration UI; storage engine remains planned (#10).
+**Status:** accepted for configuration and verified upload/restore. Local eviction
+remains disabled until a File Provider domain can preserve Finder-visible,
+on-demand files safely (#10).
