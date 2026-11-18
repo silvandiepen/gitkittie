@@ -905,6 +905,12 @@ private struct BucketSettingsRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+                Link(
+                    "Create Cloudflare R2 key",
+                    destination: URL(string: "https://dash.cloudflare.com/?to=/:account/r2/api-tokens")!
+                )
+                .font(.caption)
+
                 Spacer()
 
                 if appModel.hasStorageCredentials(folderID: folder.id) {
