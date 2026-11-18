@@ -532,6 +532,7 @@ final class AppModel {
 
     private func markFolderFailed(id: UUID, error: Error) {
         guard let index = config.folders.firstIndex(where: { $0.id == id }) else { return }
+        NSLog("GitFolder sync failed [%@]: %@", String(describing: type(of: error)), String(reflecting: error))
         let userError: UserFacingError
         if let syncError = error as? GitSyncError {
             userError = syncError.userFacingError()
