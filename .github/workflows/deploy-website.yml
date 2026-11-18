@@ -30,15 +30,15 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.inspect_gitfolder_oauth == true }}
     runs-on: ubuntu-latest
     steps:
-      - name: Read safe OAuth client metadata
+      - name: Read relevant OAuth scope identifiers
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           curl --fail-with-body --silent --show-error \
             --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/oauth_clients/385b6b643b98a3889d570ae7688cb509" \
-            | jq '{success, errors, result: (.result | {client_id, client_name, client_uri, client_uri_verification, redirect_uris, scopes, optional_scopes, visibility, token_endpoint_auth_method})}'
+            "https://api.cloudflare.com/client/v4/oauth/scopes" \
+            | jq '{success, errors, result: [.result[] | select(.name | test("R2|API Token|Account"; "i")) | {id, name, category}]}'
 
   deploy:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.inspect_gitfolder_oauth != true }}
