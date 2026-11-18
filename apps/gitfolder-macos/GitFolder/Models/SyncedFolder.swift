@@ -148,4 +148,5 @@ struct UserFacingError: Codable, Equatable, Sendable {
     var message: String
     var recoverySuggestion: String?
     var technicalDetailsLogId: String?
+    var affectedPaths: [String]? = nil
 }

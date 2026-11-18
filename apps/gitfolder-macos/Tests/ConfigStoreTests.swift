@@ -127,6 +127,133 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertFalse(remoteHead.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
+    func testSyncPullsRemoteChangesWhenWorkingTreeIsClean() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let source = root.appending(path: "source", directoryHint: .isDirectory)
+        let writer = root.appending(path: "writer", directoryHint: .isDirectory)
+        let remote = root.appending(path: "remote.git", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+        _ = try runGit(["init", "--bare"], in: remote)
+        _ = try runGit(["init"], in: source)
+        try "local".write(to: source.appending(path: "local.txt"), atomically: true, encoding: .utf8)
+
+        let folder = SyncedFolder.create(
+            name: "source",
+            localPath: source.path,
+            bookmarkData: nil,
+            repoUrl: remote.path,
+            authMode: .ssh,
+            branch: "main"
+        )
+        let options = GitSyncOptions(
+            gitAuthorName: "GitFolder Test",
+            gitAuthorEmail: "gitfolder@example.com",
+            githubToken: nil,
+            sshPrivateKeyPath: nil,
+            sshPrivateKeyBookmarkData: nil
+        )
+        let engine = GitSyncEngine()
+        _ = try await engine.sync(folder, options: options)
+
+        _ = try runGit(["clone", "--branch", "main", remote.path, writer.path], in: root)
+        _ = try runGit(["config", "user.name", "Remote Writer"], in: writer)
+        _ = try runGit(["config", "user.email", "writer@example.com"], in: writer)
+        try "remote".write(to: writer.appending(path: "remote.txt"), atomically: true, encoding: .utf8)
+        _ = try runGit(["add", "remote.txt"], in: writer)
+        _ = try runGit(["commit", "-m", "Add remote file"], in: writer)
+        _ = try runGit(["push", "origin", "main"], in: writer)
+
+        let outcome = try await engine.sync(folder, options: options)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.appending(path: "remote.txt").path))
+        XCTAssertTrue(outcome.changed)
+        XCTAssertEqual(outcome.message, "Pulled remote changes")
+    }
+
+    func testRepairReattachesDetachedHeadToConfiguredBranch() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let source = root.appending(path: "source", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        _ = try runGit(["init"], in: source)
+        _ = try runGit(["config", "user.name", "GitFolder Test"], in: source)
+        _ = try runGit(["config", "user.email", "gitfolder@example.com"], in: source)
+        try "hello".write(to: source.appending(path: "note.txt"), atomically: true, encoding: .utf8)
+        _ = try runGit(["add", "note.txt"], in: source)
+        _ = try runGit(["commit", "-m", "Initial"], in: source)
+        _ = try runGit(["branch", "-M", "main"], in: source)
+        _ = try runGit(["checkout", "--detach"], in: source)
+
+        let folder = SyncedFolder.create(
+            name: "source",
+            localPath: source.path,
+            bookmarkData: nil,
+            repoUrl: "unused",
+            authMode: .ssh,
+            branch: "main"
+        )
+
+        _ = try await GitSyncEngine().repair(folder)
+
+        let branch = try runGit(["branch", "--show-current"], in: source)
+        XCTAssertEqual(branch.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines), "main")
+    }
+
+    func testLargeFilesAreBlockedAndCanBeAddedToGitIgnore() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let source = root.appending(path: "source", directoryHint: .isDirectory)
+        let remote = root.appending(path: "remote.git", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+        _ = try runGit(["init", "--bare"], in: remote)
+        _ = try runGit(["init"], in: source)
+
+        let largeFile = source.appending(path: "large.bin")
+        FileManager.default.createFile(atPath: largeFile.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: largeFile)
+        try handle.truncate(atOffset: 100_000_000)
+        try handle.close()
+
+        let folder = SyncedFolder.create(
+            name: "source",
+            localPath: source.path,
+            bookmarkData: nil,
+            repoUrl: remote.path,
+            authMode: .ssh,
+            branch: "main"
+        )
+        let options = GitSyncOptions(
+            gitAuthorName: "GitFolder Test",
+            gitAuthorEmail: "gitfolder@example.com",
+            githubToken: nil,
+            sshPrivateKeyPath: nil,
+            sshPrivateKeyBookmarkData: nil
+        )
+        let engine = GitSyncEngine()
+
+        do {
+            _ = try await engine.sync(folder, options: options)
+            XCTFail("Expected oversized file to block sync")
+        } catch let error as GitSyncError {
+            guard case .largeFilesBlocked(let files) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(files.map(\.path), ["large.bin"])
+        }
+
+        _ = try await engine.ignore(["large.bin"], for: folder)
+
+        let ignore = try String(contentsOf: source.appending(path: ".gitignore"), encoding: .utf8)
+        XCTAssertTrue(ignore.contains("/large.bin"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: largeFile.path))
+    }
+
     func testSyncRejectsFolderWithoutRepositoryURL() async throws {
         let folder = SyncedFolder.create(
             name: "source",

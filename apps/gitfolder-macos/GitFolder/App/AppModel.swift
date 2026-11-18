@@ -307,6 +307,50 @@ final class AppModel {
         }
     }
 
+    func repairAndSync(folderID: UUID) {
+        guard !isSyncing, let folder = config.folders.first(where: { $0.id == folderID }) else {
+            lastMessage = isSyncing ? "Sync already running" : "Folder not found"
+            return
+        }
+
+        isSyncing = true
+        lastMessage = "Repairing \(folder.name)…"
+        Task {
+            do {
+                let repaired = try await syncEngine.repair(folder)
+                apply(repaired)
+                save(message: "Repaired \(repaired.name); syncing…")
+                await sync(folders: [repaired], manual: true)
+            } catch {
+                markFolderFailed(id: folderID, error: error)
+                isSyncing = false
+                save(message: lastMessage)
+            }
+        }
+    }
+
+    func excludeAndSync(paths: [String], folderID: UUID) {
+        guard !isSyncing, let folder = config.folders.first(where: { $0.id == folderID }) else {
+            lastMessage = isSyncing ? "Sync already running" : "Folder not found"
+            return
+        }
+
+        isSyncing = true
+        lastMessage = "Excluding oversized files from \(folder.name)…"
+        Task {
+            do {
+                let updated = try await syncEngine.ignore(paths, for: folder)
+                apply(updated)
+                save(message: "Updated .gitignore; syncing \(updated.name)…")
+                await sync(folders: [updated], manual: true)
+            } catch {
+                markFolderFailed(id: folderID, error: error)
+                isSyncing = false
+                save(message: lastMessage)
+            }
+        }
+    }
+
     func syncDueFolders() {
         guard !config.app.pauseAllSyncing, !isSyncing else { return }
         let dueFolders = config.folders.filter { folder in
@@ -390,7 +434,14 @@ final class AppModel {
             )
         }
 
-        config.folders[index].lastStatus = .error
+        switch userError.code {
+        case "interrupted_operation", "repository_locked", "large_files_blocked":
+            config.folders[index].lastStatus = .needsAttention
+        case "merge_failed":
+            config.folders[index].lastStatus = .conflict
+        default:
+            config.folders[index].lastStatus = .error
+        }
         config.folders[index].lastError = userError
         config.folders[index].lastCheckedAt = Date()
         config.folders[index].updatedAt = Date()

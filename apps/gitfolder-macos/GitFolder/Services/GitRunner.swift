@@ -54,6 +54,7 @@ struct GitRunner: GitRunning {
 
         if process.isRunning {
             process.terminate()
+            process.waitUntilExit()
             throw GitRunnerError.timedOut
         }
 
