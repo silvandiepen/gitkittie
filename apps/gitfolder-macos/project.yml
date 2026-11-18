@@ -61,10 +61,6 @@ targets:
         LSUIElement: true
         NSHumanReadableCopyright: "Copyright © Sil van Diepen"
         CloudflareOAuthClientID: "$(CLOUDFLARE_OAUTH_CLIENT_ID)"
-        CFBundleURLTypes:
-          - CFBundleURLName: app.hakobs.gitfolder.cloudflare-oauth
-            CFBundleURLSchemes:
-              - gitfolder
   GitFolderTests:
     type: bundle.unit-test
     platform: macOS

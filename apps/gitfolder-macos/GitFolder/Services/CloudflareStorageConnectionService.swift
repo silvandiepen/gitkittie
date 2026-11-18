@@ -35,7 +35,7 @@ final class CloudflareStorageConnectionService: NSObject, ASWebAuthenticationPre
         let verifier = Self.codeVerifier()
         let challenge = Self.base64URL(Data(SHA256.hash(data: Data(verifier.utf8))))
         let state = UUID().uuidString
-        let redirectURI = "gitfolder://oauth/cloudflare"
+        let redirectURI = "http://127.0.0.1:53682/oauth/cloudflare"
         var components = URLComponents(string: "https://dash.cloudflare.com/oauth2/auth")!
         components.queryItems = [
             URLQueryItem(name: "response_type", value: "code"),
@@ -110,7 +110,7 @@ final class CloudflareStorageConnectionService: NSObject, ASWebAuthenticationPre
 
     private func authenticate(at url: URL) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
-            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "gitfolder") { callbackURL, error in
+            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "http") { callbackURL, error in
                 if let error { continuation.resume(throwing: error) }
                 else if let callbackURL { continuation.resume(returning: callbackURL) }
                 else { continuation.resume(throwing: CloudflareConnectionError.invalidCallback) }
