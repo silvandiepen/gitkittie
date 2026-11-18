@@ -15,8 +15,10 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             settingsSidebar
-                .frame(width: isSidebarExpanded ? 220 : 76)
-            Divider()
+                .frame(width: isSidebarExpanded ? 232 : 76)
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 1)
 
             VStack(spacing: 0) {
                 HStack {
@@ -31,9 +33,9 @@ struct SettingsView: View {
                     .help(isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar")
 
                     Spacer()
-                    Text("GitFolder")
+                    Text(selectedSection.title)
                         .font(.headline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white.opacity(0.72))
                     Spacer()
                     Color.clear.frame(width: 24, height: 24)
                 }
@@ -43,8 +45,10 @@ struct SettingsView: View {
 
                 settingsPane
             }
+            .background(Color.black.opacity(0.92))
         }
-        .background(.regularMaterial)
+        .background(Color.black)
+        .preferredColorScheme(.dark)
         .frame(
             minWidth: 860,
             minHeight: SettingsWindowMetrics.preferredContentHeight,
@@ -84,7 +88,7 @@ struct SettingsView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.top, 52)
+            .padding(.top, 44)
 
             VStack(spacing: 6) {
                 ForEach(SettingsSection.allCases) { section in
@@ -103,10 +107,10 @@ struct SettingsView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
-                        .foregroundStyle(selectedSection == section ? Color.accentColor : Color.primary)
+                        .foregroundStyle(selectedSection == section ? Color.white : Color.white.opacity(0.72))
                         .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(selectedSection == section ? Color.accentColor.opacity(0.14) : Color.clear)
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(selectedSection == section ? Color.accentColor.opacity(0.72) : Color.clear)
                         )
                     }
                     .buttonStyle(.plain)
@@ -117,7 +121,7 @@ struct SettingsView: View {
             Spacer()
 
             if isSidebarExpanded {
-                Text("v1.0.0")
+                Text(appVersionLabel)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .padding(.bottom, 18)
@@ -125,7 +129,12 @@ struct SettingsView: View {
             }
         }
         .padding(.horizontal, isSidebarExpanded ? 16 : 10)
-        .background(.ultraThinMaterial)
+        .background {
+            ZStack {
+                MacSidebarMaterial()
+                Color.black.opacity(0.48)
+            }
+        }
     }
 
     @ViewBuilder
@@ -137,6 +146,8 @@ struct SettingsView: View {
             githubSettings
         case .identity:
             identitySettings
+        case .storage:
+            storageSettings
         case .folders:
             folderSettings
         }
@@ -358,6 +369,32 @@ struct SettingsView: View {
         }
     }
 
+    private var storageSettings: some View {
+        SettingsPane(title: "Storage", subtitle: "Keep project files visible in Finder while large assets live in your own S3 or R2 bucket.") {
+            if appModel.config.folders.isEmpty {
+                SettingsCard {
+                    ContentUnavailableView(
+                        "Add a folder first",
+                        systemImage: "externaldrive.badge.plus",
+                        description: Text("Bucket settings belong to a synced repository and are written to its .gitfolder.yml file.")
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 36)
+                }
+            } else {
+                ForEach(appModel.config.folders) { folder in
+                    BucketSettingsRow(folder: folder)
+                }
+            }
+        }
+    }
+
+    private var appVersionLabel: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+        return "v\(version) (\(build))"
+    }
+
     private var folderSettings: some View {
         SettingsPane(title: "Folders", subtitle: "Manage the local folders you sync with GitHub.") {
             if appModel.config.folders.isEmpty {
@@ -520,7 +557,7 @@ private struct FolderSettingsRow: View {
                         }
                         .buttonStyle(.borderless)
                         .help("Load branches from GitHub")
-                        .disabled(isLoadingBranches || draft.repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !appModel.hasGitHubToken)
+                        .disabled(isLoadingBranches || draft.repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (appModel.authMode(forRepositoryURL: draft.repoUrl) == .githubToken && !appModel.hasGitHubToken))
                     }
                     .fixedSize(horizontal: true, vertical: false)
                 }
@@ -579,7 +616,7 @@ private struct FolderSettingsRow: View {
 
             HStack {
                 Button(draft.enabled ? "Pause" : "Resume", systemImage: draft.enabled ? "pause.fill" : "play.fill") {
-                    appModel.updateFolder(tokenAuthDraft())
+                    appModel.updateFolder(authenticatedDraft())
                     appModel.toggleFolder(id: draft.id)
                     if let updated = appModel.config.folders.first(where: { $0.id == draft.id }) {
                         draft = updated
@@ -588,12 +625,12 @@ private struct FolderSettingsRow: View {
                 .frame(minWidth: 120)
 
                 Button("Save", systemImage: "square.and.arrow.down") {
-                    appModel.updateFolder(tokenAuthDraft())
+                    appModel.updateFolder(authenticatedDraft())
                 }
                 .frame(minWidth: 120)
 
                 Button("Sync Now", systemImage: "arrow.triangle.2.circlepath") {
-                    appModel.updateFolder(tokenAuthDraft())
+                    appModel.updateFolder(authenticatedDraft())
                     appModel.syncNow(folderID: draft.id)
                 }
                 .buttonStyle(.borderedProminent)
@@ -601,7 +638,7 @@ private struct FolderSettingsRow: View {
                 .disabled(appModel.isSyncing || draft.repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 Button("Repair & Sync", systemImage: "wrench.and.screwdriver") {
-                    appModel.updateFolder(tokenAuthDraft())
+                    appModel.updateFolder(authenticatedDraft())
                     appModel.repairAndSync(folderID: draft.id)
                 }
                 .help("Abort an interrupted Git operation, restore the configured branch, then sync")
@@ -625,7 +662,7 @@ private struct FolderSettingsRow: View {
         }
         .contextMenu {
             Button("Sync Now") {
-                appModel.updateFolder(tokenAuthDraft())
+                appModel.updateFolder(authenticatedDraft())
                 appModel.syncNow(folderID: draft.id)
             }
             Button("Open Folder") {
@@ -647,7 +684,9 @@ private struct FolderSettingsRow: View {
             remoteBranches = []
         }
         .onAppear {
-            if remoteBranches.isEmpty, !draft.repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, appModel.hasGitHubToken {
+            if remoteBranches.isEmpty,
+               !draft.repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               appModel.authMode(forRepositoryURL: draft.repoUrl) == .ssh || appModel.hasGitHubToken {
                 loadBranches()
             }
         }
@@ -691,9 +730,9 @@ private struct FolderSettingsRow: View {
         return Array(Set(remoteBranches + [current])).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
-    private func tokenAuthDraft() -> SyncedFolder {
+    private func authenticatedDraft() -> SyncedFolder {
         var copy = draft
-        copy.authMode = AuthMode.githubToken.rawValue
+        copy.authMode = appModel.authMode(forRepositoryURL: copy.repoUrl).rawValue
         return copy
     }
 
@@ -701,7 +740,10 @@ private struct FolderSettingsRow: View {
         isLoadingBranches = true
         let repoUrl = draft.repoUrl
         Task {
-            let branches = await appModel.loadRemoteBranches(repoUrl: repoUrl)
+            let branches = await appModel.loadRemoteBranches(
+                repoUrl: repoUrl,
+                authMode: appModel.authMode(forRepositoryURL: repoUrl)
+            )
             await MainActor.run {
                 remoteBranches = branches
                 if !branches.isEmpty, !branches.contains(draft.branch) {
@@ -734,6 +776,171 @@ private struct FolderSettingsRow: View {
         case .waitingForConnection, .needsAttention: return .orange
         case .error, .conflict: return .red
         }
+    }
+}
+
+private struct BucketSettingsRow: View {
+    @Environment(AppModel.self) private var appModel
+    let folder: SyncedFolder
+
+    @State private var settings: BucketStorageSettings
+    @State private var accessKey = ""
+    @State private var secretKey = ""
+    @State private var extensionsText: String
+    @State private var keepDownloadedText: String
+
+    init(folder: SyncedFolder) {
+        self.folder = folder
+        let value = folder.storage ?? .defaults
+        _settings = State(initialValue: value)
+        _extensionsText = State(initialValue: value.offloadExtensions.joined(separator: ", "))
+        _keepDownloadedText = State(initialValue: value.keepDownloadedPatterns.joined(separator: "\n"))
+    }
+
+    var body: some View {
+        SettingsCard {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.blue.opacity(0.16))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "externaldrive.connected.to.line.below")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(folder.name)
+                        .font(.headline)
+                    Text("S3-compatible object storage")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("Use bucket", isOn: $settings.enabled)
+                    .toggleStyle(.switch)
+            }
+            .padding(18)
+
+            SettingsDivider()
+
+            StorageFieldRow(systemImage: "network", title: "API endpoint") {
+                TextField("https://account.r2.cloudflarestorage.com", text: $settings.endpoint)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 470)
+            }
+
+            SettingsDivider()
+
+            StorageFieldRow(systemImage: "shippingbox", title: "Bucket") {
+                TextField("project-assets", text: $settings.bucket)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 470)
+            }
+
+            SettingsDivider()
+
+            StorageFieldRow(systemImage: "globe", title: "Public domain") {
+                TextField("https://project-data.hakobs.com", text: $settings.publicBaseURL)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 470)
+            }
+
+            SettingsDivider()
+
+            StorageFieldRow(systemImage: "key", title: "Access key ID") {
+                SecureField(appModel.hasStorageCredentials(folderID: folder.id) ? "Saved in Keychain" : "R2 or S3 access key", text: $accessKey)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 470)
+            }
+
+            SettingsDivider()
+
+            StorageFieldRow(systemImage: "lock", title: "Secret access key") {
+                SecureField(appModel.hasStorageCredentials(folderID: folder.id) ? "Saved in Keychain" : "Secret access key", text: $secretKey)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 470)
+            }
+
+            SettingsDivider()
+
+            StorageFieldRow(systemImage: "arrow.up.doc", title: "Offload from") {
+                Stepper("\(settings.minimumFileSizeMB) MB", value: $settings.minimumFileSizeMB, in: 1...10_000, step: 5)
+                    .frame(width: 150)
+            }
+
+            SettingsDivider()
+
+            StorageFieldRow(systemImage: "doc.badge.gearshape", title: "File extensions") {
+                TextField("psd, mov, mp4, blend", text: $extensionsText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 470)
+            }
+
+            SettingsDivider()
+
+            StorageFieldRow(systemImage: "pin", title: "Keep downloaded", alignment: .top) {
+                TextEditor(text: $keepDownloadedText)
+                    .font(.system(.body, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .padding(6)
+                    .frame(maxWidth: 470, minHeight: 64, maxHeight: 64)
+                    .background(Color.black.opacity(0.34), in: RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.white.opacity(0.1)))
+            }
+
+            HStack(spacing: 12) {
+                Label(
+                    appModel.hasStorageCredentials(folderID: folder.id) ? "Credentials saved in Keychain" : "Credentials are stored only in Keychain",
+                    systemImage: appModel.hasStorageCredentials(folderID: folder.id) ? "checkmark.shield.fill" : "shield"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if appModel.hasStorageCredentials(folderID: folder.id) {
+                    Button("Remove Credentials", role: .destructive) {
+                        appModel.clearBucketCredentials(folderID: folder.id)
+                    }
+                }
+
+                Button("Save to .gitfolder.yml", systemImage: "square.and.arrow.down") {
+                    save()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(settings.endpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || settings.bucket.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(18)
+
+            Text("The configuration and rules are versioned in Git. Secrets never enter the repository. Object upload and Finder placeholders are the next storage-engine milestone and are not active in this build yet.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 16)
+        }
+    }
+
+    private func save() {
+        settings.endpoint = settings.endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.bucket = settings.bucket.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.publicBaseURL = settings.publicBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.offloadExtensions = extensionsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        settings.keepDownloadedPatterns = keepDownloadedText
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        appModel.saveBucketStorage(
+            folderID: folder.id,
+            settings: settings,
+            accessKey: accessKey,
+            secretKey: secretKey
+        )
+        accessKey = ""
+        secretKey = ""
     }
 }
 
@@ -795,7 +1002,7 @@ private struct AddFolderSheet: View {
                         }
                 }
 
-                if !appModel.hasGitHubToken {
+                if !appModel.hasGitHubToken && appModel.authMode(forRepositoryURL: repoUrl) == .githubToken {
                     SettingsDivider()
 
                     SettingsFieldRow(systemImage: "key", title: "GitHub") {
@@ -838,7 +1045,7 @@ private struct AddFolderSheet: View {
                         }
                         .buttonStyle(.borderless)
                         .help("Load branches from GitHub")
-                        .disabled(isLoadingBranches || repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !appModel.hasGitHubToken)
+                        .disabled(isLoadingBranches || repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (appModel.authMode(forRepositoryURL: repoUrl) == .githubToken && !appModel.hasGitHubToken))
                     }
                     .fixedSize(horizontal: true, vertical: false)
                 }
@@ -873,7 +1080,7 @@ private struct AddFolderSheet: View {
                     addAndSync()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(isTesting || selectedURL == nil || repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !appModel.hasGitHubToken)
+                .disabled(isTesting || selectedURL == nil || repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (appModel.authMode(forRepositoryURL: repoUrl) == .githubToken && !appModel.hasGitHubToken))
             }
         }
         .padding()
@@ -884,7 +1091,8 @@ private struct AddFolderSheet: View {
         guard let selectedURL else { return }
         isTesting = true
         Task {
-            let hasAccess = await appModel.testGitHubAccess(repoUrl: repoUrl, authMode: .githubToken)
+            let authMode = appModel.authMode(forRepositoryURL: repoUrl)
+            let hasAccess = await appModel.testGitHubAccess(repoUrl: repoUrl, authMode: authMode)
             await MainActor.run {
                 isTesting = false
                 guard hasAccess else {
@@ -892,7 +1100,7 @@ private struct AddFolderSheet: View {
                     return
                 }
                 do {
-                    let id = try appModel.addFolder(localURL: selectedURL, repoUrl: repoUrl, authMode: .githubToken, branch: branch, syncIntervalMinutes: interval)
+                    let id = try appModel.addFolder(localURL: selectedURL, repoUrl: repoUrl, authMode: authMode, branch: branch, syncIntervalMinutes: interval)
                     isPresented = false
                     appModel.syncNow(folderID: id)
                 } catch {
@@ -944,7 +1152,10 @@ private struct AddFolderSheet: View {
         isLoadingBranches = true
         let repoUrl = repoUrl
         Task {
-            let branches = await appModel.loadRemoteBranches(repoUrl: repoUrl)
+            let branches = await appModel.loadRemoteBranches(
+                repoUrl: repoUrl,
+                authMode: appModel.authMode(forRepositoryURL: repoUrl)
+            )
             await MainActor.run {
                 remoteBranches = branches
                 if !branches.isEmpty, !branches.contains(branch) {
@@ -984,6 +1195,7 @@ private struct SettingsPane<Content: View>: View {
             .padding(.top, 22)
             .padding(.bottom, 32)
         }
+        .background(Color.black.opacity(0.92))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -997,11 +1209,11 @@ private struct SettingsCard<Content: View>: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.secondary.opacity(0.06))
+                .fill(Color.white.opacity(0.055))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
+                .stroke(Color.white.opacity(0.10), lineWidth: 1)
         )
     }
 }
@@ -1027,6 +1239,32 @@ private struct SettingsFieldRow<Content: View>: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+    }
+}
+
+private struct StorageFieldRow<Content: View>: View {
+    let systemImage: String
+    let title: String
+    var alignment: VerticalAlignment = .center
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        HStack(alignment: alignment, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .frame(width: 22)
+
+            Text(title)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+                .frame(width: 142, alignment: .leading)
+
+            content
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
     }
 }
 
@@ -1059,6 +1297,7 @@ private struct FolderFieldRow<Content: View>: View {
 private struct SettingsDivider: View {
     var body: some View {
         Divider()
+            .overlay(Color.white.opacity(0.08))
             .padding(.leading, 60)
     }
 }
@@ -1079,6 +1318,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case sync
     case github
     case identity
+    case storage
     case folders
 
     var id: Self { self }
@@ -1088,6 +1328,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .sync: return "Sync"
         case .github: return "GitHub"
         case .identity: return "Git Identity"
+        case .storage: return "Storage"
         case .folders: return "Folders"
         }
     }
@@ -1097,9 +1338,22 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .sync: return "arrow.triangle.2.circlepath"
         case .github: return "key"
         case .identity: return "person.text.rectangle"
+        case .storage: return "externaldrive.connected.to.line.below"
         case .folders: return "folder"
         }
     }
+}
+
+private struct MacSidebarMaterial: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
 private enum SettingsWindowMetrics {

@@ -18,6 +18,7 @@ struct SyncedFolder: Codable, Identifiable, Equatable, Sendable {
     var lastCheckedAt: Date?
     var lastStatus: SyncStatus
     var lastError: UserFacingError?
+    var storage: BucketStorageSettings? = nil
 
     var authModeValue: AuthMode {
         AuthMode(rawValue: authMode) ?? .ssh
@@ -113,9 +114,30 @@ struct SyncedFolder: Codable, Identifiable, Equatable, Sendable {
             lastSuccessfulSyncAt: nil,
             lastCheckedAt: nil,
             lastStatus: .idle,
-            lastError: nil
+            lastError: nil,
+            storage: nil
         )
     }
+}
+
+struct BucketStorageSettings: Codable, Equatable, Sendable {
+    var enabled: Bool
+    var endpoint: String
+    var bucket: String
+    var publicBaseURL: String
+    var minimumFileSizeMB: Int
+    var offloadExtensions: [String]
+    var keepDownloadedPatterns: [String]
+
+    static let defaults = BucketStorageSettings(
+        enabled: false,
+        endpoint: "https://8cef251b5fdcf6c6f63db98b7aa49f9a.r2.cloudflarestorage.com",
+        bucket: "project-assets",
+        publicBaseURL: "https://project-data.hakobs.com",
+        minimumFileSizeMB: 25,
+        offloadExtensions: ["psd", "psb", "mov", "mp4", "blend", "c4d", "zip"],
+        keepDownloadedPatterns: ["**/*.md", "Tasks/**"]
+    )
 }
 
 enum AuthMode: String, Codable, CaseIterable, Equatable, Sendable {

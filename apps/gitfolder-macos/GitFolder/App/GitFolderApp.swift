@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -17,6 +18,7 @@ struct GitFolderApp: App {
         Settings {
             SettingsView()
                 .environment(appModel)
+                .background(SettingsWindowConfigurator())
                 .onAppear {
                     appModel.loadIfNeeded()
                 }
@@ -33,5 +35,27 @@ struct GitFolderApp: App {
                 model.requestLaunchAtLoginIfNeeded()
             }
         }
+    }
+}
+
+private struct SettingsWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { configure(view.window) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { configure(nsView.window) }
+    }
+
+    private func configure(_ window: NSWindow?) {
+        guard let window else { return }
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = .black
+        window.styleMask.insert(.fullSizeContentView)
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isOpaque = false
     }
 }

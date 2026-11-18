@@ -59,10 +59,12 @@ final class AppModel {
     func load() {
         do {
             config = try configStore.load()
+            normalizeRepositoryAuthentication()
             syncLaunchAtLoginStateFromSystem()
             hasGitHubToken = (try? keychainService.load())?.nilIfEmpty != nil
             lastMessage = "Ready"
             startScheduler()
+            syncDueFolders()
             refreshGitHubLogin()
         } catch {
             config = .empty
@@ -114,11 +116,77 @@ final class AppModel {
         guard let index = config.folders.firstIndex(where: { $0.id == folder.id }) else { return }
         var copy = folder
         copy.repoUrl = copy.repoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.authMode = authMode(forRepositoryURL: copy.repoUrl).rawValue
         copy.branch = normalizedBranch(copy.branch)
         copy.syncIntervalMinutes = normalizedInterval(copy.syncIntervalMinutes)
         copy.updatedAt = Date()
         config.folders[index] = copy
         save(message: "Updated \(copy.name)")
+    }
+
+    func authMode(forRepositoryURL repoURL: String) -> AuthMode {
+        let value = repoURL.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if value.hasPrefix("ssh://") || (value.contains("@") && value.contains(":")) {
+            return .ssh
+        }
+        return .githubToken
+    }
+
+    private func normalizeRepositoryAuthentication() {
+        var changed = false
+        for index in config.folders.indices {
+            let inferred = authMode(forRepositoryURL: config.folders[index].repoUrl).rawValue
+            if config.folders[index].authMode != inferred {
+                config.folders[index].authMode = inferred
+                changed = true
+            }
+        }
+        if changed {
+            try? configStore.save(config)
+        }
+    }
+
+    func hasStorageCredentials(folderID: UUID) -> Bool {
+        let stores = storageCredentialStores(folderID: folderID)
+        return (try? stores.accessKey.load())?.nilIfEmpty != nil
+            && (try? stores.secretKey.load())?.nilIfEmpty != nil
+    }
+
+    func saveBucketStorage(
+        folderID: UUID,
+        settings: BucketStorageSettings,
+        accessKey: String,
+        secretKey: String
+    ) {
+        guard let index = config.folders.firstIndex(where: { $0.id == folderID }) else { return }
+        do {
+            let stores = storageCredentialStores(folderID: folderID)
+            if !accessKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                try stores.accessKey.save(accessKey)
+            }
+            if !secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                try stores.secretKey.save(secretKey)
+            }
+
+            config.folders[index].storage = settings
+            config.folders[index].updatedAt = Date()
+            try configStore.save(config)
+            try writeRepositoryStorageConfig(for: config.folders[index], settings: settings)
+            lastMessage = settings.enabled ? "Bucket configuration saved" : "Bucket storage disabled"
+        } catch {
+            lastMessage = "Could not save bucket configuration: \(error.localizedDescription)"
+        }
+    }
+
+    func clearBucketCredentials(folderID: UUID) {
+        do {
+            let stores = storageCredentialStores(folderID: folderID)
+            try stores.accessKey.delete()
+            try stores.secretKey.delete()
+            lastMessage = "Bucket credentials removed"
+        } catch {
+            lastMessage = "Could not remove bucket credentials: \(error.localizedDescription)"
+        }
     }
 
     func removeFolder(id: UUID) {
@@ -222,6 +290,49 @@ final class AppModel {
             lastMessage = "Could not load branches: \(error.localizedDescription)"
             return []
         }
+    }
+
+    private func storageCredentialStores(folderID: UUID) -> (accessKey: KeychainService, secretKey: KeychainService) {
+        let service = Bundle.main.bundleIdentifier ?? "app.hakobs.gitfolder"
+        return (
+            KeychainService(service: service, account: "bucket-access-key-\(folderID.uuidString)"),
+            KeychainService(service: service, account: "bucket-secret-key-\(folderID.uuidString)")
+        )
+    }
+
+    private func writeRepositoryStorageConfig(for folder: SyncedFolder, settings: BucketStorageSettings) throws {
+        let folderAccess = FolderAccessService()
+        try folderAccess.withSecurityScopedAccess(for: folder) { folderURL in
+            let yaml = """
+            version: 1
+            storage:
+              enabled: \(settings.enabled ? "true" : "false")
+              provider: s3
+              endpoint: \(yamlQuoted(settings.endpoint))
+              bucket: \(yamlQuoted(settings.bucket))
+              publicBaseURL: \(yamlQuoted(settings.publicBaseURL))
+              mode: tiered
+              offload:
+                minSizeMB: \(max(1, settings.minimumFileSizeMB))
+                extensions:\(yamlList(settings.offloadExtensions, indentation: 8))
+              keepDownloaded:\(yamlList(settings.keepDownloadedPatterns, indentation: 4))
+            """
+            try (yaml + "\n").write(
+                to: folderURL.appending(path: ".gitfolder.yml"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+    }
+
+    private func yamlQuoted(_ value: String) -> String {
+        "\"" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+
+    private func yamlList(_ values: [String], indentation: Int) -> String {
+        guard !values.isEmpty else { return " []" }
+        let spaces = String(repeating: " ", count: indentation)
+        return values.map { "\n\(spaces)- \(yamlQuoted($0))" }.joined()
     }
 
     func pauseAllSyncing() {
