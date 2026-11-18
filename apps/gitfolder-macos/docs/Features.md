@@ -56,9 +56,16 @@ modeled, documented, or claimed but not yet built**. Status reflects the code in
   and interval elapsed since last successful sync) and syncs them
   (`AppModel.syncDueFolders`).
 - Per sync, for each folder: ensure a Git repo (`git init` if needed), ensure the
-  `origin` remote and branch, `git status --porcelain`, and if there are changes:
-  `git add -A` → snapshot commit → `git pull --rebase origin <branch>` →
-  `git push -u origin <branch>` (`GitSyncEngine`).
+  `origin` remote and configured branch, fetch remote changes, scan changed files,
+  snapshot local changes, merge the remote branch without rewriting local history,
+  then push (`GitSyncEngine`). A clean local folder still fetches and integrates
+  remote changes before it is marked up to date.
+- Interrupted rebase/merge/cherry-pick/revert state and Git index locks are detected
+  before mutation. **Repair & Sync** aborts an interrupted operation, restores the
+  configured branch, and retries the safe sync path.
+- Changed files at or above GitHub's 100 MB limit are blocked before staging. Settings
+  lists the affected paths and can add them to `.gitignore` (and remove tracked copies
+  from the index without deleting the local files) before retrying.
 - Snapshot commit message: `GitFolder snapshot <ISO-8601 timestamp>`.
 - No changes → the folder is marked synced with "No changes"; no empty commits.
 - **Sync All Now** / per-folder **Sync Now** trigger the same engine manually.
@@ -105,8 +112,8 @@ These are modeled in code/`docs/`, claimed in copy, or tracked as tasks, but are
 
 | Area | State | Notes / task |
 |---|---|---|
-| **Pre-push safety scan** (secrets, keys, `.env`, large files), `.gitignore` management, first-run content preview | Modeled (`FolderSafetyState`, `SensitivePattern` in `packages/core`; docs Task 9) but **unbuilt** — `git add -A` pushes the whole folder with no warning | GITFOLDER-002 |
-| **Conflict / needs-attention states** | Statuses defined and rendered but **never produced**; a failed `pull --rebase` surfaces as generic `error` and can leave the repo mid-rebase (no `--abort`) | GITFOLDER-003 |
+| **Remaining pre-push safety** (secrets, keys, `.env`, first-run content preview) | The 100 MB large-file gate and `.gitignore` exclusion flow ship; sensitive-content scanning and first-sync preview remain | GITKIT-102 |
+| **Interactive conflict resolution** | Interrupted operations are detected/repaired and failed merges are aborted safely; a file-by-file conflict resolver remains planned | GITKIT-019 |
 | **Change debounce / filesystem watching** | Docs describe a 30s quiet period and "watching"; engine only **polls** every 5–60 min, so it can snapshot half-written files | GITFOLDER-014 |
 | **Local logs / Logs window** | `LogEntry` modeled and `logRetentionDays` stored, but **no log store or view** exists | GITFOLDER-022 |
 | **SSH auth UI** | Engine + config support SSH; no UI, and `chooseSSHPrivateKey`/`clearSSHPrivateKey` are dead code. `tokenAuthDraft()` silently rewrites stored `authMode` to token | GITFOLDER-019 |

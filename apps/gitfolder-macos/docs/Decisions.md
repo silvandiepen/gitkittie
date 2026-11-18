@@ -279,3 +279,26 @@ names the product it holds. Older branches/PRs and the top-level `docs/` plans m
 still reference `native-macos`.
 
 **Status:** open (GITKIT-007).
+
+---
+
+### 16. Fetch-first sync with merge-based integration and explicit repair
+
+**Decision:** Every sync fetches the configured remote branch before deciding that a
+folder is up to date. Local snapshots are integrated with the remote using a normal
+merge rather than `pull --rebase`. GitFolder detects unfinished Git operations and
+offers an explicit **Repair & Sync** action that aborts the interrupted operation and
+reattaches the configured branch before retrying.
+
+**Context:** A large `git add` timed out in `project-assets`; the following rebase was
+terminated after its todo entry moved to “done” but before the snapshot was replayed.
+The repository was left detached while the UI could still report it as up to date.
+The old clean-tree fast path also returned before fetching, so remote-only folders did
+not arrive on another Mac.
+
+**Rationale:** Snapshot history does not benefit from rebasing. Merge integration keeps
+already-created snapshots addressable, avoids routine history rewriting, and lets a
+failed conflict be aborted back to an attached, usable branch. Fetch-first status makes
+“Up to date” describe both the working tree and the remote branch.
+
+**Status:** accepted (GITKIT-164 / GITKIT-102).
