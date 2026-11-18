@@ -41,7 +41,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: true
         CODE_SIGN_STYLE: Automatic
-        CLOUDFLARE_OAUTH_CLIENT_ID: ""
+        CLOUDFLARE_OAUTH_CLIENT_ID: "385b6b643b98a3889d570ae7688cb509"
     entitlements:
       path: GitFolder/GitFolder.entitlements
       properties:
