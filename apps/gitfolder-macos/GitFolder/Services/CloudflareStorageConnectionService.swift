@@ -21,6 +21,12 @@ struct CloudflareConnection: Sendable {
 
 @MainActor
 final class CloudflareStorageConnectionService: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static let requestedScopes = [
+        "account-settings.read",
+        "workers-r2.write",
+        "account-api-tokens.write"
+    ]
+
     private var authenticationSession: ASWebAuthenticationSession?
     private let urlSession: URLSession
 
@@ -36,16 +42,12 @@ final class CloudflareStorageConnectionService: NSObject, ASWebAuthenticationPre
         let challenge = Self.base64URL(Data(SHA256.hash(data: Data(verifier.utf8))))
         let state = UUID().uuidString
         let redirectURI = "http://127.0.0.1:53682/oauth/cloudflare"
-        var components = URLComponents(string: "https://dash.cloudflare.com/oauth2/auth")!
-        components.queryItems = [
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "state", value: state),
-            URLQueryItem(name: "code_challenge", value: challenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256")
-        ]
-        guard let authorizationURL = components.url else { throw CloudflareConnectionError.invalidResponse }
+        let authorizationURL = try Self.authorizationURL(
+            clientID: clientID,
+            redirectURI: redirectURI,
+            state: state,
+            challenge: challenge
+        )
         let callbackURL = try await authenticate(at: authorizationURL)
         guard let callback = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
               callback.queryItems?.first(where: { $0.name == "state" })?.value == state,
@@ -106,6 +108,21 @@ final class CloudflareStorageConnectionService: NSObject, ASWebAuthenticationPre
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         NSApp.keyWindow ?? NSApp.windows.first ?? ASPresentationAnchor()
+    }
+
+    static func authorizationURL(clientID: String, redirectURI: String, state: String, challenge: String) throws -> URL {
+        var components = URLComponents(string: "https://dash.cloudflare.com/oauth2/auth")!
+        components.queryItems = [
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "redirect_uri", value: redirectURI),
+            URLQueryItem(name: "scope", value: requestedScopes.joined(separator: " ")),
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "code_challenge", value: challenge),
+            URLQueryItem(name: "code_challenge_method", value: "S256")
+        ]
+        guard let url = components.url else { throw CloudflareConnectionError.invalidResponse }
+        return url
     }
 
     private func authenticate(at url: URL) async throws -> URL {

@@ -4,6 +4,21 @@ import XCTest
 @testable import GitFolder
 
 final class ConfigStoreTests: XCTestCase {
+    @MainActor
+    func testCloudflareAuthorizationRequestsConfiguredPermissions() throws {
+        let url = try CloudflareStorageConnectionService.authorizationURL(
+            clientID: "client-id",
+            redirectURI: "http://127.0.0.1:53682/oauth/cloudflare",
+            state: "state",
+            challenge: "challenge"
+        )
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let scope = try XCTUnwrap(components.queryItems?.first { $0.name == "scope" }?.value)
+
+        XCTAssertEqual(Set(scope.split(separator: " ").map(String.init)), Set(CloudflareStorageConnectionService.requestedScopes))
+        XCTAssertEqual(CloudflareStorageConnectionService.requestedScopes.count, 3)
+    }
+
     func testDefaultConfigKeepsPurchaseMetadataOutOfAppState() {
         let config = GitFolderConfig.empty
 
