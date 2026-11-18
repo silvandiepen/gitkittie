@@ -34,11 +34,15 @@
         },
         {
           "title": "Folder shows \"Needs attention\"",
-          "desc": "There's a Git conflict. Resolve it in your preferred Git client, then resume syncing in GitKittie Folder."
+          "desc": "Open Settings and read the specific recovery message. If a Git operation was interrupted or the branch became detached, use Repair & Sync. File conflicts still need review in your preferred Git client."
         },
         {
           "title": "Changes not appearing on GitHub",
-          "desc": "Check that the folder isn't paused, the sync interval hasn't elapsed yet, and the repository URL is correct. You can force a sync with \"Sync Now\"."
+          "desc": "Check that the folder isn't paused and the repository URL and branch are correct. Sync Now fetches remote changes before committing and pushing local changes."
+        },
+        {
+          "title": "A file is too large to sync",
+          "desc": "GitHub rejects individual files at or above 100 MB. GitKittie Folder lists the affected paths before staging and can add them to .gitignore while leaving the files on your Mac."
         }
       ]
     }
