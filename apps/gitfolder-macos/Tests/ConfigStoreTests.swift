@@ -410,10 +410,11 @@ final class S3StorageServiceTests: XCTestCase {
         )
     }
 
-    func testStorageSettingsDecodeOlderConfigWithoutRegion() throws {
+    func testStorageSettingsDecodeOlderConfigWithoutRegionOrProvider() throws {
         let data = Data(#"{"enabled":true,"endpoint":"https://example.com","bucket":"assets","publicBaseURL":"https://cdn.example.com","minimumFileSizeMB":25,"offloadExtensions":["mov"],"keepDownloadedPatterns":["**/*.md"]}"#.utf8)
         let settings = try JSONDecoder().decode(BucketStorageSettings.self, from: data)
         XCTAssertEqual(settings.region, "auto")
+        XCTAssertEqual(settings.provider, .manual)
     }
 }
 

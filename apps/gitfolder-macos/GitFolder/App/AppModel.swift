@@ -15,6 +15,9 @@ final class AppModel {
     var gitHubLogin: String?
     var isRunningStorage = false
     var storageMessage: String?
+    var cloudflareAccounts: [CloudflareAccount] = []
+    var cloudflareBuckets: [CloudflareBucket] = []
+    var selectedCloudflareAccountID: String?
 
     @ObservationIgnored private let configStore: ConfigStore
     @ObservationIgnored private let syncEngine: GitSyncEngine
@@ -22,6 +25,8 @@ final class AppModel {
     @ObservationIgnored private let gitHubOAuthService: GitHubOAuthService
     @ObservationIgnored private let loginItemService: LoginItemManaging
     @ObservationIgnored private let bucketStorageEngine: BucketStorageEngine
+    @ObservationIgnored private let cloudflareStorageConnectionService: CloudflareStorageConnectionService
+    @ObservationIgnored private var cloudflareAccessToken: String?
     @ObservationIgnored private let userDefaults: UserDefaults
     @ObservationIgnored private var scheduler: Timer?
     @ObservationIgnored private var didLoad = false
@@ -39,6 +44,7 @@ final class AppModel {
         ),
         loginItemService: LoginItemManaging = LoginItemService(),
         bucketStorageEngine: BucketStorageEngine = BucketStorageEngine(),
+        cloudflareStorageConnectionService: CloudflareStorageConnectionService? = nil,
         userDefaults: UserDefaults = .standard
     ) {
         self.configStore = configStore
@@ -47,6 +53,7 @@ final class AppModel {
         self.gitHubOAuthService = gitHubOAuthService
         self.loginItemService = loginItemService
         self.bucketStorageEngine = bucketStorageEngine
+        self.cloudflareStorageConnectionService = cloudflareStorageConnectionService ?? CloudflareStorageConnectionService()
         self.userDefaults = userDefaults
     }
 
@@ -208,6 +215,109 @@ final class AppModel {
             } catch {
                 storageMessage = "Connection failed: \(error.localizedDescription)"
                 lastMessage = storageMessage ?? "Bucket connection failed"
+            }
+        }
+    }
+
+    func connectCloudflare() {
+        guard !isRunningStorage else { return }
+        let clientID = (Bundle.main.object(forInfoDictionaryKey: "CloudflareOAuthClientID") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !clientID.isEmpty, !clientID.contains("$(") else {
+            storageMessage = "Cloudflare login needs the publisher OAuth client ID. Manual connection remains available."
+            if let url = URL(string: "https://dash.cloudflare.com/?to=/:account/oauth-clients") {
+                NSWorkspace.shared.open(url)
+            }
+            return
+        }
+        isRunningStorage = true
+        storageMessage = "Opening Cloudflare…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let connection = try await cloudflareStorageConnectionService.connect(clientID: clientID)
+                cloudflareAccessToken = connection.accessToken
+                cloudflareAccounts = connection.accounts
+                selectedCloudflareAccountID = connection.accounts.first?.id
+                if let accountID = selectedCloudflareAccountID {
+                    cloudflareBuckets = try await cloudflareStorageConnectionService.buckets(accountID: accountID, token: connection.accessToken)
+                }
+                storageMessage = "Connected to Cloudflare. Choose or create an R2 bucket."
+            } catch {
+                storageMessage = "Cloudflare connection failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func selectCloudflareAccount(_ accountID: String) {
+        selectedCloudflareAccountID = accountID
+        guard let token = cloudflareAccessToken else { return }
+        isRunningStorage = true
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                cloudflareBuckets = try await cloudflareStorageConnectionService.buckets(accountID: accountID, token: token)
+            } catch {
+                storageMessage = "Could not load R2 buckets: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func useCloudflareBucket(_ bucket: CloudflareBucket, folderID: UUID) {
+        guard let token = cloudflareAccessToken, let accountID = selectedCloudflareAccountID else { return }
+        isRunningStorage = true
+        storageMessage = "Securing access to \(bucket.name)…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let credentials = try await cloudflareStorageConnectionService.provisionCredentials(
+                    bucket: bucket,
+                    accountID: accountID,
+                    token: token
+                )
+                let stores = storageCredentialStores(folderID: folderID)
+                try stores.accessKey.save(credentials.accessKeyID)
+                try stores.secretKey.save(credentials.secretAccessKey)
+                guard let index = config.folders.firstIndex(where: { $0.id == folderID }) else { return }
+                var settings = config.folders[index].storage ?? .defaults
+                settings.provider = .cloudflare
+                settings.enabled = true
+                settings.bucket = bucket.name
+                settings.region = bucket.jurisdiction == "default" || bucket.jurisdiction == nil ? "auto" : bucket.jurisdiction!
+                let jurisdiction = bucket.jurisdiction.flatMap { $0 == "default" ? nil : $0 }
+                settings.endpoint = "https://\(accountID)\(jurisdiction.map { ".\($0)" } ?? "").r2.cloudflarestorage.com"
+                config.folders[index].storage = settings
+                try configStore.save(config)
+                try writeRepositoryStorageConfig(for: config.folders[index], settings: settings)
+                storageMessage = "Connected to Cloudflare R2 bucket \(bucket.name)"
+            } catch {
+                storageMessage = "Could not connect R2 bucket: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func createCloudflareBucket(name: String, folderID: UUID) {
+        let bucketName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard bucketName.count >= 3,
+              let token = cloudflareAccessToken,
+              let accountID = selectedCloudflareAccountID else {
+            storageMessage = "Enter a bucket name with at least three characters."
+            return
+        }
+        isRunningStorage = true
+        storageMessage = "Creating \(bucketName)…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let bucket = try await cloudflareStorageConnectionService.createBucket(
+                    name: bucketName,
+                    accountID: accountID,
+                    token: token
+                )
+                cloudflareBuckets = try await cloudflareStorageConnectionService.buckets(accountID: accountID, token: token)
+                useCloudflareBucket(bucket, folderID: folderID)
+            } catch {
+                storageMessage = "Could not create R2 bucket: \(error.localizedDescription)"
             }
         }
     }
@@ -379,7 +489,7 @@ final class AppModel {
             version: 1
             storage:
               enabled: \(settings.enabled ? "true" : "false")
-              provider: s3
+              provider: (settings.provider.rawValue)
               endpoint: \(yamlQuoted(settings.endpoint))
               bucket: \(yamlQuoted(settings.bucket))
               region: \(yamlQuoted(settings.region))

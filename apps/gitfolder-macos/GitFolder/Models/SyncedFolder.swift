@@ -121,6 +121,7 @@ struct SyncedFolder: Codable, Identifiable, Equatable, Sendable {
 }
 
 struct BucketStorageSettings: Codable, Equatable, Sendable {
+    var provider: StorageProvider
     var enabled: Bool
     var endpoint: String
     var bucket: String
@@ -131,6 +132,7 @@ struct BucketStorageSettings: Codable, Equatable, Sendable {
     var keepDownloadedPatterns: [String]
 
     init(
+        provider: StorageProvider = .manual,
         enabled: Bool,
         endpoint: String,
         bucket: String,
@@ -140,6 +142,7 @@ struct BucketStorageSettings: Codable, Equatable, Sendable {
         offloadExtensions: [String],
         keepDownloadedPatterns: [String]
     ) {
+        self.provider = provider
         self.enabled = enabled
         self.endpoint = endpoint
         self.bucket = bucket
@@ -151,11 +154,12 @@ struct BucketStorageSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case enabled, endpoint, bucket, region, publicBaseURL, minimumFileSizeMB, offloadExtensions, keepDownloadedPatterns
+        case provider, enabled, endpoint, bucket, region, publicBaseURL, minimumFileSizeMB, offloadExtensions, keepDownloadedPatterns
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try container.decodeIfPresent(StorageProvider.self, forKey: .provider) ?? .manual
         enabled = try container.decode(Bool.self, forKey: .enabled)
         endpoint = try container.decode(String.self, forKey: .endpoint)
         bucket = try container.decode(String.self, forKey: .bucket)
@@ -167,6 +171,7 @@ struct BucketStorageSettings: Codable, Equatable, Sendable {
     }
 
     static let defaults = BucketStorageSettings(
+        provider: .manual,
         enabled: false,
         endpoint: "https://8cef251b5fdcf6c6f63db98b7aa49f9a.r2.cloudflarestorage.com",
         bucket: "project-assets",
@@ -176,6 +181,20 @@ struct BucketStorageSettings: Codable, Equatable, Sendable {
         offloadExtensions: ["psd", "psb", "mov", "mp4", "blend", "c4d", "zip"],
         keepDownloadedPatterns: ["**/*.md", "Tasks/**"]
     )
+}
+
+enum StorageProvider: String, Codable, CaseIterable, Equatable, Sendable {
+    case cloudflare
+    case aws
+    case manual
+
+    var title: String {
+        switch self {
+        case .cloudflare: "Cloudflare"
+        case .aws: "Amazon Web Services"
+        case .manual: "Manual"
+        }
+    }
 }
 
 enum AuthMode: String, Codable, CaseIterable, Equatable, Sendable {

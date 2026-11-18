@@ -824,29 +824,62 @@ private struct BucketSettingsRow: View {
 
             SettingsDivider()
 
-            StorageFieldRow(systemImage: "network", title: "API endpoint") {
-                TextField("https://account.r2.cloudflarestorage.com", text: $settings.endpoint)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 470)
+            StorageFieldRow(systemImage: "building.2", title: "Provider") {
+                Picker("Provider", selection: $settings.provider) {
+                    Text("Cloudflare R2").tag(StorageProvider.cloudflare)
+                    Text("Amazon S3").tag(StorageProvider.aws)
+                    Text("Manual").tag(StorageProvider.manual)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 470)
             }
 
             SettingsDivider()
 
-            StorageFieldRow(systemImage: "shippingbox", title: "Bucket") {
-                TextField("project-assets", text: $settings.bucket)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 470)
+            if settings.provider == .cloudflare {
+                cloudflareConnectionSection
+                SettingsDivider()
+            } else if settings.provider == .aws {
+                StorageFieldRow(systemImage: "person.crop.circle.badge.checkmark", title: "AWS account") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button("Connect AWS", systemImage: "person.badge.key.fill") {
+                            appModel.storageMessage = "AWS connection uses IAM Identity Center. Add your organization’s access portal URL, or choose Manual for access keys."
+                        }
+                        Text("AWS has no universal consumer login; organization accounts connect through IAM Identity Center.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: 470, alignment: .leading)
+                }
+                SettingsDivider()
             }
 
-            SettingsDivider()
+            if settings.provider == .manual {
+                StorageFieldRow(systemImage: "network", title: "API endpoint") {
+                    TextField("https://account.r2.cloudflarestorage.com", text: $settings.endpoint)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 470)
+                }
 
-            StorageFieldRow(systemImage: "map", title: "Region") {
-                TextField("auto", text: $settings.region)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 470)
+                SettingsDivider()
+
+                StorageFieldRow(systemImage: "shippingbox", title: "Bucket") {
+                    TextField("project-assets", text: $settings.bucket)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 470)
+                }
+
+                SettingsDivider()
+
+                StorageFieldRow(systemImage: "map", title: "Region") {
+                    TextField("auto", text: $settings.region)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 470)
+                }
+
+                SettingsDivider()
             }
-
-            SettingsDivider()
 
             StorageFieldRow(systemImage: "globe", title: "Public domain") {
                 TextField("https://project-data.hakobs.com", text: $settings.publicBaseURL)
@@ -856,21 +889,23 @@ private struct BucketSettingsRow: View {
 
             SettingsDivider()
 
-            StorageFieldRow(systemImage: "key", title: "Access key ID") {
-                SecureField(appModel.hasStorageCredentials(folderID: folder.id) ? "Saved in Keychain" : "R2 or S3 access key", text: $accessKey)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 470)
+            if settings.provider == .manual {
+                StorageFieldRow(systemImage: "key", title: "Access key ID") {
+                    SecureField(appModel.hasStorageCredentials(folderID: folder.id) ? "Saved in Keychain" : "R2 or S3 access key", text: $accessKey)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 470)
+                }
+
+                SettingsDivider()
+
+                StorageFieldRow(systemImage: "lock", title: "Secret access key") {
+                    SecureField(appModel.hasStorageCredentials(folderID: folder.id) ? "Saved in Keychain" : "Secret access key", text: $secretKey)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 470)
+                }
+
+                SettingsDivider()
             }
-
-            SettingsDivider()
-
-            StorageFieldRow(systemImage: "lock", title: "Secret access key") {
-                SecureField(appModel.hasStorageCredentials(folderID: folder.id) ? "Saved in Keychain" : "Secret access key", text: $secretKey)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 470)
-            }
-
-            SettingsDivider()
 
             StorageFieldRow(systemImage: "arrow.up.doc", title: "Offload from") {
                 Stepper("\(settings.minimumFileSizeMB) MB", value: $settings.minimumFileSizeMB, in: 1...10_000, step: 5)
@@ -905,11 +940,13 @@ private struct BucketSettingsRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-                Link(
-                    "Create Cloudflare R2 key",
-                    destination: URL(string: "https://dash.cloudflare.com/?to=/:account/r2/api-tokens")!
-                )
-                .font(.caption)
+                if settings.provider == .manual {
+                    Link(
+                        "Create Cloudflare R2 key",
+                        destination: URL(string: "https://dash.cloudflare.com/?to=/:account/r2/api-tokens")!
+                    )
+                    .font(.caption)
+                }
 
                 Spacer()
 
@@ -952,6 +989,62 @@ private struct BucketSettingsRow: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 18)
                 .padding(.bottom, 16)
+        }
+    }
+
+    @ViewBuilder
+    private var cloudflareConnectionSection: some View {
+        StorageFieldRow(systemImage: "cloud.fill", title: "Cloudflare") {
+            VStack(alignment: .leading, spacing: 10) {
+                if appModel.cloudflareAccounts.isEmpty {
+                    Button("Connect Cloudflare", systemImage: "person.badge.key.fill") {
+                        appModel.connectCloudflare()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Text("Log in in your browser, then choose or create an R2 bucket.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("Account", selection: Binding(
+                        get: { appModel.selectedCloudflareAccountID ?? "" },
+                        set: { appModel.selectCloudflareAccount($0) }
+                    )) {
+                        ForEach(appModel.cloudflareAccounts) { account in
+                            Text(account.name).tag(account.id)
+                        }
+                    }
+                    .labelsHidden()
+
+                    if !appModel.cloudflareBuckets.isEmpty {
+                        ForEach(appModel.cloudflareBuckets) { bucket in
+                            HStack {
+                                Label(bucket.name, systemImage: "shippingbox")
+                                Spacer()
+                                Button("Use Bucket") {
+                                    settings.bucket = bucket.name
+                                    settings.enabled = true
+                                    settings.region = bucket.jurisdiction == "default" || bucket.jurisdiction == nil ? "auto" : bucket.jurisdiction!
+                                    if let accountID = appModel.selectedCloudflareAccountID {
+                                        let jurisdiction = bucket.jurisdiction.flatMap { $0 == "default" ? nil : $0 }
+                                        settings.endpoint = "https://\(accountID)\(jurisdiction.map { ".\($0)" } ?? "").r2.cloudflarestorage.com"
+                                    }
+                                    appModel.useCloudflareBucket(bucket, folderID: folder.id)
+                                }
+                            }
+                        }
+                    }
+
+                    HStack {
+                        TextField("new-bucket-name", text: $settings.bucket)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Create Bucket") {
+                            appModel.createCloudflareBucket(name: settings.bucket, folderID: folder.id)
+                        }
+                        .disabled(settings.bucket.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+                    }
+                }
+            }
+            .frame(maxWidth: 470, alignment: .leading)
         }
     }
 
