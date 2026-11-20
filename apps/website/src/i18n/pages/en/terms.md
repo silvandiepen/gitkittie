@@ -1,4 +1,4 @@
-These terms govern your use of the GitKittie apps — **GitKittie Folder**, **GitKittie Kanban** and **GitKittie Bud** (the "Software"). By downloading or using the Software you agree to these terms. Purchases and downloads made through the Mac App Store are additionally subject to Apple's terms.
+These terms govern your use of the GitKittie apps — **GitKittie Folder**, **GitKittie Tasks** and **GitKittie Bud** (the "Software"). By downloading or using the Software you agree to these terms. Purchases and downloads made through the Mac App Store are additionally subject to Apple's terms.
 
 ## Licence
 

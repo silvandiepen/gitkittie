@@ -81,7 +81,7 @@ function marker(i: number): string {
         </div>
       </section>
 
-      <!-- GitKittie Kanban -->
+      <!-- GitKittie Tasks (namespace: gitkanban) -->
       <section class="support__app" data-app="gitkanban">
         <div class="mkt__container support__app-inner">
           <h2 class="support__app-heading">{{ t.gitkanban.heading }}</h2>

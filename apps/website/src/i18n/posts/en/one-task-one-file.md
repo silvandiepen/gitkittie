@@ -159,7 +159,7 @@ what to do next. A card that lies about its state is worse than an empty one.
 ## And then you want to look at it
 
 All of this is still a directory of text files, which is the right storage and
-the wrong interface. [GitKittie Kanban](/gitkanban) reads exactly this format —
+the wrong interface. [GitKittie Tasks](/gitkanban) reads exactly this format —
 the lane config, the frontmatter, the merged vocabularies — and draws it as a
 board on your Mac and iPhone. Dragging a card writes the frontmatter and moves
 the file; the file stays the truth.

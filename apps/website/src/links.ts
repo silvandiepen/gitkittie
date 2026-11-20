@@ -14,7 +14,7 @@ export const gitfolderMacAppStoreUrl = `${gitfolderAppStoreUrl}?mt=12`
 export const appStoreUrl = gitfolderMacAppStoreUrl
 
 /**
- * GitKittie Kanban — like Folder, one App Store record covering macOS and iOS
+ * GitKittie Tasks (formerly GitKittie Kanban) — like Folder, one App Store record covering macOS and iOS
  * since the Mac build shipped at 1.0. Same `?mt=12` trick for the Mac listing.
  */
 export const gitkanbanAppStoreUrl = 'https://apps.apple.com/app/id6792793088'

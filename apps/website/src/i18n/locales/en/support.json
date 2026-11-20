@@ -1,11 +1,11 @@
 {
   "meta": {
     "title": "Support — GitKittie",
-    "description": "Support and troubleshooting for GitKittie Folder, GitKittie Kanban and GitKittie Bud. Most issues come down to git, token access, repository URLs, or folder permissions."
+    "description": "Support and troubleshooting for GitKittie Folder, GitKittie Tasks and GitKittie Bud. Most issues come down to git, token access, repository URLs, or folder permissions."
   },
   "eyebrow": "Help",
   "title": "Support",
-  "intro": "GitKittie Folder, GitKittie Kanban and GitKittie Bud are small, local-first apps. Most issues come down to git, token access, repository URLs, or folder permissions. Pick your app below.",
+  "intro": "GitKittie Folder, GitKittie Tasks and GitKittie Bud are small, local-first apps. Most issues come down to git, token access, repository URLs, or folder permissions. Pick your app below.",
   "gitfolder": {
     "heading": "GitKittie Folder",
     "setup": {
@@ -44,10 +44,10 @@
     }
   },
   "gitkanban": {
-    "heading": "GitKittie Kanban",
+    "heading": "GitKittie Tasks",
     "title": "Getting connected",
-    "body": "GitKittie Kanban is on the Mac App Store and the App Store for iPhone and iPad — one record, so the download button gives you the build for the device you're on. Open the demo board to try it without an account, or connect GitHub, GitLab.com or a self-hosted GitLab. If a repository doesn't show up, check that the token you pasted has repository read and write scope, and that self-hosted GitLab was given its server URL. Anything else — a board that won't load, a card that won't save — send a message and it lands against GitKittie Kanban.",
-    "action": "Message about GitKittie Kanban"
+    "body": "GitKittie Tasks is on the Mac App Store and the App Store for iPhone and iPad — one record, so the download button gives you the build for the device you're on. Open the demo board to try it without an account, or connect GitHub, GitLab.com or a self-hosted GitLab. If a repository doesn't show up, check that the token you pasted has repository read and write scope, and that self-hosted GitLab was given its server URL. If live updates won't turn on, your account needs admin access to the repository on GitHub, or the Maintainer role on GitLab. Anything else — a board that won't load, a card that won't save, an agent that can't connect — send a message and it lands against GitKittie Tasks.",
+    "action": "Message about GitKittie Tasks"
   },
   "gitbud": {
     "heading": "GitKittie Bud",

@@ -1,24 +1,24 @@
 {
   "meta": {
-    "title": "GitKittie Kanban — Your kanban board is a git repo",
-    "description": "GitKittie Kanban is a kanban board whose only data source is a git repo of markdown files. One file = one card, history from git, agent-friendly. On Mac, iPhone and iPad now."
+    "title": "GitKittie Tasks — Your task board is a git repo",
+    "description": "GitKittie Tasks is a task board whose only data source is a git repo of markdown files. One file = one card, history from git, and agents can work on it through the app. On Mac, iPhone and iPad."
   },
   "hero": {
     "badge": "On Mac, iPhone & iPad",
-    "title": "Your kanban board *is a git repo.*",
-    "subtitle": "GitKittie Kanban is a kanban board whose only data source is a git repo of markdown files. Every edit is a change to a file and a commit; sync is a pull and a push against your own remote. No backend, no accounts.",
+    "title": "Your task board *is a git repo.*",
+    "subtitle": "GitKittie Tasks is a kanban board whose only data source is a git repo of markdown files. Every edit is a change to a file and a commit, written straight to your own remote. No backend, no accounts.",
     "download": "Download on the Mac App Store",
     "downloadIos": "Also on iPhone & iPad"
   },
   "features": {
     "eyebrow": "How it works",
     "title": "A board made of *plain files.*",
-    "subtitle": "The board logic is an open TypeScript core, shared by the Mac, iPhone and iPad apps.",
+    "subtitle": "The board is a folder of markdown you own. The Mac, iPhone and iPad apps read and write the same files.",
     "items": [
       {
         "icon": "columns",
         "title": "Your board is a git repo",
-        "desc": "Point it at a repo and folder of markdown files. There is no backend and no hosted database — the board is a folder you own."
+        "desc": "Point it at a repo and a folder of markdown files. There is no backend and no hosted database — the board is a folder you own."
       },
       {
         "icon": "file",
@@ -27,23 +27,53 @@
       },
       {
         "icon": "git-branch",
-        "title": "A column is a field",
-        "desc": "Moving a card changes one line in one file (status: todo → done). The file never moves, so git history stays continuous and diffs stay tiny."
+        "title": "A lane is a folder",
+        "desc": "Moving a card moves its file into the lane's folder and updates one line (status: todo → done). Folder and status always agree, so the repo reads the same as the board."
       },
       {
         "icon": "history",
         "title": "History from git",
-        "desc": "Every card's journey — who moved it and when — is read straight from git log. No separate activity database to trust."
-      },
-      {
-        "icon": "bot",
-        "title": "Agent-friendly by design",
-        "desc": "Because the board is just files, agents, CI, and scripts write cards and push like any other client. A human curates; a fleet populates."
+        "desc": "Every change is a commit in your repository. Who changed a card and when is in the history you already have, not in a separate activity database."
       },
       {
         "icon": "check",
         "title": "Validated & lenient",
-        "desc": "Cards are validated against a board config with root → project inheritance, while unknown frontmatter round-trips untouched."
+        "desc": "Cards are checked against a board config with root → project inheritance, while frontmatter the app does not know is kept as it is. A card with a broken header still shows its title."
+      },
+      {
+        "icon": "file",
+        "title": "From a screenshot to a task",
+        "desc": "On iPhone and iPad, share a screenshot or photo to Tasks. Pick the project, mark the part that is wrong, add a comment, and the task gets a drafted title, description, type and priority that you can change."
+      },
+      {
+        "icon": "clock",
+        "title": "Add now, send in the background",
+        "desc": "On iPhone and iPad a new task or an edit is saved at once and sent to your repository in the background. Without a connection it waits and goes out when you are back online."
+      },
+      {
+        "icon": "users",
+        "title": "See what changed",
+        "desc": "Cards show when they were last updated and which ones changed since you looked. On iPhone and iPad, sort by unseen, date or priority; on the Mac, the sidebar counts the updates per board."
+      },
+      {
+        "icon": "refresh",
+        "title": "Live updates",
+        "desc": "Turn on live updates for a repository on GitHub or GitLab and a push shows up on the open board within a couple of seconds, without the app polling."
+      },
+      {
+        "icon": "folder",
+        "title": "Boards that look like yours",
+        "desc": "On the Mac, give a board a name, an icon and a color. They are saved in the board's own README, so they travel with the repository."
+      },
+      {
+        "icon": "menu",
+        "title": "Edit where you read",
+        "desc": "On the Mac a task opens in a side panel with no edit mode: the title and the Markdown description are editable in place, the lane, priority and assignee are menus, and a swipe closes it."
+      },
+      {
+        "icon": "bot",
+        "title": "Agents work through the app",
+        "desc": "On the Mac, turn on Agent Access and Claude Code, Codex and other agents can list, create, claim and update cards through Tasks. They need no copy of the repository, and they get the board's own rules with it."
       }
     ]
   },
@@ -51,7 +81,7 @@
     "badge": "Now on Mac",
     "title": "The same board, on every device",
     "text": "The Mac app is on the Mac App Store alongside the iPhone and iPad app — one purchase, one board, the same repository. Connect GitHub, GitLab.com or a self-hosted GitLab with a token, sign in to GitHub without one, or open the built-in demo board and try the whole thing without an account.",
-    "support": "Ask about GitKittie Kanban"
+    "support": "Ask about GitKittie Tasks"
   },
   "cta": {
     "eyebrow": "Available now",

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * @view GitKanbanPage
- * GitKittie Kanban product page — shipped on Mac, iPhone and iPad off one App
+ * GitKittie Tasks product page (the app formerly named GitKittie Kanban; the route,
+ * namespace and component keep the gitkanban name) — shipped on Mac, iPhone and iPad off one App
  * Store record, so both download buttons point at the same id with and without
  * `?mt=12`. Themed to the orange app icon background via data-app="gitkanban".
  */
@@ -38,7 +39,7 @@ usePageMeta({ title: t.meta.title, description: t.meta.description })
         :badge="t.hero.badge"
         :title="t.hero.title"
         :subtitle="t.hero.subtitle"
-        mark-title="GitKittie Kanban"
+        mark-title="GitKittie Tasks"
       >
         <a :href="gitkanbanMacAppStoreUrl" class="mkt__btn" target="_blank" rel="noopener">{{ t.hero.download }}</a>
         <a :href="gitkanbanAppStoreUrl" class="mkt__btn mkt__btn--ghost" target="_blank" rel="noopener">{{ t.hero.downloadIos }}</a>

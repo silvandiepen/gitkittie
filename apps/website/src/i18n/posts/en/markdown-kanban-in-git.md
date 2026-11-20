@@ -113,9 +113,9 @@ listing is not a substitute.
 
 So I built the view.
 
-## GitKittie Kanban
+## GitKittie Tasks
 
-[GitKittie Kanban](/gitkanban) reads the markdown and draws the board. It does
+[GitKittie Tasks](/gitkanban) reads the markdown and draws the board. It does
 not become the source of truth — the files stay the source of truth.
 
 - Move a card, and the markdown file moves.

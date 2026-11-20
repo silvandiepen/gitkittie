@@ -1,14 +1,14 @@
 {
   "meta": {
     "title": "GitKittie — Small apps built on your own git",
-    "description": "GitKittie makes GitKittie Folder, GitKittie Kanban and GitKittie Bud: small, local-first apps for Mac, iPhone and iPad that use your own git — GitHub, GitLab, or wherever your repositories already live. No accounts, no servers."
+    "description": "GitKittie makes GitKittie Folder, GitKittie Tasks and GitKittie Bud: small, local-first apps for Mac, iPhone and iPad that use your own git — GitHub, GitLab, or wherever your repositories already live. No accounts, no servers."
   },
   "hero": {
     "eyebrow": "The GitKittie family",
     "title": "Small apps, built on *your own git.*",
     "subtitle": "Three focused, local-first apps that use the git setup you already have — GitHub, GitLab, or wherever your repositories live. No accounts, no servers, no lock-in.",
     "ctaGitfolder": "Explore GitKittie Folder",
-    "ctaGitkanban": "Explore GitKittie Kanban",
+    "ctaGitkanban": "Explore GitKittie Tasks",
     "ctaGitbud": "Explore GitKittie Bud"
   },
   "statement": {
@@ -35,15 +35,15 @@
       },
       {
         "app": "gitkanban",
-        "name": "GitKittie Kanban",
-        "tagline": "A kanban board whose only data source is a git repo of markdown.",
+        "name": "GitKittie Tasks",
+        "tagline": "A task board whose only data source is a git repo of markdown.",
         "points": [
           "Your board is a git repo of markdown files",
-          "One file = one card; history comes from git",
-          "Agents and scripts can populate it headlessly"
+          "Share a screenshot on iPhone and it becomes a task",
+          "Agents work on the board through the Mac app"
         ],
         "to": "/gitkanban",
-        "cta": "Explore GitKittie Kanban",
+        "cta": "Explore GitKittie Tasks",
         "badge": "Mac, iPhone & iPad"
       },
       {
@@ -91,8 +91,8 @@
   "cta": {
     "eyebrow": "No accounts. No servers.",
     "title": "Own your data. *Keep owning it.*",
-    "subtitle": "GitKittie Folder and GitKittie Kanban are on the Mac App Store and the App Store. GitKittie Bud is in development.",
+    "subtitle": "GitKittie Folder and GitKittie Tasks are on the Mac App Store and the App Store. GitKittie Bud is in development.",
     "primary": "Explore GitKittie Folder",
-    "secondary": "See GitKittie Kanban"
+    "secondary": "See GitKittie Tasks"
   }
 }

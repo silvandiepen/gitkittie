@@ -13,9 +13,9 @@
           "description": "Automatic version history for your folders"
         },
         {
-          "label": "GitKittie Kanban",
+          "label": "GitKittie Tasks",
           "to": "/gitkanban",
-          "description": "A kanban board that is a git repo of markdown"
+          "description": "A task board that is a git repo of markdown"
         },
         {
           "label": "GitKittie Bud",
@@ -52,7 +52,7 @@
             "to": "/gitfolder"
           },
           {
-            "label": "GitKittie Kanban",
+            "label": "GitKittie Tasks",
             "to": "/gitkanban"
           },
           {
