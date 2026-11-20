@@ -57,7 +57,33 @@ public struct ProviderConnection {
 @MainActor
 @Observable
 public final class AppModel {
-    public init() {}
+    /// Storage private to the running app (macOS, tests).
+    public init() {
+        defaults = .standard
+        keychain = KeychainService(service: Bundle.main.bundleIdentifier ?? "app.hakobs.gitkanban")
+        legacyKeychain = nil
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "app.hakobs.gitkanban", isDirectory: true)
+        outbox = Outbox(directory: support.appendingPathComponent("Outbox", isDirectory: true))
+        readCache = ReadCache(directory: support.appendingPathComponent("ReadCache", isDirectory: true))
+    }
+
+    /// Storage shared through an App Group, so the app and its share extension see the
+    /// same boards, connection and token. `migratesLegacyStorage` is for the app itself:
+    /// it moves what an earlier version kept in its private defaults and keychain item.
+    public init(appGroup: String, keychainService: String, migratesLegacyStorage: Bool) {
+        defaults = UserDefaults(suiteName: appGroup) ?? .standard
+        keychain = KeychainService(service: keychainService, accessGroup: appGroup)
+        legacyKeychain = migratesLegacyStorage
+            ? KeychainService(service: Bundle.main.bundleIdentifier ?? keychainService) : nil
+        // The outbox lives in the group container so a write saved by the share extension
+        // is sent by the app if the extension is closed first. Outside a real App Group
+        // (tests) it falls back to a folder named after the suite.
+        let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+            ?? FileManager.default.temporaryDirectory.appendingPathComponent(appGroup, isDirectory: true)
+        outbox = Outbox(directory: container.appendingPathComponent("Outbox", isDirectory: true))
+        readCache = ReadCache(directory: container.appendingPathComponent("ReadCache", isDirectory: true))
+    }
 
     // MARK: Connection
     public var connection: ProviderConnection?
@@ -78,7 +104,15 @@ public final class AppModel {
     public var selectedProject: BoardProject?
     public var board: LoadedBoard?
     public var isLoadingBoard = false
+    /// Set to ask the board screen for the open board's full settings (lanes, priorities, members).
+    public var wantsProjectSettings = false
     public var isSaving = false
+
+    // MARK: Agent access
+    /// The port the agent server is listening on; `nil` when it is not running.
+    public var agentServerPort: Int?
+    /// Why the agent server is not running although it is turned on.
+    public var agentServerError: String?
 
     // MARK: Presentation
     public var selectedCard: Card?
@@ -130,37 +164,158 @@ public final class AppModel {
     public var isConnected: Bool { connection != nil }
 
     // MARK: Persistence
-    @ObservationIgnored private let keychain = KeychainService(
-        service: Bundle.main.bundleIdentifier ?? "app.hakobs.gitkanban"
-    )
-    @ObservationIgnored private let defaults = UserDefaults.standard
+    @ObservationIgnored private let keychain: KeychainService
+    /// The pre-App-Group keychain item, read once to migrate (and as a fallback).
+    @ObservationIgnored private let legacyKeychain: KeychainService?
+    @ObservationIgnored let defaults: UserDefaults
+    /// The MCP server agents connect to (see `AppModel+Agents.swift`).
+    @ObservationIgnored var agentServer: MCPHTTPServer?
+    @ObservationIgnored private let storageMigratedKey = "gitkanban.storageMigratedToGroup"
     @ObservationIgnored private let connectionKey = "gitkanban.connection"
-    @ObservationIgnored private let addedReposKey = "gitkanban.addedReposV2"
+    @ObservationIgnored let addedReposKey = "gitkanban.addedReposV2"
     @ObservationIgnored private let activeRepoKey = "gitkanban.activeRepo"
     @ObservationIgnored private let activeBoardKey = "gitkanban.activeBoard"
     @ObservationIgnored private let aiProviderKey = "gitkanban.aiProvider"
     @ObservationIgnored private let aiModelKey = "gitkanban.aiModel"
     @ObservationIgnored private let aiAPIKeyKey = "gitkanban.aiAPIKey"
 
-    @ObservationIgnored private var source: (any BoardWritable)?
+    @ObservationIgnored var source: (any BoardWritable)?
     /// True when viewing the offline in-memory demo board (no provider connection).
     public var isDemo = false
+
+    // MARK: Folders & review state (see AppModel+Folders.swift)
+
+    /// Review requests for the open board's project (empty when it has no `review_path` folder).
+    public var reviews: [ReviewRequest] = []
+    /// The source-relative folder the open board's reviews come from, if configured.
+    public var reviewFolder: String?
+    public var isLoadingReviews = false
+    /// Ids of the cards in the selected project that have files in `attachments/<id>/`.
+    public internal(set) var attachmentCardIDs: Set<String> = []
+    /// The signed-in identity reported by a folder server (`Tailscale-User-Login`).
+    public var serverLogin: String?
+    @ObservationIgnored var folderSourceCache: [String: any BoardWritable] = [:]
+    @ObservationIgnored var watchTask: Task<Void, Never>?
+
+    /// Set while a board is open transiently (the share extension): it was loaded without
+    /// its cards, and this listing stands in for them when a free file name is needed.
+    @ObservationIgnored var transientListing: BoardListing?
+    /// Whether the transiently opened board's cards have been loaded after all.
+    public private(set) var hasTransientCards = false
+
+    /// A move to another project that is waiting for the id question (see AppModel+MoveProject.swift).
+    public var pendingProjectMove: ProjectMovePlan?
+
+    // MARK: Outbox (see AppModel+Sync.swift and Outbox.swift)
+
+    @ObservationIgnored let outbox: Outbox
+    @ObservationIgnored let readCache: ReadCache
+    /// Writes that are waiting to be sent, being sent, or were refused. Oldest first.
+    public internal(set) var syncItems: [OutboxOperation] = []
+    /// The most recent writes that went out.
+    public internal(set) var syncReceipts: [OutboxReceipt] = []
+    public internal(set) var isSyncing = false
+
+    // MARK: Seen state & sorting (see AppModel+Seen.swift)
+
+    /// How cards are ordered inside a lane or stage.
+    public var cardSort: CardSort = .board {
+        didSet { defaults.set(cardSort.rawValue, forKey: "gitkanban.cardSort") }
+    }
+    /// When each card was last opened on this device (key = boardKey|cardID).
+    public internal(set) var seenCards: [String: Date] = [:]
+    /// When each board was first opened (or last marked all seen); older updates count as seen.
+    public internal(set) var seenBaselines: [String: Date] = [:]
+    /// Where each board's card files were when it was last looked at (file name → lane id).
+    @ObservationIgnored var boardSnapshots: [String: [String: String]] = [:]
+    /// Listing-based summaries for the boards list (key = repoID|folder).
+    public internal(set) var boardSummaries: [String: BoardSummary] = [:]
 
     // MARK: - Lifecycle
 
     public func restore() async {
         defer { isRestoring = false }
+        migrateLegacyStorageIfNeeded()
         loadAddedRepos()
         loadAIConfig()
+        loadSeenState()
+        await reconnect(loadRepositories: true)
+        await refreshSyncItems()
+        Task { await flushOutbox() }
+        await reopenLastBoard()
+    }
+
+    /// Restore just enough to write a card from outside the app (the share extension):
+    /// the added boards and the provider connection, without the repo list or reopening
+    /// the last board.
+    public func restoreForSharing() async {
+        defer { isRestoring = false }
+        loadAddedRepos()
+        loadAIConfig()
+        await reconnect(loadRepositories: false)
+    }
+
+    /// The board that was open last, if it is still added.
+    public var lastOpenedBoard: (repo: AddedRepo, folder: String)? {
+        guard let savedRepo = defaults.string(forKey: activeRepoKey),
+              let repo = addedRepos.first(where: { $0.fullName == savedRepo }),
+              let folder = defaults.string(forKey: activeBoardKey),
+              repo.boards.contains(where: { $0.folder == folder }) else { return nil }
+        return (repo, folder)
+    }
+
+    private func reconnect(loadRepositories: Bool) async {
         guard let data = defaults.data(forKey: connectionKey),
               let stored = try? JSONDecoder().decode(StoredConnection.self, from: data),
-              let token = ((try? keychain.load()) ?? nil)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !token.isEmpty else { return }
-        await connect(choice: stored.choice, serverURL: stored.serverURL, token: token, persist: false)
-        // Reopen the last board so relaunching lands where you left off.
-        if isConnected,
-           let savedRepo = defaults.string(forKey: activeRepoKey),
+              let token = storedToken() else { return }
+        // A connection restored before: trust what was stored and start working right
+        // away, online or not. A token that stopped being valid shows up on first use.
+        if let login = stored.login, let (instance, provider) = Self.provider(for: stored.choice, serverURL: stored.serverURL) {
+            connection = ProviderConnection(choice: stored.choice, instance: instance, provider: provider, token: token, login: login)
+            if loadRepositories { Task { await loadRepos() } }
+            return
+        }
+        await connect(choice: stored.choice, serverURL: stored.serverURL, token: token,
+                      persist: false, loadRepositories: loadRepositories)
+    }
+
+    private func storedToken() -> String? {
+        for store in [keychain, legacyKeychain].compactMap({ $0 }) {
+            if let token = ((try? store.load()) ?? nil)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !token.isEmpty { return token }
+        }
+        return nil
+    }
+
+    /// Move what an earlier version kept in the app's private defaults and keychain item
+    /// into the shared App Group storage. Runs once; an existing shared value always wins.
+    /// The legacy token is only removed after the shared copy is written, and
+    /// `storedToken()` still falls back to it, so a failed move never signs anyone out.
+    private func migrateLegacyStorageIfNeeded() {
+        guard let legacyKeychain, defaults !== UserDefaults.standard,
+              !defaults.bool(forKey: storageMigratedKey) else { return }
+        let legacyDefaults = UserDefaults.standard
+        for key in [connectionKey, addedReposKey, activeRepoKey, activeBoardKey,
+                    aiProviderKey, aiModelKey, aiAPIKeyKey] {
+            if defaults.object(forKey: key) == nil, let value = legacyDefaults.object(forKey: key) {
+                defaults.set(value, forKey: key)
+            }
+        }
+        if let token = (try? legacyKeychain.load()) ?? nil, !token.isEmpty {
+            if ((try? keychain.load()) ?? nil) == nil {
+                do { try keychain.save(token) } catch { return }  // retry on the next launch
+            }
+            try? legacyKeychain.delete()
+        }
+        defaults.set(true, forKey: storageMigratedKey)
+    }
+
+    /// Reopen the last board so relaunching lands where you left off. Folder entries
+    /// reopen without a provider connection.
+    private func reopenLastBoard() async {
+        if let savedRepo = defaults.string(forKey: activeRepoKey),
            let repo = addedRepos.first(where: { $0.fullName == savedRepo }),
+           repo.kind.isFolder || isConnected,
            let folder = defaults.string(forKey: activeBoardKey),
            repo.boards.contains(where: { $0.folder == folder }) {
             await openBoard(repo, folder: folder)
@@ -169,7 +324,7 @@ public final class AppModel {
 
     // MARK: - Repos & boards
 
-    private func persistAddedRepos() {
+    func persistAddedRepos() {
         if let data = try? JSONEncoder().encode(addedRepos) { defaults.set(data, forKey: addedReposKey) }
     }
     private func loadAddedRepos() {
@@ -217,26 +372,31 @@ public final class AppModel {
         persistAddedRepos()
     }
 
-    /// A file source rooted at a repo's root (no subpath — boards are addressed by folder).
-    private func makeSource(for repo: AddedRepo) -> GitPontFileSource? {
-        guard let connection else { return nil }
+    /// A file source rooted at a repo's (or folder's) root — boards are addressed by folder.
+    private func makeSource(for repo: AddedRepo) -> (any BoardWritable)? {
+        if repo.kind.isFolder { return folderSource(for: repo) }
+        guard let remote = remoteSource(for: repo) else { return nil }
+        return OutboxSource(base: remote, outbox: outbox, repoKey: repo.id, branch: repo.branch, cache: readCache) { [weak self] in
+            Task { @MainActor in self?.outboxDidChange() }
+        }
+    }
+
+    /// The provider itself, with nothing in between: what the outbox sends through.
+    func remoteSource(for repo: AddedRepo) -> (any BoardWritable)? {
+        guard !repo.kind.isFolder, let connection else { return nil }
         return GitPontFileSource(
             provider: connection.provider, instance: connection.instance,
             owner: repo.namespace, repo: repo.name, branch: repo.branch, token: connection.token)
     }
 
-    /// Cached total task counts per board (key = repoID|folder), for the boards list.
-    public var boardCounts: [String: Int] = [:]
+    public func boardCount(_ repo: AddedRepo, _ folder: String) -> Int? { boardSummaries["\(repo.id)|\(folder)"]?.total }
 
-    public func boardCount(_ repo: AddedRepo, _ folder: String) -> Int? { boardCounts["\(repo.id)|\(folder)"] }
-
-    /// Lazily count a board's tasks for the boards list (once, then cached).
+    /// Lazily summarize a board for the boards list (once per launch, then cached).
     public func loadBoardCount(_ repo: AddedRepo, _ folder: String) async {
-        let key = "\(repo.id)|\(folder)"
-        guard boardCounts[key] == nil, let source = makeSource(for: repo) else { return }
-        let count = (try? await RemoteBoardStore.taskCount(source: source, folder: folder)) ?? 0
-        boardCounts[key] = count
+        await loadBoardSummary(repo, folder, force: false)
     }
+
+    func source(for repo: AddedRepo) -> (any BoardWritable)? { makeSource(for: repo) }
 
     /// The subfolders under a repo-relative path (`""` = repo root) — for browsing to
     /// pick board folders yourself, no scanning/heuristics.
@@ -304,7 +464,8 @@ public final class AppModel {
     // MARK: - Connect
 
     /// Validate a token against the chosen provider, then load its repositories.
-    public func connect(choice: ProviderChoice, serverURL rawServerURL: String?, token rawToken: String, persist: Bool = true) async {
+    public func connect(choice: ProviderChoice, serverURL rawServerURL: String?, token rawToken: String,
+                        persist: Bool = true, loadRepositories: Bool = true) async {
         let token = rawToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else { errorMessage = "Enter a personal access token."; return }
 
@@ -312,45 +473,46 @@ public final class AppModel {
         errorMessage = nil
         defer { isConnecting = false }
 
-        let instance: GitProviderInstance
-        let provider: any GitProvider
-        switch choice {
-        case .github:
-            instance = .github
-            provider = GitHubProvider(httpClient: URLSessionHTTPClient())
-        case .gitlabCloud:
-            instance = .gitLabCloud
-            provider = GitLabProvider(httpClient: URLSessionHTTPClient(), instances: [.gitLabCloud])
-        case .gitlabSelfHosted:
-            guard let raw = rawServerURL?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
-                  let url = URL(string: raw.hasPrefix("http") ? raw : "https://\(raw)") else {
-                errorMessage = "Enter a valid GitLab server URL."
-                return
-            }
-            instance = .gitLabSelfHosted(baseURL: url)
-            provider = GitLabProvider(httpClient: URLSessionHTTPClient(), instances: [instance])
+        guard let (instance, provider) = Self.provider(for: choice, serverURL: rawServerURL) else {
+            errorMessage = "Enter a valid GitLab server URL."
+            return
         }
 
-        await establish(choice: choice, instance: instance, provider: provider, token: token, serverURL: rawServerURL, persist: persist)
+        await establish(choice: choice, instance: instance, provider: provider, token: token,
+                        serverURL: rawServerURL, persist: persist, loadRepositories: loadRepositories)
+    }
+
+    static func provider(for choice: ProviderChoice, serverURL rawServerURL: String?) -> (GitProviderInstance, any GitProvider)? {
+        switch choice {
+        case .github:
+            return (.github, GitHubProvider(httpClient: UncachedHTTPClient()))
+        case .gitlabCloud:
+            return (.gitLabCloud, GitLabProvider(httpClient: UncachedHTTPClient(), instances: [.gitLabCloud]))
+        case .gitlabSelfHosted:
+            guard let raw = rawServerURL?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
+                  let url = URL(string: raw.hasPrefix("http") ? raw : "https://\(raw)") else { return nil }
+            let instance = GitProviderInstance.gitLabSelfHosted(baseURL: url)
+            return (instance, GitLabProvider(httpClient: UncachedHTTPClient(), instances: [instance]))
+        }
     }
 
     /// Validate a token/credential against a provider, set the active connection,
     /// persist it, and load repositories. Shared by the token and OAuth connect paths.
     private func establish(
         choice: ProviderChoice, instance: GitProviderInstance, provider: any GitProvider,
-        token: String, serverURL: String?, persist: Bool
+        token: String, serverURL: String?, persist: Bool, loadRepositories: Bool = true
     ) async {
         do {
             let account = try await provider.account(instance: instance, credential: GitCredential(accessToken: token))
             connection = ProviderConnection(
                 choice: choice, instance: instance, provider: provider, token: token, login: account.login
             )
-            if persist {
-                try? keychain.save(token)
-                let stored = StoredConnection(choice: choice, serverURL: serverURL)
-                if let data = try? JSONEncoder().encode(stored) { defaults.set(data, forKey: connectionKey) }
-            }
-            await loadRepos()
+            if persist { try? keychain.save(token) }
+            // The login is kept so the next launch can restore the connection without a
+            // round-trip (and so with no connection at all).
+            let stored = StoredConnection(choice: choice, serverURL: serverURL, login: account.login)
+            if let data = try? JSONEncoder().encode(stored) { defaults.set(data, forKey: connectionKey) }
+            if loadRepositories { await loadRepos() }
         } catch {
             errorMessage = "Could not connect: \(error.localizedDescription)"
         }
@@ -371,7 +533,7 @@ public final class AppModel {
     public func startGitHubOAuth() async {
         errorMessage = nil
         isConnecting = true
-        let provider = GitHubProvider(httpClient: URLSessionHTTPClient(), oauth: gitHubOAuthConfig)
+        let provider = GitHubProvider(httpClient: UncachedHTTPClient(), oauth: gitHubOAuthConfig)
         do {
             let result = try await provider.startOAuth(GitOAuthStartRequest(
                 instance: .github, method: .oauthDevice, appConfig: gitHubOAuthConfig))
@@ -430,12 +592,14 @@ public final class AppModel {
     public func signOut() {
         try? keychain.delete()
         defaults.removeObject(forKey: connectionKey)
-        defaults.removeObject(forKey: addedReposKey)
         defaults.removeObject(forKey: activeRepoKey)
         defaults.removeObject(forKey: activeBoardKey)
         connection = nil
         repos = []
-        addedRepos = []
+        // Folder entries don't depend on the provider account, so they stay.
+        addedRepos.removeAll { !$0.kind.isFolder }
+        persistAddedRepos()
+        stopWatching()
         activeRepo = nil
         activeBoardFolder = nil
         workspace = nil
@@ -455,6 +619,8 @@ public final class AppModel {
             let list = try await connection.provider.repositories(context: connection.requestContext)
             // Most-recently-updated first, so active repos stay on top.
             repos = list.items.sorted { ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast) }
+        } catch where Outbox.isConnectivity(error) {
+            // Offline: the added boards still work; the repo list just isn't fresh.
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -467,8 +633,18 @@ public final class AppModel {
     // MARK: - Open a board
 
     /// Open a specific board (project folder) within a repo.
-    public func openBoard(_ repo: AddedRepo, folder: String) async {
-        guard let source = makeSource(for: repo) else { return }
+    /// `transient` opens it for a one-off write (the share extension): it is not remembered
+    /// as the last board, and reviews and change-watching are skipped.
+    public func openBoard(_ repo: AddedRepo, folder: String, transient: Bool = false) async {
+        guard let source = makeSource(for: repo) else {
+            if transient { errorMessage = "Open the app and sign in to use this board." }
+            return
+        }
+        // Another board: do not leave the previous one on screen while this one loads.
+        if activeRepo?.id != repo.id || activeBoardFolder != folder {
+            board = nil
+            selectedProject = nil
+        }
         activeRepo = repo
         activeBoardFolder = folder
         self.source = source
@@ -476,14 +652,47 @@ public final class AppModel {
         loadedBacklogLanes = []
         isLoadingBoard = true
         defer { isLoadingBoard = false }
-        defaults.set(repo.fullName, forKey: activeRepoKey)
-        defaults.set(folder, forKey: activeBoardKey)
+        if !transient {
+            defaults.set(repo.fullName, forKey: activeRepoKey)
+            defaults.set(folder, forKey: activeBoardKey)
+        }
+        transientListing = nil
+        hasTransientCards = false
         do {
-            let loaded = try await RemoteBoardStore.loadBoard(source: source, folder: folder, loadBacklog: false)
-            // A single-project workspace, so edit/reload paths keep working.
-            workspace = Workspace(rootConfig: loaded.rootConfig, projects: [loaded.project])
-            selectedProject = loaded.project
-            board = loaded.board
+            if transient {
+                // Lanes and file names only: reading every card is one request each over
+                // a provider API, and filing a new card needs none of them.
+                let shell = try await RemoteBoardStore.loadBoardShell(source: source, folder: folder)
+                workspace = Workspace(rootConfig: shell.rootConfig, projects: [shell.project])
+                selectedProject = shell.project
+                board = shell.board
+                transientListing = shell.listing
+            } else {
+                let loaded = try await RemoteBoardStore.loadBoard(source: source, folder: folder, loadBacklog: false)
+                // A single-project workspace, so edit/reload paths keep working.
+                workspace = Workspace(rootConfig: loaded.rootConfig, projects: [loaded.project])
+                selectedProject = loaded.project
+                board = loaded.board
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        guard !transient else { return }
+        if board != nil { await boardWasOpened(repo, folder: folder) }
+        await loadReviews()
+        startWatching()
+    }
+
+    /// Load the cards of a transiently opened board after all (to pick an existing card).
+    public func loadTransientCards() async {
+        guard transientListing != nil, !hasTransientCards, let source, let project = selectedProject,
+              let rootConfig = workspace?.rootConfig else { return }
+        isLoadingBoard = true
+        defer { isLoadingBoard = false }
+        do {
+            board = try await RemoteBoardStore.loadProjectBoard(
+                source: source, project: project, rootConfig: rootConfig, loadBacklog: false)
+            hasTransientCards = true
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -533,6 +742,7 @@ public final class AppModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+        await loadReviews()
     }
 
     /// Lazily load a backlog lane's cards on demand.
@@ -550,6 +760,9 @@ public final class AppModel {
     }
 
     public func closeRepo() {
+        stopWatching()
+        reviews = []
+        reviewFolder = nil
         activeRepo = nil
         activeBoardFolder = nil
         workspace = nil
@@ -613,9 +826,12 @@ public final class AppModel {
     public func saveProjectSettings(project: BoardProject, name: String, description: String, lanes: [Lane],
                             priorities: [Priority], users: [User], types: [String], epics: [Epic]) async {
         guard let source else { return }
-        let readme = BoardStore.renderProjectReadme(
-            name: name, description: description, lanes: lanes,
-            priorities: priorities, users: users, types: types, epics: epics)
+        // The settings form rewrites the README; what it has no field for is carried over.
+        let readme = CardText.update(
+            BoardStore.renderProjectReadme(
+                name: name, description: description, lanes: lanes,
+                priorities: priorities, users: users, types: types, epics: epics),
+            set: ["icon": project.config.icon, "color": project.config.color, "review_path": project.config.reviewPath])
         isSaving = true; errorMessage = nil
         do { try await source.write(path: "\(project.folder)/README.md", text: readme, message: "Update \(name) settings") }
         catch { errorMessage = error.localizedDescription }
@@ -627,7 +843,7 @@ public final class AppModel {
                 addedRepos[ri].boards[bi].name = name
                 persistAddedRepos()
             }
-            boardCounts["\(repo.id)|\(folder)"] = nil
+            boardSummaries["\(repo.id)|\(folder)"] = nil
             await openBoard(repo, folder: folder)
         } else {
             await reloadWorkspace(selecting: project.folder)
@@ -647,12 +863,14 @@ public final class AppModel {
 
     // MARK: - Writes (over the provider API via git-pont)
 
+    /// Returns the new card's id, or `nil` when it was not written (see `errorMessage`).
+    @discardableResult
     public func createTask(
         title rawTitle: String, lane: Lane,
         priority: String?, type: String?, assignee: String?, epic: String? = nil, body: String
-    ) async {
+    ) async -> String? {
         let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let source, let project = selectedProject, !title.isEmpty, !lane.folder.isEmpty else { return }
+        guard let source, let project = selectedProject, !title.isEmpty, !lane.folder.isEmpty else { return nil }
         let id = uniqueID(for: title, lane: lane)
         let path = "\(project.folder)/\(lane.folder)/\(id).md"
         var content = CardText.make(
@@ -661,6 +879,9 @@ public final class AppModel {
         )
         if let epic, !epic.isEmpty { content = CardText.update(content, set: ["epic": epic]) }
         await performWrite { try await source.write(path: path, text: content, message: "Add task \(id)") }
+        guard errorMessage == nil else { return nil }
+        transientListing?.files[lane.id, default: []].append("\(id).md")
+        return id
     }
 
     public func moveCard(_ card: Card, to lane: Lane) async {
@@ -719,6 +940,23 @@ public final class AppModel {
         }
     }
 
+    /// Add text to the end of a card's description, keeping everything else as it is.
+    /// Returns false when it was not written (see `errorMessage`).
+    @discardableResult
+    public func appendToCard(_ card: Card, text: String) async -> Bool {
+        guard let source, let location = location(of: card) else { return false }
+        let addition = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !addition.isEmpty else { return true }
+        let existing = card.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = existing.isEmpty ? addition : "\(existing)\n\n\(addition)"
+        await performWrite {
+            let original = try await source.readText(location.path)
+            try await source.write(path: location.path, text: CardText.update(original, set: [:], body: body),
+                                   message: "Update \(card.fields.id)")
+        }
+        return errorMessage == nil
+    }
+
     public func deleteCard(_ card: Card) async {
         guard let source, let location = location(of: card) else { return }
         await performWrite { try await source.delete(path: location.path, message: "Delete \(card.fields.id)") }
@@ -749,9 +987,11 @@ public final class AppModel {
     // <project>/attachments/<cardId>/<filename>. They're committed to the repo (so they
     // show on GitHub by browsing that folder) and listed in the card detail.
 
-    private func attachmentsDir(for card: Card) -> String? {
+    private func attachmentsDir(for card: Card) -> String? { attachmentsDir(forCardID: card.fields.id) }
+
+    private func attachmentsDir(forCardID id: String) -> String? {
         guard let project = selectedProject else { return nil }
-        return "\(project.folder)/attachments/\(card.fields.id)"
+        return "\(project.folder)/attachments/\(id)"
     }
 
     /// The files attached to a card.
@@ -764,12 +1004,18 @@ public final class AppModel {
     /// Attach a file to a card (committed to its attachments folder).
     @discardableResult
     public func attachFile(to card: Card, data: Data, filename: String) async -> Bool {
-        guard let source, let dir = attachmentsDir(for: card) else { return false }
+        await attachFile(toCardID: card.fields.id, data: data, filename: filename)
+    }
+
+    /// Attach a file by card id — for a card that was just created and isn't loaded yet.
+    @discardableResult
+    public func attachFile(toCardID cardID: String, data: Data, filename: String) async -> Bool {
+        guard let source, let dir = attachmentsDir(forCardID: cardID) else { return false }
         let safe = filename.map { $0.isLetter || $0.isNumber || "._- ".contains($0) ? $0 : "-" }
         let name = String(safe).trimmingCharacters(in: .whitespaces)
         isSaving = true; errorMessage = nil; defer { isSaving = false }
         do {
-            try await source.writeData(path: "\(dir)/\(name)", data: data, message: "Attach \(name) to \(card.fields.id)")
+            try await source.writeData(path: "\(dir)/\(name)", data: data, message: "Attach \(name) to \(cardID)")
             return true
         } catch { errorMessage = error.localizedDescription; return false }
     }
@@ -787,7 +1033,7 @@ public final class AppModel {
 
     /// The github.com blob URL for a card's file (Copy Link / Open on GitHub).
     public func githubURL(for card: Card) -> URL? {
-        guard connection?.choice == .github, let repo = activeRepo, let location = location(of: card) else { return nil }
+        guard connection?.choice == .github, let repo = activeRepo, repo.kind == .provider, let location = location(of: card) else { return nil }
         let encoded = location.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? location.path
         return URL(string: "https://github.com/\(repo.namespace)/\(repo.name)/blob/\(repo.branch)/\(encoded)")
     }
@@ -819,16 +1065,18 @@ public final class AppModel {
 
     // MARK: Write helpers
 
-    private func performWrite(_ operation: @escaping () async throws -> Void) async {
+    func performWrite(_ operation: @escaping () async throws -> Void) async {
         guard let project = selectedProject else { return }
         isSaving = true
         errorMessage = nil
         do { try await operation() } catch { errorMessage = error.localizedDescription }
         isSaving = false
+        // A transiently opened board is not on screen: don't reload it after every write.
+        guard transientListing == nil else { return }
         await selectProject(project)
     }
 
-    private func location(of card: Card) -> (lane: Lane, path: String)? {
+    func location(of card: Card) -> (lane: Lane, path: String)? {
         guard let project = selectedProject, let board, let fileName = card.fileName else { return nil }
         guard let column = board.columns.first(where: { column in
             column.cards.contains { $0.fields.id == card.fields.id }
@@ -840,6 +1088,7 @@ public final class AppModel {
         let base = slug(title).isEmpty ? "task" : slug(title)
         let existing = Set((board?.columns.first { $0.lane.id == lane.id }?.cards ?? [])
             .compactMap { $0.fileName })
+            .union(transientListing?.files[lane.id] ?? [])
         var name = "\(base).md"
         var n = 2
         while existing.contains(name) { name = "\(base)-\(n).md"; n += 1 }
@@ -856,6 +1105,7 @@ public final class AppModel {
     private struct StoredConnection: Codable {
         let choice: ProviderChoice
         let serverURL: String?
+        var login: String?
     }
 
     // MARK: - AI Quick Create
@@ -879,16 +1129,30 @@ public final class AppModel {
         defaults.set(aiAPIKey, forKey: aiAPIKeyKey)
     }
 
-    /// Whether AI quick create is configured (has an API key).
-    public var isAIConfigured: Bool {
-        !aiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    /// Whether AI quick create can run: an API key, or the on-device model being usable.
+    public var isAIConfigured: Bool { isUsable(aiProvider) }
+
+    private func isUsable(_ provider: AIPontProvider) -> Bool {
+        if provider == .onDevice { return OnDeviceAI.isAvailable }
+        return provider == aiProvider && !aiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The configured cloud provider, when it has a key. It can be sent images to look
+    /// at; the on-device model cannot (it is text-only).
+    public var imageAnalysisProvider: AIPontProvider? {
+        aiProvider.needsAPIKey && isAIConfigured ? aiProvider : nil
     }
 
     /// Generate tickets from natural language input using AI.
-    public func generateTicketsFromInput(_ input: String) async {
+    public func generateTicketsFromInput(
+        _ input: String, using override: AIPontProvider? = nil, images: [AIImageAttachment] = []
+    ) async {
         guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        guard isAIConfigured else {
-            aiError = "Configure your AI API key in settings to use quick create."
+        let provider = override ?? aiProvider
+        guard isUsable(provider) else {
+            aiError = provider == .onDevice
+                ? OnDeviceAI.unavailableReason
+                : "Configure your AI API key in settings to use quick create."
             return
         }
 
@@ -897,9 +1161,9 @@ public final class AppModel {
         generatedTickets = []
 
         let config = AIPontMagicConfiguration(
-            provider: aiProvider,
+            provider: provider,
             apiKey: aiAPIKey,
-            model: aiModel
+            model: provider == aiProvider ? aiModel : provider.defaultModel
         )
 
         // Collect sample tickets to show the AI the style
@@ -927,7 +1191,8 @@ public final class AppModel {
             generatedTickets = try await service.generateTickets(
                 configuration: config,
                 input: input,
-                context: context
+                context: context,
+                images: images
             )
             if generatedTickets.isEmpty {
                 aiError = "Could not parse tickets from input. Try being more specific."
