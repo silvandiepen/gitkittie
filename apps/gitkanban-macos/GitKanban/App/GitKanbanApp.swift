@@ -18,6 +18,8 @@ struct GitKanbanApp: App {
                         await model.loadDemo()
                     } else {
                         await model.restore()
+                        // Agents on this Mac reach the boards through the app (Agent Access).
+                        await model.startAgentServerIfEnabled()
                     }
                 }
         }

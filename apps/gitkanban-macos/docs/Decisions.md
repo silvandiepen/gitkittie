@@ -4,7 +4,7 @@ An ADR-lite log of the load-bearing decisions behind GitKanban. Each entry recor
 **Decision**, its **Context**, the **Rationale**, and a **Status** (accepted / proposed / open /
 superseded). These are drawn from the GitKanban plan
 (`/Users/silvandiepen/Projects/GitKittie/GitKanban/plan/`), the `@gitkittie/gitkanban-core` README, the
-canonical board contract (`/Users/silvandiepen/Projects/Tasks/README.md`), and the shipped app.
+canonical board contract (`/Users/silvandiepen/Repositories/tasks/README.md`), and the shipped app.
 Where the shipped implementation diverges from the original plan, that is called out explicitly.
 
 ---

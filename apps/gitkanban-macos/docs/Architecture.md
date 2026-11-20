@@ -11,7 +11,7 @@ the GitKittie board.
 
 | Layer | Where | Status |
 |---|---|---|
-| Board contract (card + config format) | `/Users/silvandiepen/Projects/Tasks/README.md` | **Exists** (canonical, live board) |
+| Board contract (card + config format) | `/Users/silvandiepen/Repositories/tasks/README.md` | **Exists** (canonical, live board) |
 | Board logic (schema, inheritance, rank, validation) | `packages/gitkanban-core` (TS) | **Exists** — built + tested |
 | Shared git engine + services | `swift/GitKittieKit` | **Exists** — `GitEngine`, `ShellGitEngine`, `GitProcessRunner`, `KeychainService`, `GitHubOAuthService`, `GitHubReposService` |
 | Swift board model + parsing | `swift/GitKittieKit` | **Exists** — `BoardStore`, `BoardMarkdown`, `BoardModel`, `BoardInheritance`, `RemoteBoardStore`, `CardText` |

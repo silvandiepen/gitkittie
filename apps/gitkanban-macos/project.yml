@@ -8,8 +8,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: 3
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: 4
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: "38MGF83L2L"
 
@@ -41,6 +41,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitkanban
+        # The app is called Tasks (Tasks.app, "Tasks" in the menu bar). The target, scheme and
+        # Swift module keep the name GitKanban, and so does the bundle id.
+        PRODUCT_NAME: Tasks
+        PRODUCT_MODULE_NAME: GitKanban
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: GitKanban/Info.plist
         CODE_SIGN_ENTITLEMENTS: GitKanban/GitKanban.entitlements
@@ -56,12 +60,18 @@ targets:
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
+        # Agent access: the app listens on 127.0.0.1 for agents on this Mac (MCPServer.swift).
+        com.apple.security.network.server: true
         com.apple.security.files.user-selected.read-write: true
         com.apple.security.files.bookmarks.app-scope: true
     info:
       path: GitKanban/Info.plist
       properties:
-        CFBundleDisplayName: GitKittie Kanban
+        CFBundleDisplayName: Tasks
+        CFBundleName: Tasks
+        NSLocalNetworkUsageDescription: Tasks looks for folder servers on your network so you can add one without typing its address.
+        NSBonjourServices:
+          - _gitkanban._tcp
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.developer-tools

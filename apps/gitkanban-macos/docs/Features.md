@@ -1,4 +1,9 @@
-# GitKanban (macOS) — Features
+# Tasks (macOS) — Features
+
+> **Name.** The app is called **Tasks** (`Tasks.app`, "GitKittie Tasks" on the website and store).
+> It was GitKittie Kanban before. The target, scheme, Swift module, bundle id
+> (`app.hakobs.gitkanban`) and this folder keep the GitKanban name, and so does the rest of this
+> document.
 
 GitKanban is a native macOS kanban board whose **only data source is a git repository of
 markdown files**. There is no product backend and no hosted database: the board *is* a folder
@@ -20,7 +25,7 @@ moves, reorders, deletes, filters, searches, and syncs cards — committing and 
 mutation. The board *logic* it uses (schema, inheritance, ordering, validation) lives in the
 TypeScript package [`@gitkittie/gitkanban-core`](../../../packages/gitkanban-core/) and is mirrored in
 `swift/GitKittieKit`; the board *format* is the canonical contract in
-`/Users/silvandiepen/Projects/Tasks/README.md`. What remains **Planned** is background interval
+`/Users/silvandiepen/Repositories/tasks/README.md`. What remains **Planned** is background interval
 sync, a conflict-resolution UI, and fractional rank keys in the app; see
 [Architecture.md](./Architecture.md) for what is on disk versus tracked.
 
@@ -59,7 +64,7 @@ A card is YAML frontmatter for machines + a markdown body for humans. The modell
 edits are `id`, `title`, `project`, `status`, `priority`, `type`, `epic`, `assignee`, `order`.
 **Unknown keys are preserved verbatim** on write (see below). The full canonical card schema — the
 lifecycle fields (`picked_up_by`, `reviewer`, `testing_owner`, …) and required body sections — is
-in `/Users/silvandiepen/Projects/Tasks/README.md`; GitKanban renders and edits a board of exactly
+in `/Users/silvandiepen/Repositories/tasks/README.md`; GitKanban renders and edits a board of exactly
 that shape. Parse/field-reading: **Exists** in core. Card editor UI (own detail window, field
 selects, description edit/preview, markdown-rendered body): **Exists**.
 
@@ -118,6 +123,48 @@ loading a board.
 
 ---
 
+## Added in the Tasks update (2026-11)
+
+Everything in this section is **Exists** in code on `feat/gitkanban-folders-review` and covered by
+the tests named; "not clicked through" means the screen was built and compiles but was not
+exercised by hand in that session.
+
+> **Transport note.** The app reads and writes boards over the provider API through
+> `swift/GitKanbanKit` (`GitPontFileSource`), or straight from a folder — it does not clone. The
+> sections above that describe an app-owned checkout predate that and are due a rewrite.
+
+| Feature | What it is | Status |
+|---|---|---|
+| **Loading screen** | The animated Tasks mark, "Tasks", "by GitKittie"; no title bar while it shows, centred in the window (`TasksMark.swift`, `SplashView`). | Exists |
+| **Board loading on GitHub** | A lane's cards arrive in one GraphQL request instead of one request per card (`BulkTextSource`, `GitPontFileSource.readTexts`). GitLab still reads card by card. | Exists · measured: 143 cards in ~3 s |
+| **Cards with a broken header** | Frontmatter that is not valid YAML is read line by line, so the card keeps its fields; a card with no title shows its first heading, then its file name (`BoardStore.lenientFields`, `CardTitleTests`). | Exists |
+| **Switching boards** | The previous board is cleared and a loader names the board being read; the sidebar row shows a spinner. | Exists |
+| **Sidebar** | Board icon and colour, a count of cards new or moved since the board was last opened, right-click menus on boards (Open, Reload, Board Settings…, Browse Boards…, Remove from Sidebar) and on repositories. | Exists · not clicked through |
+| **Board Settings** | Display name, icon and colour, saved as `project:`, `icon:` and `color:` in the board's `README.md`; "More Settings…" opens the full project settings (`BoardSettingsSheet`, `AppModel+Appearance.swift`, `BoardAppearanceTests`). Saving project settings no longer drops `review_path`, `icon` or `color`. | Exists |
+| **Adding boards** | The board picker opens on the folders next to the existing boards, not-yet-added first, with a filter and "Add All"; the + menu has "Add Board from…" for repositories already in the sidebar. | Exists · not clicked through |
+| **A folder without a board** | A folder with no cards in any lane says so, and offers "Use `<parent>/<name>` Instead" when a board of that name sits next to the other boards. | Exists · not clicked through |
+| **Task side panel** | No edit mode: the title is always editable, the description is a Markdown editor styled while typing (`MarkdownSourceStyler`, taken from Lezin), the lane/priority/type/epic/assignee chips are menus, a green check saves (⌘↩), closing or switching cards saves, and a two-finger swipe right closes the panel (`CardDetailInspector`, `MarkdownEditor.swift`). The panel no longer renders the description through the web view; "Open in Panel" still does. | Exists · not clicked through |
+| **Open the file** | A card's menu opens its `.md` in the default Markdown app: the real file for a folder board, a downloaded copy for a repository board. | Exists · not clicked through |
+| **Live updates** | Board menu → Live Updates…: registers a channel on the relay (`apps/gitkanban-relay`), adds a push webhook on GitHub or GitLab, commits `.gitkanban/relay.json`; an open board then reloads on push (`Relay.swift`, `ProviderWebhook.swift`, `RelayTests`). | Exists · verified against a local and the deployed relay with signed test pushes; no real webhook created yet |
+| **Agent Access** | Account menu → Agent Access…: a local MCP server so agents use the boards without a copy of the repository. See [`../AGENTS.md`](../AGENTS.md) → Agent access. | Exists · verified with Claude Code and Codex against the real board |
+
+### Agent Access in short
+
+- **Transport:** loopback HTTP (`POST /mcp`, default port 47810, bearer token) plus a stdio bridge
+  script the app writes (`AgentAccess/tasks-mcp.sh`), which opens the app when it is closed.
+- **Tools:** `list_boards`, `create_board`, `get_board`, `get_board_rules`, `list_cards`,
+  `get_card`, `create_card`, `update_card`, `claim_card`, `attach_file`.
+- **Rules reach the agent:** `get_board_rules` returns the repository's `README.md`,
+  `TASK_TEMPLATE.md`, `AGENTS.md` and `RULES.md`, and the board's own `README.md`, `AGENTS.md` and
+  `RULES.md`; the board's files win.
+- **Vocabulary is enforced:** a `priority`, `type`, `epic`, `assignee` or `status` the board's
+  effective config does not have is refused (`AgentBoard.validate`).
+- **Every board of an added repository is reachable**, not only those in the sidebar; a board joins
+  the sidebar on first use, and `create_board` makes a new one that inherits the repository's lanes.
+- **Tests:** `AgentAccessTests` (a real MCP conversation over HTTP against a folder board).
+
+---
+
 ## Sync
 
 The write loop runs on every mutation: edit writes the affected card file(s) → **commit per
@@ -138,7 +185,7 @@ Because the board is just files in a repo the app clones, agents, CI, and script
 push like any other client; GitKanban pulls and the new/changed cards appear. The
 lenient-frontmatter rule means an agent can add fields the app does not model and they survive. This
 "a human curates in a native UI, a fleet of agents populates through git" loop is the primary
-differentiator — and it already runs headless on the live `/Users/silvandiepen/Projects/Tasks`
+differentiator — and it already runs headless on the live `/Users/silvandiepen/Repositories/tasks`
 board today.
 
 ---

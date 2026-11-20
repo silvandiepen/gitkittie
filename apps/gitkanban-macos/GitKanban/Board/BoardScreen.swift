@@ -9,6 +9,8 @@ import SwiftUI
 struct BoardScreen: View {
     @Environment(AppModel.self) private var model
     @State private var showNewProject = false
+    @State private var betterFolder: String?
+    @State private var showLiveUpdates = false
     @State private var settingsProject: BoardProject?
     @State private var setupProject: BoardProject?
     @State private var setupConfig: DetectedBoardConfig?
@@ -38,14 +40,46 @@ struct BoardScreen: View {
         .sheet(isPresented: $model.isShowingSearch) { SearchSheet().environment(model) }
         .sheet(isPresented: $model.showQuickCreate) { QuickCreateSheet().environment(model) }
         .sheet(isPresented: $showNewProject) { ProjectSheet(editing: nil).environment(model) }
+        .sheet(isPresented: $showLiveUpdates) { LiveUpdatesSheet().environment(model) }
         .sheet(item: $settingsProject) { project in ProjectSheet(editing: project).environment(model) }
         .sheet(item: $setupProject) { project in ProjectSheet(editing: project, prefill: setupConfig).environment(model) }
         .task(id: model.selectedProject?.id) { await maybeOfferSetup() }
+        // "More Settings…" in a board's settings (sidebar) asks for the full project settings.
+        .onChange(of: model.wantsProjectSettings, initial: true) { _, wanted in
+            guard wanted, let project = model.selectedProject else { return }
+            model.wantsProjectSettings = false
+            settingsProject = project
+        }
     }
 
     @ViewBuilder private var boardContent: some View {
         if model.isLoadingBoard && model.board == nil {
-            ProgressView("Loading board…")
+            VStack(spacing: 12) {
+                ProgressView()
+                Text("Loading \(model.activeRepo?.boards.first { $0.folder == model.activeBoardFolder }?.name ?? "board")…")
+                    .font(.headline)
+                Text(model.activeRepo?.kind.isFolder == true ? "Reading the folder" : "Reading the cards from \(model.activeRepo?.fullName ?? "the repository")")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.openBoardIsEmpty {
+            // Nothing in it: say so, and offer the folder that was probably meant.
+            ContentUnavailableView {
+                Label("No cards in \(model.activeBoardFolder ?? "this folder")", systemImage: "tray")
+            } description: {
+                if let betterFolder {
+                    Text("This folder has no cards in any lane. There is a board at \(betterFolder).")
+                } else {
+                    Text("This folder has no cards in any lane. If the board lives in another folder, pick it with Browse Boards… in the sidebar.")
+                }
+            } actions: {
+                if let betterFolder {
+                    Button("Use \(betterFolder) Instead") { Task { await model.moveOpenBoard(to: betterFolder) } }
+                        .buttonStyle(.borderedProminent)
+                }
+                if let lane = model.board?.columns.first?.lane { Button("New Task") { model.newTaskLane = lane } }
+            }
+            .task(id: model.activeBoardFolder) { betterFolder = await model.betterFolderForOpenBoard() }
         } else if let board = model.board {
             switch model.boardViewMode {
             case .lanes: LanesView(columns: displayColumns(board))
@@ -108,6 +142,9 @@ struct BoardScreen: View {
             }
             .pickerStyle(.inline)
             Divider()
+            if !model.isDemo {
+                Button("Live Updates…", systemImage: "dot.radiowaves.left.and.right") { showLiveUpdates = true }
+            }
             Button("New Project…", systemImage: "plus") { showNewProject = true }
             if let project = model.selectedProject {
                 Button("Project Settings…", systemImage: "gearshape") { settingsProject = project }
@@ -500,6 +537,10 @@ func cardMenu(_ card: Card, model: AppModel) -> some View {
     if let url = model.githubURL(for: card) {
         Button("Copy Link", systemImage: "link") { Platform.copy(url.absoluteString) }
         Button("Open on GitHub", systemImage: "safari") { Platform.open(url) }
+    }
+    // The .md itself, in whatever app opens Markdown. A repository's file is a downloaded copy.
+    Button(model.cardFilesAreLocal ? "Open File" : "Open a Copy of the File", systemImage: "doc.text") {
+        Task { if let url = await model.fileURL(for: card) { Platform.open(url) } }
     }
     Button("Copy ID", systemImage: "number") { Platform.copy(card.fields.id) }
 

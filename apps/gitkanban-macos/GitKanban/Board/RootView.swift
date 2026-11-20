@@ -1,6 +1,7 @@
 import GitKittieKit
 import GitKanbanKit
 import GitPontCore
+import AppKit
 import SwiftUI
 
 /// Top-level flow: restore → connect → a split view with the boards sidebar + board.
@@ -12,7 +13,7 @@ struct RootView: View {
             SplashView()
         } else if model.isDemo {
             NavigationStack { BoardScreen() }
-        } else if !model.isConnected {
+        } else if !model.hasHome {
             ConnectView()
         } else {
             WorkspaceSplit()
@@ -24,36 +25,80 @@ struct RootView: View {
 private struct SplashView: View {
     var body: some View {
         VStack(spacing: 20) {
-            Spacer()
-
-            Image("GitKanbanLines")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 72, height: 72)
-                .foregroundStyle(.primary.opacity(0.7))
-
-            Text("GitKittie Kanban")
-                .font(.title2.weight(.medium))
-                .foregroundStyle(.primary.opacity(0.8))
+            // The same animated mark and wordmark as the iOS app (TasksMark.swift).
+            TasksWordmark()
 
             ProgressView()
                 .controlSize(.small)
                 .padding(.top, 8)
-
-            Spacer()
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
+        // No title bar while loading: the screen runs to the top of the window, so the
+        // mark sits in the middle of the whole window.
+        .ignoresSafeArea()
+        .background(TitleBarHider())
     }
 }
+
+/// Hides the window's title bar (title text and its background strip) for as long as the
+/// view is on screen, and puts back what was there when it leaves.
+private struct TitleBarHider: NSViewRepresentable {
+    final class Probe: NSView {
+        private var saved: (title: NSWindow.TitleVisibility, transparent: Bool, fullSize: Bool)?
+        private weak var hiddenWindow: NSWindow?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            restore()
+            guard let window else { return }
+            saved = (window.titleVisibility, window.titlebarAppearsTransparent, window.styleMask.contains(.fullSizeContentView))
+            hiddenWindow = window
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.styleMask.insert(.fullSizeContentView)
+        }
+
+        func restore() {
+            guard let window = hiddenWindow, let saved else { return }
+            window.titleVisibility = saved.title
+            window.titlebarAppearsTransparent = saved.transparent
+            if !saved.fullSize { window.styleMask.remove(.fullSizeContentView) }
+            hiddenWindow = nil
+            self.saved = nil
+        }
+    }
+
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ view: Probe, context: Context) {}
+    static func dismantleNSView(_ view: Probe, coordinator: ()) { view.restore() }
+}
+
 
 /// The connected working screen: a sidebar of added repos + their boards, and the
 /// selected board in the detail pane.
 private struct WorkspaceSplit: View {
     @Environment(AppModel.self) private var model
     @State private var showAdd = false
+    @State private var showAddServer = false
+    @State private var showConnect = false
+    @State private var serverAddress = ""
+    @State private var isCheckingServer = false
     @State private var browseRepo: AddedRepo?
+    @State private var appearanceTarget: AppearanceTarget?
+    @State private var showAgentAccess = false
+    @Environment(\.scenePhase) private var scenePhase
+
+    private struct AppearanceTarget: Identifiable {
+        let repo: AddedRepo
+        let board: SelectedBoard
+        var id: String { "\(repo.id)|\(board.folder)" }
+    }
+
+    private func openFolder() {
+        guard let url = pickFolder() else { return }
+        do { browseRepo = try model.addLocalFolder(url) } catch { model.errorMessage = error.localizedDescription }
+    }
 
     /// Sidebar selection is a "repoID|folder" key mirroring the open board.
     private var selection: Binding<String?> {
@@ -87,28 +132,59 @@ private struct WorkspaceSplit: View {
                         } else {
                             ForEach(repo.boards) { board in
                                 HStack(spacing: 10) {
-                                    Image(systemName: "square.stack.3d.up.fill")
+                                    Image(systemName: board.icon ?? BoardAppearance.defaultIcon)
                                         .font(.caption)
-                                        .foregroundStyle(.tint)
+                                        .foregroundStyle(Color(boardColor: board.color))
+                                        .frame(width: 16)
                                     Text(board.name)
                                         .font(.callout)
+                                    Spacer(minLength: 4)
+                                    if model.isLoadingBoard, model.activeRepo?.id == repo.id, model.activeBoardFolder == board.folder {
+                                        ProgressView().controlSize(.small)
+                                    } else if let changed = model.boardSummary(repo, board.folder)?.changed, changed > 0 {
+                                        // Cards that are new or moved lane since this board was last opened.
+                                        Text("\(changed)")
+                                            .font(.caption2.weight(.semibold).monospacedDigit())
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 6).padding(.vertical, 1)
+                                            .background(Color(boardColor: board.color), in: Capsule())
+                                            .accessibilityLabel("\(changed) updated")
+                                    }
                                 }
                                 .tag("\(repo.id)|\(board.folder)")
+                                .contextMenu {
+                                    Button("Open", systemImage: "square.stack.3d.up") {
+                                        Task { await model.openBoard(repo, folder: board.folder) }
+                                    }
+                                    Button("Reload", systemImage: "arrow.clockwise") {
+                                        Task { await model.openBoard(repo, folder: board.folder) }
+                                    }
+                                    Button("Board Settings…", systemImage: "gearshape") {
+                                        appearanceTarget = AppearanceTarget(repo: repo, board: board)
+                                    }
+                                    Divider()
+                                    Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
+                                    Divider()
+                                    Button("Remove from Sidebar", systemImage: "minus.circle", role: .destructive) {
+                                        if model.activeRepo?.id == repo.id, model.activeBoardFolder == board.folder { model.closeRepo() }
+                                        model.removeBoard(board, from: repo)
+                                    }
+                                }
                             }
                         }
                     } header: {
                         HStack(spacing: 8) {
-                            Image(systemName: repo.isPrivate ? "lock.fill" : "book.closed")
+                            Image(systemName: repo.symbolName)
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
-                            Text(repo.name)
+                            Text(repo.displayName)
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Menu {
                                 Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
                                 Divider()
-                                Button("Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
+                                Button(repo.kind.isFolder ? "Remove Folder" : "Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
                             } label: {
                                 Image(systemName: "ellipsis")
                                     .font(.caption)
@@ -116,6 +192,11 @@ private struct WorkspaceSplit: View {
                             }
                             .menuStyle(.borderlessButton)
                             .fixedSize()
+                        }
+                        .contextMenu {
+                            Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
+                            Divider()
+                            Button(repo.kind.isFolder ? "Remove Folder" : "Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
                         }
                     }
                 }
@@ -130,10 +211,14 @@ private struct WorkspaceSplit: View {
                             .foregroundStyle(.tertiary)
                         Text("No Boards")
                             .font(.headline)
-                        Text("Add a repository to get started.")
+                        Text("Add a repository or open a folder to get started.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
-                        Button("Add Repository") { showAdd = true }
+                        if model.isConnected {
+                            Button("Add Repository") { showAdd = true }
+                                .buttonStyle(.bordered)
+                        }
+                        Button("Open a Folder…") { openFolder() }
                             .buttonStyle(.bordered)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -141,17 +226,40 @@ private struct WorkspaceSplit: View {
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showAdd = true } label: {
+                    Menu {
+                        if model.isConnected {
+                            Button("Add Repository…", systemImage: "book.closed") { showAdd = true }
+                        }
+                        Button("Open a Folder…", systemImage: "folder") { openFolder() }
+                        Button("Add Folder Server…", systemImage: "server.rack") { showAddServer = true }
+                        if !model.addedRepos.isEmpty {
+                            Divider()
+                            // More boards from something that is already in the sidebar.
+                            if model.addedRepos.count == 1, let only = model.addedRepos.first {
+                                Button("Add Board from \(only.displayName)…", systemImage: "square.stack.3d.up") { browseRepo = only }
+                            } else {
+                                Menu("Add Board from", systemImage: "square.stack.3d.up") {
+                                    ForEach(model.addedRepos) { repo in
+                                        Button(repo.displayName, systemImage: repo.symbolName) { browseRepo = repo }
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
                         Image(systemName: "plus")
                     }
                 }
                 ToolbarItem(placement: .navigation) {
                     Menu {
+                        Button("Agent Access…", systemImage: "point.3.connected.trianglepath.dotted") { showAgentAccess = true }
+                        Divider()
                         if let login = model.connection?.login {
                             Text("Signed in as \(login)")
+                            Divider()
+                            Button("Sign Out", role: .destructive) { model.signOut() }
+                        } else {
+                            Button("Connect a Git Provider…") { showConnect = true }
                         }
-                        Divider()
-                        Button("Sign Out", role: .destructive) { model.signOut() }
                     } label: {
                         Image(systemName: "person.crop.circle")
                     }
@@ -173,9 +281,122 @@ private struct WorkspaceSplit: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .sheet(isPresented: $showAgentAccess) { AgentAccessSheet().environment(model) }
+        .sheet(item: $appearanceTarget) { target in
+            BoardSettingsSheet(repo: target.repo, board: target.board).environment(model)
+        }
+        // What changed on each board since it was last opened (the sidebar badges), and
+        // each board's icon and colour: on launch, and again whenever the app comes forward.
+        .task(id: scenePhase) {
+            if scenePhase == .active { await model.refreshBoardSummaries() }
+        }
         .sheet(isPresented: $showAdd) { NavigationStack { AddRepoView() }.environment(model).frame(minWidth: 460, minHeight: 480) }
         .sheet(item: $browseRepo) { repo in NavigationStack { BoardPickerView(repo: repo) }.environment(model).frame(minWidth: 460, minHeight: 480) }
+        .sheet(isPresented: $showConnect) {
+            ConnectView()
+                .environment(model)
+                .frame(minWidth: 460, minHeight: 560)
+                .onChange(of: model.isConnected) { _, connected in if connected { showConnect = false } }
+        }
+        .sheet(isPresented: $showAddServer) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Add Folder Server").font(.headline)
+                DiscoveredServerList { added in
+                    showAddServer = false
+                    browseRepo = added
+                }
+                Text("Or enter an address, e.g. a Mac's Tailscale name.")
+                    .font(.callout).foregroundStyle(.secondary)
+                TextField("my-mac.tailnet.ts.net", text: $serverAddress)
+                    .textFieldStyle(.roundedBorder)
+                if let error = model.errorMessage {
+                    Text(error).font(.callout).foregroundStyle(.red)
+                }
+                HStack {
+                    Spacer()
+                    Button("Cancel") { showAddServer = false }
+                    Button("Connect") {
+                        isCheckingServer = true
+                        Task {
+                            defer { isCheckingServer = false }
+                            if let added = await model.addFolderServer(serverAddress) {
+                                showAddServer = false
+                                browseRepo = added
+                            }
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isCheckingServer || serverAddress.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(width: 420)
+        }
     }
+}
+
+/// Folder servers announced on the local network, each one click away.
+struct DiscoveredServerList: View {
+    @Environment(AppModel.self) private var model
+    var onAdded: (AddedRepo) -> Void
+    @State private var browser = FolderServerBrowser()
+    @State private var connecting: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if browser.servers.isEmpty {
+                HStack(spacing: 8) {
+                    if browser.problem == nil { ProgressView().controlSize(.small) }
+                    Text(browser.problem ?? "Looking for servers on this network…")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            ForEach(browser.servers) { server in
+                Button { connect(server) } label: {
+                    HStack {
+                        Image(systemName: "server.rack")
+                        VStack(alignment: .leading) {
+                            Text(server.name)
+                            Text(server.url.flatMap { URL(string: $0)?.host } ?? "No address yet. Turn on Tailscale on that Mac.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if connecting == server.id {
+                            ProgressView().controlSize(.small)
+                        } else if model.addedServer(for: server) != nil {
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(connecting != nil || server.url == nil)
+            }
+        }
+        .padding(.vertical, 4)
+        .onAppear { browser.start() }
+        .onDisappear { browser.stop() }
+    }
+
+    private func connect(_ server: DiscoveredServer) {
+        connecting = server.id
+        Task {
+            defer { connecting = nil }
+            if let added = await model.addDiscoveredServer(server) { onAdded(added) }
+        }
+    }
+}
+
+/// A folder picker for opening a plain folder as a board source.
+@MainActor
+func pickFolder() -> URL? {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.allowsMultipleSelection = false
+    panel.prompt = "Open"
+    panel.message = "Choose a folder of boards. GitKanban reads and writes its files and does no git."
+    return panel.runModal() == .OK ? panel.url : nil
 }
 
 /// Clean splash/connect screen with minimal, luxurious design.
@@ -201,7 +422,7 @@ private struct ConnectView: View {
                     .foregroundStyle(.primary.opacity(0.8))
 
                 VStack(spacing: 6) {
-                    Text("GitKittie Kanban")
+                    Text("Tasks")
                         .font(.largeTitle.weight(.semibold))
                     Text("Your kanban board is a git repo.")
                         .font(.body)
@@ -229,6 +450,20 @@ private struct ConnectView: View {
                         .padding(.vertical, 12)
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                    // A plain folder — no git; the folder's own sync tool (e.g. GitFolder) commits.
+                    Button {
+                        if let url = pickFolder() { try? model.addLocalFolder(url) }
+                    } label: {
+                        HStack {
+                            Image(systemName: "folder")
+                            Text("Open a Folder…")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.bordered)
                     .controlSize(.large)
 
                     // Sign in with GitHub
@@ -402,7 +637,9 @@ private struct AddRepoView: View {
     }
 }
 
-/// Browse a repo's folders and check whichever ones you want as boards.
+/// Choose a repo's boards. A repo that already has boards opens on the folders next to
+/// them (the other projects of the same workspace), each one a checkbox away; the whole
+/// folder tree is still there to browse for anything else.
 private struct BoardPickerView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -410,17 +647,109 @@ private struct BoardPickerView: View {
     var onDone: (() -> Void)? = nil
 
     @State private var selected: [String: String] = [:]
+    /// The folders next to the boards the repo already has, per parent folder.
+    @State private var siblings: [(parent: String, folders: [BoardFileEntry])]?
+    @State private var filter = ""
+
+    /// The folders the current boards live in ("Tasks" for "Tasks/Arvik").
+    private var parents: [String] {
+        Set(repo.boards.compactMap { board -> String? in
+            guard let slash = board.folder.lastIndex(of: "/") else { return board.folder.isEmpty ? nil : "" }
+            return String(board.folder[..<slash])
+        }).sorted()
+    }
+
+    private func commit() {
+        let boards = selected.map { SelectedBoard(folder: $0.key, name: $0.value) }
+        model.setBoards(boards, for: repo.id)
+        if let onDone { onDone() } else { dismiss() }
+    }
+
+    private func matches(_ entry: BoardFileEntry) -> Bool {
+        let query = filter.trimmingCharacters(in: .whitespaces)
+        return query.isEmpty || entry.name.localizedCaseInsensitiveContains(query)
+    }
 
     var body: some View {
-        FolderLevel(repo: repo, path: "", title: repo.name, selected: $selected) {
-            let boards = selected.map { SelectedBoard(folder: $0.key, name: $0.value) }
-            model.setBoards(boards, for: repo.id)
-            if let onDone { onDone() } else { dismiss() }
+        Group {
+            if parents.isEmpty {
+                FolderLevel(repo: repo, path: "", title: repo.name, selected: $selected, commit: commit)
+            } else {
+                quickPicker
+            }
         }
         .onAppear {
             if selected.isEmpty {
                 selected = Dictionary(uniqueKeysWithValues: repo.boards.map { ($0.folder, $0.name) })
             }
+        }
+    }
+
+    private var quickPicker: some View {
+        List {
+            if let siblings {
+                ForEach(siblings, id: \.parent) { group in
+                    let shown = group.folders.filter(matches)
+                    let missing = shown.filter { selected[$0.path] == nil }
+                    Section {
+                        if shown.isEmpty {
+                            Text(group.folders.isEmpty ? "No folders" : "No folder matches \"\(filter)\"").foregroundStyle(.secondary)
+                        }
+                        // What is not a board yet comes first: that is what you came to add.
+                        ForEach(missing + shown.filter { selected[$0.path] != nil }, id: \.path) { entry in
+                            Toggle(isOn: Binding(
+                                get: { selected[entry.path] != nil },
+                                set: { selected[entry.path] = $0 ? entry.name : nil }
+                            )) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "square.stack.3d.up.fill").font(.caption).foregroundStyle(.tint)
+                                    Text(entry.name)
+                                    if !repo.boards.contains(where: { $0.folder == entry.path }) {
+                                        Text("not added").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .toggleStyle(.checkbox)
+                        }
+                    } header: {
+                        HStack {
+                            Text(group.parent.isEmpty ? repo.name : group.parent)
+                            Spacer()
+                            if !missing.isEmpty {
+                                Button("Add All \(missing.count)") {
+                                    for entry in missing { selected[entry.path] = entry.name }
+                                }
+                                .font(.caption).buttonStyle(.plain).foregroundStyle(.tint)
+                            }
+                        }
+                    }
+                }
+            } else {
+                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Looking for boards…").foregroundStyle(.secondary) }
+            }
+            Section {
+                NavigationLink {
+                    FolderLevel(repo: repo, path: "", title: repo.name, selected: $selected, commit: commit)
+                        .environment(model)
+                } label: {
+                    Label("Browse All Folders…", systemImage: "folder")
+                }
+            }
+        }
+        .searchable(text: $filter, placement: .toolbar, prompt: "Filter boards")
+        .navigationTitle("Boards in \(repo.displayName)")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { if let onDone { onDone() } else { dismiss() } } }
+            ToolbarItem(placement: .confirmationAction) { Button("Done") { commit() } }
+        }
+        .task {
+            var found: [(parent: String, folders: [BoardFileEntry])] = []
+            for parent in parents {
+                // "attachments" sits next to the lanes of a board, it is never a board itself.
+                let folders = await model.listFolders(in: repo, at: parent).filter { $0.name != "attachments" }
+                found.append((parent, folders))
+            }
+            siblings = found
         }
     }
 }
