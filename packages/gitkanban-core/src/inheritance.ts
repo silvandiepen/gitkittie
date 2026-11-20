@@ -56,5 +56,7 @@ export function resolveEffectiveConfig(root: BoardConfig, project?: ProjectConfi
     tags: mergeStrings(root.tags, project?.tags),
     // A project can override the field source; otherwise inherit the root's.
     fieldSource: project?.fieldSource ?? root.fieldSource,
+    // Same for where review requests live.
+    reviewPath: project?.reviewPath ?? root.reviewPath,
   }
 }

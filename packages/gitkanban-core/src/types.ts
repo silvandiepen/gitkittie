@@ -63,6 +63,8 @@ export interface BoardConfig {
   types: string[]
   tags: string[]
   fieldSource?: FieldSource
+  /** `review_path`: where review requests live, relative to each project folder (see review.ts). */
+  reviewPath?: string
   [key: string]: unknown
 }
 
@@ -76,6 +78,7 @@ export interface ProjectConfig {
   types?: string[]
   tags?: string[]
   fieldSource?: FieldSource
+  reviewPath?: string
   [key: string]: unknown
 }
 
@@ -89,6 +92,7 @@ export interface EffectiveConfig {
   types: string[]
   tags: string[]
   fieldSource?: FieldSource
+  reviewPath?: string
 }
 
 /**
