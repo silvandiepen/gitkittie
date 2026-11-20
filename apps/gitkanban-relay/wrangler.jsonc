@@ -1,0 +1,15 @@
+{
+  // GitKanban relay: GitHub push webhooks in, "paths changed" events out over WebSockets.
+  "name": "gitkanban-relay",
+  // Sil's main Cloudflare account, the one his other projects deploy to.
+  "account_id": "8cef251b5fdcf6c6f63db98b7aa49f9a",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  // One Durable Object per channel (= one repo): it holds that channel's two secrets and
+  // its connected sockets. SQLite-backed, which the free plan allows.
+  "durable_objects": {
+    "bindings": [{ "name": "CHANNEL", "class_name": "Channel" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Channel"] }],
+  "observability": { "enabled": true }
+}
