@@ -6,7 +6,7 @@ first-class backend for everyday work — and the shared engine they run on.
 | App | What it is | Status |
 |---|---|---|
 | **GitFolder** | macOS menu-bar app that auto-versions selected folders to GitHub | Shipping (App Store) |
-| **GitKanban** | macOS/iOS kanban board backed by a git repo of markdown files | In development |
+| **Tasks** (GitKanban) | macOS/iOS kanban board backed by a git repo of markdown files; called "Tasks" in the apps, GitKanban in the code | App Store (Mac, iPhone, iPad) |
 | **GitBud** | macOS/iOS/iPadOS git client focused on visual history editing and simple rebasing | macOS scaffold in development |
 
 The products are local-first or remote-provider-first depending on platform, own-your-data,
@@ -18,7 +18,10 @@ plumbing, so it lives in one repo.
 ```txt
 apps/
   gitfolder-macos/    GitFolder — macOS menu-bar app (SwiftUI/AppKit, XcodeGen)
-  gitkanban-macos/    GitKanban — macOS board app (read-only board UI)
+  gitkanban-macos/    Tasks (GitKanban) — macOS board app, incl. the agent MCP server
+  gitkanban-ios/      Tasks (GitKanban) — iOS/iPadOS board app + share and action extensions
+  gitkanban-relay/    Live-updates relay — push webhooks in, "paths changed" out (Cloudflare Worker)
+  gitkanban-server/   GitKanban file server — serves one local folder to the apps over Tailscale (Node + Hono)
   gitbud-macos/       GitBud — macOS git client (SwiftUI/AppKit, XcodeGen)
   gitbud-ios/         GitBud — iOS/iPadOS remote git client (planned; docs/spec only)
   website/            Marketing/docs site (Vue 3 + Vite)
@@ -27,6 +30,7 @@ packages/
   gitkanban-core/     @gitkittie/gitkanban-core — GitKanban board schema + logic (TS, tested)
 swift/
   GitKittieKit/             Shared Swift package: the GitEngine, board model, and app services (implemented + tested)
+  GitKanbanKit/             The Tasks app layer shared by iOS and macOS: view model, provider transport, outbox, relay client, agent MCP server (tested)
 docs/                 GitFolder product docs
 ```
 
@@ -46,15 +50,24 @@ Docs: [product spec](docs/product-spec.md) · [data model](docs/data-model.md) �
 [GitHub access](docs/github-access.md) · [macOS permissions](docs/macos-permissions.md) ·
 [edge cases](docs/edge-cases.md) · [future phases](docs/future-phases.md)
 
-## GitKanban
+## Tasks (GitKanban)
 
 Your kanban board is a git repo. A native macOS/iOS kanban app backed by markdown files in a
 git repository you own — full history, no server, portable by default. The board schema,
 config inheritance, and card logic live in [`packages/gitkanban-core`](packages/gitkanban-core/),
 and the full plan lives in the `project-assets` repo under `GitKittie/GitKanban/plan/`.
 
-The canonical board format is the shared Tasks contract (`project-assets/Tasks/README.md`):
-root/project configuration with inheritance, and markdown cards with YAML frontmatter.
+The canonical board format is the shared Tasks contract (the `README.md` of the board repository,
+`silvandiepen/tasks`): root/project configuration with inheritance, and markdown cards with YAML
+frontmatter.
+
+What the apps do, per platform: [macOS features](apps/gitkanban-macos/docs/Features.md) ·
+[iOS features](apps/gitkanban-ios/docs/Features.md). In short: share a screenshot on iPhone to
+create a task (markup, drafted title and description), background sending with an offline queue,
+seen/unseen marks and sorting, live updates through [`apps/gitkanban-relay`](apps/gitkanban-relay/),
+board icons/colours and in-place editing on the Mac, and **Agent Access** — a local MCP server in
+the Mac app so agents work on a board without a copy of its repository
+([how it is built](apps/gitkanban-macos/AGENTS.md)).
 
 ## GitBud
 

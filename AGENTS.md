@@ -16,6 +16,7 @@ no-server apps that treat a git repository as the source of truth.
 | GitFolder (iOS) | `apps/gitfolder-ios/` | SwiftUI (planned) | Roadmap — libgit2 spike + plan |
 | GitKanban (macOS) | `apps/gitkanban-macos/` | SwiftUI board app | In development (read-only board UI) |
 | GitKanban (iOS) | `apps/gitkanban-ios/` | SwiftUI (planned) | Roadmap — Phase 2 |
+| GitKanban server | `apps/gitkanban-server/` | Node + Hono file server (tailnet-only) | In development |
 | GitBud (macOS) | `apps/gitbud-macos/` | SwiftUI git client | In development — tested local history/rewrite UI |
 | GitBud (iOS/iPadOS) | `apps/gitbud-ios/` | SwiftUI remote git client (planned) | Docs/spec — GitPont remote-only |
 | Website | `apps/website/` | Vue 3 + Vite | Shipping |
@@ -30,6 +31,7 @@ apps/
   gitfolder-macos/    GitFolder — macOS menu-bar app (SwiftUI/AppKit, XcodeGen)
   gitfolder-ios/      GitFolder — iOS app (planned; docs/spec only)
   gitkanban-macos/    GitKanban — macOS board app (read-only board UI)
+  gitkanban-server/   GitKanban file server — one local folder over Tailscale (Node + Hono)
   gitkanban-ios/      GitKanban — iOS app (planned; docs/spec only)
   gitbud-macos/       GitBud — macOS git client (SwiftUI/AppKit, XcodeGen)
   gitbud-ios/         GitBud — iOS/iPadOS remote git client (planned; docs/spec only)

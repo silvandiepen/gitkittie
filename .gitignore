@@ -42,3 +42,7 @@ swift/*/.build/
 .swiftpm/
 # Capture output from @sil/app-release (screenshots, promo videos, Deliver payloads).
 artifacts/
+
+# Wrangler local state (apps/gitkanban-relay)
+.wrangler/
+.dev.vars
