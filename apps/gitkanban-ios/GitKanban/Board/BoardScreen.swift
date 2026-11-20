@@ -10,10 +10,12 @@ import UIKit
 struct BoardScreen: View {
     @Environment(AppModel.self) private var model
     @State private var showNewProject = false
+    @State private var showLiveUpdates = false
     @State private var settingsProject: BoardProject?
     @State private var setupProject: BoardProject?
     @State private var setupConfig: DetectedBoardConfig?
     @State private var offeredSetup: Set<String> = []
+    @State private var showReviews = false
 
     private var projects: [BoardProject] { model.workspace?.projects ?? [] }
 
@@ -39,8 +41,26 @@ struct BoardScreen: View {
         .sheet(item: $model.selectedCard) { card in CardDetailSheet(card: card).environment(model) }
         .sheet(item: $model.newTaskLane) { lane in NewTaskSheet(lane: lane).environment(model) }
         .sheet(isPresented: $model.isShowingSearch) { SearchSheet().environment(model) }
+        .sheet(isPresented: $showReviews) { NavigationStack { ReviewListView() }.environment(model) }
         .sheet(isPresented: $model.showQuickCreate) { QuickCreateSheet().environment(model) }
+        // Moving a card that carries this project's id prefix: keep the id, or take the
+        // next one in the project it is going to.
+        .confirmationDialog(
+            model.pendingProjectMove.map { "Move “\($0.cardTitle)” to \($0.target.name)" } ?? "",
+            isPresented: Binding(get: { model.pendingProjectMove != nil }, set: { if !$0 { model.pendingProjectMove = nil } }),
+            titleVisibility: .visible,
+            presenting: model.pendingProjectMove
+        ) { plan in
+            if let newID = plan.suggestedID {
+                Button("Renumber to \(newID)") { Task { await model.finishMove(plan, renumber: true) } }
+            }
+            Button("Keep \(plan.cardID)") { Task { await model.finishMove(plan, renumber: false) } }
+            Button("Cancel", role: .cancel) { model.pendingProjectMove = nil }
+        } message: { plan in
+            Text("It lands in \(plan.lane.name). Renumbering changes the id other tasks and review requests may refer to.")
+        }
         .sheet(isPresented: $showNewProject) { ProjectSheet(editing: nil).environment(model) }
+        .sheet(isPresented: $showLiveUpdates) { LiveUpdatesSheet().environment(model) }
         .sheet(item: $settingsProject) { project in ProjectSheet(editing: project).environment(model) }
         .sheet(item: $setupProject) { project in ProjectSheet(editing: project, prefill: setupConfig).environment(model) }
         .task(id: model.selectedProject?.id) { await maybeOfferSetup() }
@@ -62,9 +82,36 @@ struct BoardScreen: View {
             }
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
+            Button {
+                model.boardViewMode = model.boardViewMode == .list ? .lanes : .list
+            } label: {
+                Image(systemName: model.boardViewMode == .list ? "rectangle.split.3x1" : "list.bullet.rectangle")
+            }
+            .accessibilityIdentifier("viewModeButton")
+            .accessibilityLabel(model.boardViewMode == .list ? "Show lanes" : "Show progress list")
+            .help(model.boardViewMode == .list ? "Lanes" : "Progress list")
+            if !model.reviews.isEmpty {
+                Button { showReviews = true } label: {
+                    Image(systemName: model.pendingReviewCount > 0 ? "checkmark.seal.fill" : "checkmark.seal")
+                        .overlay(alignment: .topTrailing) {
+                            if model.pendingReviewCount > 0 {
+                                Text("\(model.pendingReviewCount)")
+                                    .font(.system(size: 10, weight: .bold).monospacedDigit())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 4).padding(.vertical, 1)
+                                    .background(Color.accentColor, in: Capsule())
+                                    .offset(x: 10, y: -8)
+                            }
+                        }
+                }
+                .accessibilityIdentifier("reviewsButton")
+                .help("Reviews")
+            }
             if let lane = firstLane {
                 Button { model.newTaskLane = lane } label: { Image(systemName: "plus") }
                     .help("New task")
+                    .accessibilityLabel("New task")
+                    .accessibilityIdentifier("newTaskButton")
             }
             Button { model.showQuickCreate = true } label: { Image(systemName: "sparkles") }
                 .help("Quick Create with AI")
@@ -96,9 +143,19 @@ struct BoardScreen: View {
         return Menu {
             Picker("View", selection: $model.boardViewMode) {
                 Label("Lanes", systemImage: "rectangle.split.3x1").tag(BoardViewMode.lanes)
-                Label("List", systemImage: "list.bullet").tag(BoardViewMode.list)
+                Label("Progress List", systemImage: "list.bullet").tag(BoardViewMode.list)
+            }
+            Picker("Sort", selection: $model.cardSort) {
+                ForEach(CardSort.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.menu)
+            if model.unseenCount > 0 {
+                Button("Mark \(model.unseenCount) Updated as Seen", systemImage: "eye") { model.markAllSeen() }
             }
             Divider()
+            if !model.isDemo {
+                Button("Live Updates…", systemImage: "dot.radiowaves.left.and.right") { showLiveUpdates = true }
+            }
             Button("New Project…", systemImage: "plus") { showNewProject = true }
             if let project = model.selectedProject {
                 Button("Project Settings…", systemImage: "gearshape") { settingsProject = project }
@@ -255,7 +312,7 @@ private struct LaneColumn: View {
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVStack(spacing: 8) {
-                        ForEach(column.cards) { card in
+                        ForEach(model.sorted(column.cards)) { card in
                             LaneCardCell(card: card)
                         }
                     }
@@ -293,8 +350,15 @@ private struct LaneCardCell: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(card.fields.title.isEmpty ? card.fields.id : card.fields.title)
-                .font(.callout).lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if model.isUnseen(card) {
+                    Circle().fill(Color.blue).frame(width: 8, height: 8)
+                        .accessibilityLabel("Updated since you last looked")
+                }
+                Text(card.fields.title.isEmpty ? card.fields.id : card.fields.title)
+                    .font(.callout.weight(model.isUnseen(card) ? .semibold : .regular))
+                    .lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
+            }
             HStack(spacing: 6) {
                 if let p = card.fields.priority, let color = PriorityPalette.color(p, priorities) {
                     Text(p).font(.caption2.weight(.medium))
@@ -305,6 +369,10 @@ private struct LaneCardCell: View {
                     Text("@\(a)").font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
+                if let updated = card.fields.updatedAt {
+                    Text(ReviewFormat.relative(updated)).font(.caption2).foregroundStyle(.secondary)
+                        .accessibilityLabel("Updated \(ReviewFormat.relative(updated))")
+                }
             }
         }
         .padding(10)
@@ -324,61 +392,191 @@ private struct LaneCardCell: View {
 
 // MARK: - List
 
+/// The board as three stages — Working on, Up next, Checked off — so agent work can be
+/// followed at a glance. Checked-off cards carry a read mark (`read_at`); unread ones come
+/// first. Lane-by-lane management stays in the Lanes view.
 private struct ListBoardView: View {
     @Environment(AppModel.self) private var model
     let columns: [Column]
 
+    private var groups: [ProgressGroup] {
+        let groups = BoardProgress.groups(columns, lanes: model.board?.config.lanes)
+        guard model.cardSort != .board else { return groups }
+        return groups.map { group in
+            let order = model.sorted(group.entries.map(\.card)).map(\.id)
+            var sorted = group
+            sorted.entries = order.compactMap { id in group.entries.first { $0.id == id } }
+            return sorted
+        }
+    }
+
     var body: some View {
         List {
-            ForEach(columns) { column in
+            ForEach(groups) { group in
                 Section {
-                    if column.lane.isBacklog && !model.loadedBacklogLanes.contains(column.lane.id) {
-                        Button {
-                            Task { await model.loadBacklogLane(column.lane) }
-                        } label: {
-                            Label(model.loadingBacklogLane == column.lane.id ? "Loading…" : "Load Backlog",
-                                  systemImage: "tray.and.arrow.down")
+                    if group.entries.isEmpty {
+                        Text(emptyText(group.stage)).font(.caption).foregroundStyle(.secondary)
+                    }
+                    ForEach(group.entries) { entry in
+                        Button { model.selectedCard = entry.card } label: {
+                            ProgressRow(entry: entry, stage: group.stage,
+                                        hasAttachments: model.attachmentCardIDs.contains(entry.card.fields.id))
                         }
-                    } else if column.cards.isEmpty {
-                        Text("No tasks").font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        ForEach(column.cards) { card in
-                            Button { model.selectedCard = card } label: {
-                                CardRow(card: card, priorities: model.board?.config.priorities ?? [])
+                        .buttonStyle(.plain)
+                        .contextMenu { cardMenu(entry.card, model: model) }
+                        .swipeActions(edge: .leading) {
+                            if group.stage == .checkedOff {
+                                if BoardProgress.isUnread(entry.card.fields) {
+                                    Button { Task { await model.markRead([entry.card]) } } label: {
+                                        Label("Read", systemImage: "checkmark.circle")
+                                    }
+                                    .tint(.blue)
+                                } else {
+                                    Button { Task { await model.markUnread(entry.card) } } label: {
+                                        Label("Unread", systemImage: "circle.fill")
+                                    }
+                                    .tint(.gray)
+                                }
                             }
-                            .buttonStyle(.plain)
-                            .contextMenu { cardMenu(card, model: model) }
-                        }
-                        .onMove { indices, newOffset in
-                            guard !column.lane.folder.isEmpty, !model.hasActiveFilters else { return }
-                            var ids = column.cards.map { $0.fields.id }
-                            ids.move(fromOffsets: indices, toOffset: newOffset)
-                            Task { await model.reorderCards(in: column.lane, orderedIDs: ids) }
-                        }
-                        .onDelete { indices in
-                            let doomed = indices.map { column.cards[$0] }
-                            Task { for card in doomed { await model.deleteCard(card) } }
                         }
                     }
+                    if group.stage == .pipeline { backlogLoaders }
                 } header: {
-                    HStack(spacing: 7) {
-                        Circle().fill(laneColor(column.lane, model.board?.config ?? EffectiveConfig()))
-                            .frame(width: 8, height: 8)
-                        Text(column.lane.name)
-                        Text("\(column.cards.count)").foregroundStyle(.secondary)
-                        Spacer()
-                        if !column.lane.folder.isEmpty {
-                            Button { model.newTaskLane = column.lane } label: { Image(systemName: "plus.circle") }
-                                .buttonStyle(.plain)
-                        }
-                    }
+                    header(group)
                 }
             }
         }
         .listStyle(.insetGrouped)
         .refreshable {
             if let project = model.selectedProject { await model.selectProject(project) }
+            await model.loadAttachmentIndex()
         }
+        .task(id: model.selectedProject?.id) { await model.loadAttachmentIndex() }
+    }
+
+    @ViewBuilder private var backlogLoaders: some View {
+        ForEach(columns.filter { $0.lane.isBacklog && !model.loadedBacklogLanes.contains($0.lane.id) }) { column in
+            Button {
+                Task { await model.loadBacklogLane(column.lane) }
+            } label: {
+                Label(model.loadingBacklogLane == column.lane.id ? "Loading…" : "Load \(column.lane.name)",
+                      systemImage: "tray.and.arrow.down")
+            }
+        }
+    }
+
+    private func header(_ group: ProgressGroup) -> some View {
+        let unread = group.stage == .checkedOff
+            ? group.entries.filter { BoardProgress.isUnread($0.card.fields) } : []
+        return HStack(spacing: 7) {
+            Image(systemName: icon(group.stage)).foregroundStyle(tint(group.stage))
+            Text(group.stage.title)
+            Text("\(group.entries.count)").foregroundStyle(.secondary)
+            if !unread.isEmpty {
+                Text("\(unread.count) unread").foregroundStyle(.blue)
+            }
+            Spacer()
+            if !unread.isEmpty {
+                Button("Mark All Read") { Task { await model.markRead(unread.map(\.card)) } }
+                    .font(.caption)
+                    .textCase(nil)
+                    .accessibilityIdentifier("markAllRead")
+            }
+        }
+    }
+
+    private func emptyText(_ stage: ProgressStage) -> String {
+        switch stage {
+        case .working: "Nothing in progress."
+        case .pipeline: "Nothing queued."
+        case .checkedOff: "Nothing finished yet."
+        }
+    }
+
+    private func icon(_ stage: ProgressStage) -> String {
+        switch stage {
+        case .working: "hammer"
+        case .pipeline: "tray.full"
+        case .checkedOff: "checkmark.circle"
+        }
+    }
+
+    private func tint(_ stage: ProgressStage) -> Color {
+        switch stage {
+        case .working: .orange
+        case .pipeline: .secondary
+        case .checkedOff: .green
+        }
+    }
+}
+
+/// One card in the progress list: title, lane, who, when, and what happened last.
+private struct ProgressRow: View {
+    @Environment(AppModel.self) private var model
+    let entry: ProgressEntry
+    let stage: ProgressStage
+    let hasAttachments: Bool
+
+    private var fields: CardFields { entry.card.fields }
+    /// Needs a look: an unread checked-off card, or any card updated since it was last opened.
+    private var unread: Bool { (stage == .checkedOff && BoardProgress.isUnread(fields)) || model.isUnseen(entry.card) }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(unread ? Color.blue : Color.clear)
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
+                .accessibilityLabel(unread ? "Unread" : "")
+            VStack(alignment: .leading, spacing: 3) {
+                Text(fields.title.isEmpty ? fields.id : fields.title)
+                    .font(.body.weight(unread ? .semibold : .regular))
+                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(entry.lane.name)
+                        .font(.caption2.weight(.medium))
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(laneColor(entry.lane, model.board?.config ?? EffectiveConfig()).opacity(0.16), in: Capsule())
+                        .foregroundStyle(laneColor(entry.lane, model.board?.config ?? EffectiveConfig()))
+                    if !fields.id.isEmpty {
+                        Text(fields.id).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    }
+                    if let assignee = fields.assignee {
+                        Text("@\(assignee)").font(.caption2).foregroundStyle(.secondary)
+                    }
+                    if hasAttachments {
+                        Image(systemName: "paperclip").font(.caption2).foregroundStyle(.secondary)
+                            .accessibilityLabel("Has attachments")
+                    }
+                    Spacer(minLength: 0)
+                    if let updated = fields.updatedAt {
+                        Text(ReviewFormat.relative(updated)).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                if stage != .pipeline, let activity = BoardProgress.latestActivity(entry.card.body) {
+                    Text(Self.inlineMarkdown(Self.stripTimestamp(activity)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+    }
+
+    /// Activity lines use inline markdown (`claude`, **bold**); show it rendered.
+    static func inlineMarkdown(_ text: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+    }
+
+    /// Drop the leading "2026-11-08T20:15:00Z — " the age is already shown on the row.
+    static func stripTimestamp(_ line: String) -> String {
+        guard let range = line.range(of: " — ") ?? line.range(of: " - "),
+              BoardProgress.date(String(line[..<range.lowerBound]).trimmingCharacters(in: CharacterSet(charactersIn: "`"))) != nil
+        else { return line }
+        return String(line[range.upperBound...])
     }
 }
 
@@ -428,6 +626,13 @@ func cardMenu(_ card: Card, model: AppModel) -> some View {
                 menuCheck(lane.name, card.fields.status == lane.status) {
                     Task { await model.moveCard(card, to: lane) }
                 }
+            }
+        }
+    }
+    if !model.otherProjects.isEmpty {
+        Menu("Move to Project", systemImage: "arrowshape.turn.up.right") {
+            ForEach(model.otherProjects) { board in
+                Button(board.name) { Task { await model.startMove(card, to: board) } }
             }
         }
     }

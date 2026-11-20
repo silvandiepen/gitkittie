@@ -1,4 +1,7 @@
-# GitKanban (iOS)
+# Tasks (iOS)
+
+The app is called **Tasks** on the home screen and in the share sheet (formerly "Kanban"); the
+target, scheme, module and bundle id (`app.hakobs.gitkanban`) keep the GitKanban name.
 
 The iOS counterpart of the GitKanban board app — the same "your kanban board is a git repo"
 contract as [GitKanban macOS](../gitkanban-macos/), rendered on a touch UI.
@@ -58,10 +61,35 @@ personal access token, not device-flow OAuth.
   (`commitFile`/`deleteFile`), after which the board reloads; a "Saving…" overlay shows during
   writes. Pull-to-refresh reloads; sign out clears state.
 
+### Added in the Tasks update (2026-11)
+
+Status per item is in [`docs/Features.md`](./docs/Features.md).
+
+- **Share a screenshot or photo to Tasks** (share extension, plus an "Add to Tasks" action): pick
+  the project (the last used one is suggested), a new or an existing task, mark up the image
+  (select a region, comment, quick suggestions), and get a drafted title, description, type and
+  priority you can change. Device details (model, iOS version, screen size, appearance, text size)
+  are added unless switched off.
+- **Drafting runs where you choose:** on device with Apple Foundation Models (text only: it works
+  from the text and labels Vision finds in the image), or with OpenAI, Anthropic or Gemini using
+  your key (the image is sent). AI Settings is in the account menu.
+- **Images when creating a task in the app**, with the same markup and drafting.
+- **Background sending and offline:** a write is saved to an outbox and sent in the background; a
+  dot in the corner opens the activity view. Without a connection, changes wait and go out later.
+- **Seen/unseen marks, the updated date on cards, sorting** (Board Order, Unseen First, Last
+  Updated, Priority), and a **board overview** with counts of what changed since you last looked.
+- **Move a task to another project** (same-named lane, else the first; asks whether to renumber
+  the id; the file name follows).
+- **Live updates** through the webhook relay ([`apps/gitkanban-relay`](../gitkanban-relay/)).
+- **Loading screen** "Tasks · by GitKittie" with the animated mark; cards with a broken YAML header
+  still read; a lane loads in one request on GitHub.
+
+Not on iOS: board icon/colour editing, the side-panel editor and Agent Access are macOS only.
+
 ## Where the plan and tasks live
 
 - **Plan:** `/Users/silvandiepen/Projects/GitKittie/GitKanban/plan/` — start with
   `platforms-and-git.md` (the macOS-vs-iOS git story), then `architecture.md`.
-- **Tasks:** the `GitKittie` board in `/Users/silvandiepen/Projects/Tasks/GitKit/`, epic
+- **Tasks:** the `GitKittie` board in `/Users/silvandiepen/Repositories/tasks/GitKit/`, epic
   **`gitkanban-ios`**.
 - App-specific agent rules: [`AGENTS.md`](./AGENTS.md). Detail: [`docs/`](./docs/).

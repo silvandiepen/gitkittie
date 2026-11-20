@@ -8,8 +8,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.0.1"
-    CURRENT_PROJECT_VERSION: 5
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: 6
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: "38MGF83L2L"
 
@@ -31,6 +31,8 @@ targets:
     platform: iOS
     sources:
       - path: GitKanban
+      # Image markup and task drafting, also compiled into the share and action extensions.
+      - path: Shared
     dependencies:
       - package: GitKanbanKit
         product: GitKanbanKit
@@ -38,6 +40,17 @@ targets:
         product: GitPontCore
       - package: GitKittieKit
         product: GitKittieKit
+      # "Tasks" in the share sheet: a screenshot becomes a card (see ShareExtension/).
+      - target: GitKanbanShare
+      # The same sheet as an action: "Add to Tasks" in the share sheet's action list.
+      - target: GitKanbanAction
+    # The App Group is how the app and the share extension see the same boards,
+    # connection and token (GitKanbanSharedStorage in GitKanbanKit).
+    entitlements:
+      path: GitKanban/GitKanban.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.app.hakobs.gitkanban
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitkanban
@@ -53,11 +66,23 @@ targets:
     info:
       path: GitKanban/Info.plist
       properties:
-        CFBundleDisplayName: Kanban
+        CFBundleDisplayName: Tasks
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSRequiresIPhoneOS: true
         ITSAppUsesNonExemptEncryption: false
+        # Folder servers on the local network (http://my-mac.local:4417) or loopback in
+        # the simulator. Tailscale serve URLs are HTTPS and don't need this.
+        NSLocalNetworkUsageDescription: GitKanban looks for folder servers on your Mac so you can add one without typing its address.
+        NSBonjourServices:
+          - _gitkanban._tcp
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        # Sending the outbox when the app is woken in the background (GitKanbanApp).
+        UIBackgroundModes:
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - app.hakobs.gitkanban.sync
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -68,6 +93,100 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+
+  GitKanbanShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+      - path: Shared
+    dependencies:
+      - package: GitKanbanKit
+        product: GitKanbanKit
+      - package: GitKittieKit
+        product: GitKittieKit
+    entitlements:
+      path: ShareExtension/GitKanbanShare.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.app.hakobs.gitkanban
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitkanban.share
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: true
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Tasks
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Plain-HTTP folder servers on the local network, same as the app.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ShareViewController"
+          NSExtensionAttributes:
+            # Offer Tasks whenever at least one shared attachment is an image, even when
+            # the sharing app adds other representations (a URL, text) alongside it. The
+            # plain "SupportsImageWithMaxCount" rule hides the target in that case.
+            NSExtensionActivationRule: >-
+              SUBQUERY(extensionItems, $item,
+              SUBQUERY($item.attachments, $attachment,
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image").@count >= 1).@count >= 1
+
+  # The share sheet has two places: the row of app icons (GitKanbanShare) and the list of
+  # actions below it, where people look for "Ask …" / "Save to …". This is the same view
+  # controller registered as an action, so Tasks is in both.
+  GitKanbanAction:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+        excludes:
+          - Info.plist
+          - "*.entitlements"
+      - path: ActionExtension
+      - path: Shared
+    dependencies:
+      - package: GitKanbanKit
+        product: GitKanbanKit
+      - package: GitKittieKit
+        product: GitKittieKit
+    entitlements:
+      path: ActionExtension/GitKanbanAction.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.app.hakobs.gitkanban
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitkanban.action
+        INFOPLIST_FILE: ActionExtension/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: true
+        # The action's icon in the list: the Tasks mark, used as a template image.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: ActionExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Add to Tasks
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ui-services
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ShareViewController"
+          NSExtensionAttributes:
+            NSExtensionServiceAllowsFinderPreviewItem: false
+            NSExtensionActivationRule: >-
+              SUBQUERY(extensionItems, $item,
+              SUBQUERY($item.attachments, $attachment,
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image").@count >= 1).@count >= 1
 
   GitKanbanTests:
     type: bundle.unit-test

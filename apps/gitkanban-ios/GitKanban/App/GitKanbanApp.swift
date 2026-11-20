@@ -1,15 +1,37 @@
+import BackgroundTasks
+import Network
 import SwiftUI
 import GitKanbanKit
+import UIKit
 
 @main
 struct GitKanbanApp: App {
-    @State private var model = AppModel()
+    @State private var model = AppModel.shared(migratesLegacyStorage: true)
+    @State private var network = NetworkWatcher()
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// The background refresh that sends whatever is still in the outbox.
+    private static let syncTask = "app.hakobs.gitkanban.sync"
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(model)
                 .preferredColorScheme(CaptureHooks.colorScheme)
+                .onChange(of: scenePhase) { _, phase in
+                    switch phase {
+                    case .active:
+                        // The share extension may have saved changes while the app was away.
+                        Task { await model.refreshSyncItems(); await model.flushOutbox() }
+                    case .background:
+                        finishSendingInBackground()
+                    default:
+                        break
+                    }
+                }
+                .onChange(of: network.isOnline) { _, online in
+                    if online { Task { await model.flushOutbox() } }
+                }
                 .task {
                     // Test hook: launch with GITKANBAN_DEMO=1 to open the offline demo.
                     if CaptureHooks.isDemo {
@@ -20,6 +42,44 @@ struct GitKanbanApp: App {
                     }
                 }
         }
+        .backgroundTask(.appRefresh(Self.syncTask)) {
+            await model.refreshSyncItems()
+            await model.flushOutbox()
+        }
+    }
+
+    /// Leaving the app with changes still unsent: keep going for the time iOS allows, and
+    /// ask to be woken later in case that was not enough (or there is no connection).
+    private func finishSendingInBackground() {
+        guard !model.syncItems.isEmpty else { return }
+        var token = UIBackgroundTaskIdentifier.invalid
+        token = UIApplication.shared.beginBackgroundTask(withName: "Send changes") {
+            UIApplication.shared.endBackgroundTask(token)
+            token = .invalid
+        }
+        let request = BGAppRefreshTaskRequest(identifier: Self.syncTask)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 5 * 60)
+        try? BGTaskScheduler.shared.submit(request)
+        Task {
+            await model.flushOutbox()
+            if token != .invalid { UIApplication.shared.endBackgroundTask(token) }
+        }
+    }
+}
+
+/// Whether the device currently has a network path, to send the outbox when it returns.
+@MainActor
+@Observable
+final class NetworkWatcher {
+    private(set) var isOnline = true
+    @ObservationIgnored private let monitor = NWPathMonitor()
+
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            let online = path.status == .satisfied
+            Task { @MainActor in self?.isOnline = online }
+        }
+        monitor.start(queue: DispatchQueue(label: "app.hakobs.gitkanban.network"))
     }
 }
 

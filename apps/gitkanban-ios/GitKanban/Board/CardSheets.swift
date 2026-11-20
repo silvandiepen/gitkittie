@@ -1,5 +1,6 @@
 import GitKittieKit
 import GitKanbanKit
+import PhotosUI
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -15,7 +16,10 @@ struct CardDetailSheet: View {
     @State private var editing = false
     @State private var confirmDelete = false
     @State private var attachments: [BoardFileEntry] = []
+    @State private var showCardReviews = false
     @State private var showImporter = false
+    @State private var showPhotoPicker = false
+    @State private var pickedPhotos: [PhotosPickerItem] = []
     @State private var shareItem: CardShareItem?
 
     // Editable state.
@@ -36,6 +40,14 @@ struct CardDetailSheet: View {
     private var epics: [Epic] { config?.epics ?? [] }
 
     private var laneForStatus: Lane? { lanes.first { $0.status == card.fields.status } }
+    /// The card as currently loaded (the sheet's copy goes stale after a write).
+    private var current: Card {
+        model.board?.columns.lazy.flatMap(\.cards).first { $0.id == card.id } ?? card
+    }
+    private var isCheckedOff: Bool {
+        guard let lane = laneForStatus else { return false }
+        return BoardProgress.stage(for: lane, in: lanes) == .checkedOff
+    }
 
     private var navigationTitle: String {
         let title = card.fields.title.isEmpty ? card.fields.id : card.fields.title
@@ -54,10 +66,16 @@ struct CardDetailSheet: View {
                 .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item], allowsMultipleSelection: false) { result in
                     handleImport(result)
                 }
+                .photosPicker(isPresented: $showPhotoPicker, selection: $pickedPhotos, maxSelectionCount: 5, matching: .images)
+                .onChange(of: pickedPhotos) { _, items in attachPhotos(items) }
                 .sheet(item: $shareItem) { item in ShareSheet(items: [item.url]) }
+                .sheet(isPresented: $showCardReviews) { NavigationStack { ReviewListView(cardID: card.fields.id) }.environment(model) }
                 .task { await loadAttachments() }
         }
         .onAppear(perform: seed)
+        // Opening a card is looking at it. Recorded when it closes, so the "updated"
+        // mark stays visible while it is open.
+        .onDisappear { model.markSeen(card) }
     }
 
     private func loadAttachments() async { attachments = await model.attachments(for: card) }
@@ -69,6 +87,37 @@ struct CardDetailSheet: View {
         guard let data = try? Data(contentsOf: url) else { return }
         let name = url.lastPathComponent
         Task { if await model.attachFile(to: card, data: data, filename: name) { await loadAttachments() } }
+    }
+
+    /// Attach images picked from Photos (screenshots, mostly), keeping their format.
+    private func attachPhotos(_ items: [PhotosPickerItem]) {
+        guard !items.isEmpty else { return }
+        pickedPhotos = []
+        Task {
+            let stamp = Self.attachmentStamp.string(from: Date())
+            for (index, item) in items.enumerated() {
+                guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+                let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "png"
+                let suffix = items.count > 1 ? "-\(index + 1)" : ""
+                await model.attachFile(to: card, data: data, filename: "photo-\(stamp)\(suffix).\(ext)")
+            }
+            await loadAttachments()
+        }
+    }
+
+    private static let attachmentStamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter
+    }()
+
+    /// Photos or Files — the two places a screenshot or document comes from.
+    private func addAttachmentMenu<L: View>(@ViewBuilder label: () -> L) -> some View {
+        Menu {
+            Button { showPhotoPicker = true } label: { Label("Photo Library", systemImage: "photo.on.rectangle") }
+            Button { showImporter = true } label: { Label("Files", systemImage: "folder") }
+        } label: { label() }
     }
 
     private func share(_ entry: BoardFileEntry) async {
@@ -101,6 +150,8 @@ struct CardDetailSheet: View {
                 // Metadata chips
                 metadata
 
+                if isCheckedOff { readBanner }
+
                 // Description - strip leading title if it matches
                 let body = stripLeadingTitle(card.body, title: card.fields.title)
                 if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -111,6 +162,17 @@ struct CardDetailSheet: View {
                     MarkdownWebView(markdown: body)
                 }
 
+                // Review requests linked to this card (`card:` in their review.md).
+                let cardReviews = model.reviews(for: card)
+                if !cardReviews.isEmpty {
+                    Divider()
+                    Button { showCardReviews = true } label: {
+                        let pending = cardReviews.reduce(0) { $0 + $1.summary.pending }
+                        Label(pending > 0 ? "\(pending) asset\(pending == 1 ? "" : "s") to review" : "\(cardReviews.count) review\(cardReviews.count == 1 ? "" : "s")",
+                              systemImage: "checkmark.seal")
+                    }
+                }
+
                 // Attachments: only show if present or expanded via add button
                 if !attachments.isEmpty || showImporter {
                     Divider()
@@ -119,7 +181,7 @@ struct CardDetailSheet: View {
                     // Compact add attachment button when no attachments
                     HStack {
                         Spacer()
-                        Button { showImporter = true } label: {
+                        addAttachmentMenu {
                             Label("Add Attachment", systemImage: "paperclip")
                                 .font(.caption)
                         }
@@ -133,16 +195,52 @@ struct CardDetailSheet: View {
         }
     }
 
+    /// Checked-off work: whether Sil has read it, and the button to say so.
+    @ViewBuilder private var readBanner: some View {
+        let fields = current.fields
+        if BoardProgress.isUnread(fields) {
+            Button { Task { await model.markRead([current]) } } label: {
+                Label(fields.readAt == nil ? "Mark as Read" : "Updated since you read it. Mark as Read",
+                      systemImage: "checkmark.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("markRead")
+        } else if let readAt = fields.readAt {
+            HStack {
+                Label("Read \(ReviewFormat.relative(readAt))\(fields.readBy.map { " by \($0)" } ?? "")",
+                      systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+                Spacer()
+                Button("Mark Unread") { Task { await model.markUnread(current) } }
+                    .font(.caption)
+            }
+        }
+    }
+
+    private var imageAttachments: [BoardFileEntry] { attachments.filter { AttachmentRow.isImage($0.name) } }
+
     private var attachmentsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Attachments").font(.subheadline.weight(.medium))
                 Spacer()
-                Button { showImporter = true } label: { Label("Add", systemImage: "paperclip").font(.caption) }
+                addAttachmentMenu { Label("Add", systemImage: "paperclip").font(.caption) }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
             }
-            ForEach(attachments, id: \.path) { entry in
+            // Screenshots and other images, large enough to judge the work.
+            ForEach(imageAttachments, id: \.path) { entry in
+                AttachmentImage(entry: entry)
+                    .contextMenu {
+                        Button("Share", systemImage: "square.and.arrow.up") { Task { await share(entry) } }
+                        Button("Remove", systemImage: "trash", role: .destructive) {
+                            Task { await model.deleteAttachment(path: entry.path); await loadAttachments() }
+                        }
+                    }
+            }
+            ForEach(attachments.filter { !AttachmentRow.isImage($0.name) }, id: \.path) { entry in
                 AttachmentRow(entry: entry)
                     .contentShape(Rectangle())
                     .onTapGesture { Task { await share(entry) } }
@@ -296,6 +394,15 @@ struct NewTaskSheet: View {
     @State private var assignee = ""
     @State private var epic = ""
     @State private var body_ = ""
+    @State private var pickedPhotos: [PhotosPickerItem] = []
+    @State private var images: [SharedImage] = []
+    /// The image open in the markup editor.
+    @State private var annotating: SharedImage.ID?
+    @State private var isDrafting = false
+    /// What was last written for the user, so a new draft may replace it but never their own text.
+    @State private var draftedTitle = ""
+    @State private var draftedBody = ""
+    @State private var recognizedText: [SharedImage.ID: String] = [:]
 
     private var config: EffectiveConfig? { model.board?.config }
     private var lanes: [Lane] { config?.lanes.filter { !$0.folder.isEmpty } ?? [] }
@@ -345,29 +452,153 @@ struct NewTaskSheet: View {
                     }
                 }
                 Section("Description") { TextEditor(text: $body_).frame(minHeight: 120) }
+                Section {
+                    if !images.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(images) { image in
+                                    if let thumbnail = image.thumbnail {
+                                        Button { annotating = image.id } label: {
+                                            Image(uiImage: thumbnail)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(height: 120)
+                                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                .overlay(alignment: .bottomTrailing) {
+                                                    Label(image.annotations.isEmpty ? "Mark up" : "\(image.annotations.count)",
+                                                          systemImage: "pencil.tip.crop.circle")
+                                                        .font(.caption2.weight(.semibold))
+                                                        .padding(.horizontal, 6).padding(.vertical, 3)
+                                                        .background(.regularMaterial, in: Capsule())
+                                                        .padding(4)
+                                                }
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("Mark up image")
+                                        .overlay(alignment: .topTrailing) {
+                                            Button { images.removeAll { $0.id == image.id } } label: {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .symbolRenderingMode(.palette)
+                                                    .foregroundStyle(.white, .black.opacity(0.6))
+                                                    .font(.title3)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .padding(4)
+                                            .accessibilityLabel("Remove image")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    PhotosPicker(selection: $pickedPhotos, maxSelectionCount: 5, matching: .images) {
+                        Label(images.isEmpty ? "Add Images" : "Add More", systemImage: "photo.on.rectangle")
+                    }
+                    .accessibilityIdentifier("newTaskAddImages")
+                    if isDrafting {
+                        HStack(spacing: 10) { ProgressView(); Text("Writing a title and description").foregroundStyle(.secondary) }
+                    }
+                } header: {
+                    Text("Images")
+                } footer: {
+                    if !images.isEmpty {
+                        Text("Tap an image to mark what is wrong. An empty title and description are written from the image and your marks.")
+                    }
+                }
             }
             .navigationTitle("New Task")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { if laneID.isEmpty { laneID = lane.id } }
+            .onChange(of: pickedPhotos) { _, items in
+                guard !items.isEmpty else { return }
+                pickedPhotos = []
+                Task {
+                    for item in items {
+                        guard let raw = try? await item.loadTransferable(type: Data.self) else { continue }
+                        // PNG and JPEG are kept; anything else (HEIC) becomes JPEG so every client shows it.
+                        let isPNG = item.supportedContentTypes.contains(.png)
+                        let isJPEG = item.supportedContentTypes.contains(.jpeg)
+                        guard let data = isPNG || isJPEG ? raw : UIImage(data: raw)?.jpegData(compressionQuality: 0.85) else { continue }
+                        images.append(SharedImage(data: data, fileExtension: isPNG ? "png" : "jpg",
+                                                  thumbnail: SharedImage.downsampled(data, maxPixel: 480)))
+                    }
+                    await draftFromImages()
+                }
+            }
+            .sheet(item: annotatingBinding, onDismiss: { Task { await draftFromImages() } }) { $image in
+                AnnotationEditor(image: $image)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
+                        // Close at once: the task is saved locally and sent in the
+                        // background (see the indicator in the corner).
+                        let model = model, lane = targetLane, images = images
+                        let marks = ImageTaskDrafter.annotationNotes(images)
+                        let title = title.trimmingCharacters(in: .whitespaces).isEmpty
+                            ? (ImageTaskDrafter.firstComment(images) ?? "New task") : title
+                        let body = [body_.trimmingCharacters(in: .whitespacesAndNewlines), marks]
+                            .filter { !$0.isEmpty }.joined(separator: "\n\n")
+                        let (priority, type, assignee, epic) = (priority, type, assignee, epic)
+                        dismiss()
                         Task {
-                            await model.createTask(
-                                title: title, lane: targetLane,
+                            let id = await model.createTask(
+                                title: title, lane: lane,
                                 priority: priority.isEmpty ? nil : priority,
                                 type: type.isEmpty ? nil : type,
                                 assignee: assignee.isEmpty ? nil : assignee,
                                 epic: epic.isEmpty ? nil : epic,
-                                body: body_
+                                body: body
                             )
-                            dismiss()
+                            guard let id else { return }
+                            for (index, image) in images.enumerated() {
+                                let file = image.attachment()
+                                await model.attachFile(toCardID: id, data: file.data,
+                                                       filename: "image-\(index + 1).\(file.fileExtension)")
+                            }
+                            if !images.isEmpty { await model.loadAttachmentIndex() }
                         }
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+                    // With an image a title is written if none is given.
+                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty && images.isEmpty)
                 }
             }
+        }
+    }
+
+    /// The binding to the image being marked up, for the editor sheet.
+    private var annotatingBinding: Binding<Binding<SharedImage>?> {
+        Binding(
+            get: { $images.first { $0.wrappedValue.id == annotating } },
+            set: { if $0 == nil { annotating = nil } })
+    }
+
+    /// Write the title and description from the images and marks, where the user has not
+    /// written their own: a field is only filled when it is empty or still an earlier draft.
+    private func draftFromImages() async {
+        guard !images.isEmpty, !isDrafting else { return }
+        func open(_ text: String, _ draft: String) -> Bool {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty || trimmed == draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard open(title, draftedTitle) || open(body_, draftedBody) else { return }
+        let titleAtStart = title, bodyAtStart = body_
+        let own = [(title, draftedTitle), (body_, draftedBody)].filter { !open($0.0, $0.1) }.map(\.0).joined(separator: "\n")
+        isDrafting = true
+        var known = recognizedText
+        let ticket = await ImageTaskDrafter.draft(app: model, images: images, pointers: own, recognizedText: &known)
+        recognizedText = known
+        isDrafting = false
+        if let ticket {
+            // Only where nothing was typed while the draft was being written.
+            if open(title, draftedTitle), title == titleAtStart { title = ticket.title; draftedTitle = ticket.title }
+            if open(body_, draftedBody), body_ == bodyAtStart { body_ = ticket.description; draftedBody = ticket.description }
+            if priority.isEmpty, let suggested = ticket.priority, priorities.contains(where: { $0.id == suggested }) { priority = suggested }
+            if type.isEmpty, let suggested = ticket.type, types.contains(suggested) { type = suggested }
+        } else if open(title, draftedTitle), let comment = ImageTaskDrafter.firstComment(images) {
+            title = comment
+            draftedTitle = comment
         }
     }
 }
@@ -603,11 +834,20 @@ struct AISettingsSheet: View {
                         }
                     }
                 }
-                Section("API Key") {
-                    SecureField("API Key", text: $model.aiAPIKey)
-                    Text("Your API key is stored locally and never shared.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if model.aiProvider.needsAPIKey {
+                    Section("API Key") {
+                        SecureField("API Key", text: $model.aiAPIKey)
+                        Text("Your API key is stored locally and never shared.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Section("On device") {
+                        Text(OnDeviceAI.unavailableReason
+                             ?? "Runs on this device with Apple Intelligence. No API key, and nothing you type leaves the device.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("AI Settings")
@@ -633,10 +873,12 @@ private struct AttachmentRow: View {
     let entry: BoardFileEntry
     @State private var thumb: UIImage?
 
-    private var isImage: Bool {
+    static func isImage(_ name: String) -> Bool {
         [".png", ".jpg", ".jpeg", ".gif", ".heic", ".webp", ".bmp", ".tiff"]
-            .contains { entry.name.lowercased().hasSuffix($0) }
+            .contains { name.lowercased().hasSuffix($0) }
     }
+
+    private var isImage: Bool { Self.isImage(entry.name) }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -677,4 +919,61 @@ struct ShareSheet: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+/// An image attachment shown full width; tap to open it in Quick Look (zoom, share).
+private struct AttachmentImage: View {
+    @Environment(AppModel.self) private var model
+    let entry: BoardFileEntry
+    @State private var image: UIImage?
+    @State private var data: Data?
+    @State private var preview: QuickLookItem?
+    @State private var failed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Group {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
+                } else if failed {
+                    Label("Couldn't load \(entry.name)", systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    RoundedRectangle(cornerRadius: 10).fill(.quaternary.opacity(0.4))
+                        .frame(height: 180)
+                        .overlay(ProgressView())
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: open)
+            Text(entry.name).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Screenshot \(entry.name)")
+        .accessibilityIdentifier("attachmentImage")
+        .task(id: entry.path) {
+            guard image == nil else { return }
+            if let loaded = await model.readAttachment(path: entry.path), let decoded = UIImage(data: loaded) {
+                data = loaded
+                image = decoded
+            } else {
+                failed = true
+            }
+        }
+        .quickLook(item: $preview)
+    }
+
+    private func open() {
+        guard let data else { return }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(entry.name)
+        do {
+            try data.write(to: url)
+            preview = QuickLookItem(url: url)
+        } catch {
+            model.errorMessage = "Couldn't open \(entry.name): \(error.localizedDescription)"
+        }
+    }
 }
