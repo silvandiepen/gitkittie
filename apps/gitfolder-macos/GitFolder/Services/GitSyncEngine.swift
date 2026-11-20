@@ -125,7 +125,10 @@ struct GitSyncEngine: Sendable {
                 return FolderSyncOutcome(folder: updatedFolder, changed: false, pushed: false, message: "No changes")
             }
 
-            _ = try requireSuccess(git(["add", "-A"], in: folderURL, environment: authContext.environment), failure: .gitAddFailed())
+            // `--sparse`: in a sparse checkout (a folder cloned without, say, its attachments)
+            // a new file in a left-out folder is otherwise refused, `git add` fails, and the
+            // folder stops syncing altogether. It changes nothing in an ordinary checkout.
+            _ = try requireSuccess(git(["add", "-A", "--sparse"], in: folderURL, environment: authContext.environment), failure: .gitAddFailed())
 
             let commitMessage = SnapshotCommitMessage.make(date: now())
             let commit = git(["commit", "-m", commitMessage], in: folderURL, timeoutSeconds: 60, environment: authContext.environment)

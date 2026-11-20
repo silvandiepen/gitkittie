@@ -127,6 +127,55 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertFalse(remoteHead.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
+    /// A light checkout that leaves `attachments/` out: a card edit syncs, and so does a
+    /// new attachment made locally in a left-out folder (plain `git add -A` refuses it).
+    func testSyncWorksInASparseCheckoutIncludingNewFilesInLeftOutFolders() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let remote = root.appending(path: "remote.git", directoryHint: .isDirectory)
+        let seed = root.appending(path: "seed", directoryHint: .isDirectory)
+        let light = root.appending(path: "light", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: seed.appending(path: "Pets/attachments/PETS-1"), withIntermediateDirectories: true)
+        let identity = ["-c", "user.name=GitFolder Test", "-c", "user.email=gitfolder@example.com"]
+
+        _ = try runGit(["init", "--bare"], in: remote)
+        _ = try runGit(["init", "-b", "main"], in: seed)
+        try "card".write(to: seed.appending(path: "Pets/PETS-1.md"), atomically: true, encoding: .utf8)
+        try "image".write(to: seed.appending(path: "Pets/attachments/PETS-1/shot.png"), atomically: true, encoding: .utf8)
+        _ = try runGit(["add", "-A"], in: seed)
+        _ = try runGit(identity + ["commit", "-m", "seed"], in: seed)
+        _ = try runGit(["push", remote.path, "main"], in: seed)
+
+        _ = try runGit(["clone", "--no-checkout", remote.path, light.path], in: root)
+        _ = try runGit(["sparse-checkout", "init", "--no-cone"], in: light)
+        try "/*\n!attachments/\n".write(to: light.appending(path: ".git/info/sparse-checkout"), atomically: true, encoding: .utf8)
+        _ = try runGit(["checkout", "main"], in: light)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: light.appending(path: "Pets/attachments/PETS-1/shot.png").path))
+
+        try "card, edited".write(to: light.appending(path: "Pets/PETS-1.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: light.appending(path: "Pets/attachments/PETS-2"), withIntermediateDirectories: true)
+        try "new image".write(to: light.appending(path: "Pets/attachments/PETS-2/new.png"), atomically: true, encoding: .utf8)
+
+        let folder = SyncedFolder.create(
+            name: "light", localPath: light.path, bookmarkData: nil, repoUrl: remote.path,
+            authMode: .ssh, branch: "main", syncIntervalMinutes: 15)
+        let engine = GitSyncEngine(now: { Date(timeIntervalSince1970: 1_700_000_000) })
+        let options = GitSyncOptions(
+            gitAuthorName: "GitFolder Test", gitAuthorEmail: "gitfolder@example.com",
+            githubToken: nil, sshPrivateKeyPath: nil, sshPrivateKeyBookmarkData: nil)
+        let outcome = try await engine.sync(folder, options: options)
+
+        XCTAssertTrue(outcome.pushed)
+        XCTAssertEqual(outcome.folder.lastStatus, .synced)
+        let pushed = try runGit(["--git-dir", remote.path, "ls-tree", "-r", "--name-only", "main"], in: root).standardOutput
+        XCTAssertTrue(pushed.contains("Pets/attachments/PETS-2/new.png"), pushed)
+        // What was left out of the checkout is still in the repository, untouched.
+        XCTAssertTrue(pushed.contains("Pets/attachments/PETS-1/shot.png"), pushed)
+        let card = try runGit(["--git-dir", remote.path, "show", "main:Pets/PETS-1.md"], in: root).standardOutput
+        XCTAssertEqual(card, "card, edited")
+    }
+
     func testSyncRejectsFolderWithoutRepositoryURL() async throws {
         let folder = SyncedFolder.create(
             name: "source",

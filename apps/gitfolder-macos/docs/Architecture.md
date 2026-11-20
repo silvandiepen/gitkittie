@@ -114,7 +114,7 @@ flowchart TD
     S --> R[ensure repo/remote/branch]
     R --> ST{git status --porcelain<br/>changes?}
     ST -->|no| OK1[mark .synced · No changes]
-    ST -->|yes| ADD[git add -A]
+    ST -->|yes| ADD[git add -A --sparse]
     ADD --> C[commit 'GitFolder snapshot …']
     C --> PR[git pull --rebase origin branch]
     PR --> PU[git push -u origin branch]

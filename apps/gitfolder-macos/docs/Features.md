@@ -60,6 +60,11 @@ modeled, documented, or claimed but not yet built**. Status reflects the code in
   `git add -A` → snapshot commit → `git pull --rebase origin <branch>` →
   `git push -u origin <branch>` (`GitSyncEngine`).
 - Snapshot commit message: `GitFolder snapshot <ISO-8601 timestamp>`.
+- **Sparse checkouts work.** Staging uses `git add -A --sparse`, so a folder cloned without some of
+  its sub-folders (a light checkout that leaves out, say, `attachments/`) still syncs, including a
+  new file made locally in a left-out folder. Plain `git add -A` refuses such a file and the folder
+  would stop syncing. The flag changes nothing in an ordinary checkout. Covered by
+  `testSyncWorksInASparseCheckoutIncludingNewFilesInLeftOutFolders` (real git).
 - No changes → the folder is marked synced with "No changes"; no empty commits.
 - **Sync All Now** / per-folder **Sync Now** trigger the same engine manually.
 - **Pause all syncing** (global) and **pause individual folders** suppress
