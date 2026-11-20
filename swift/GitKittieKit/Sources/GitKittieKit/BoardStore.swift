@@ -17,7 +17,8 @@ public enum BoardStore {
             priorities: priorities(from: map["priorities"]),
             types: strings(from: map["types"]),
             tags: strings(from: map["tags"]),
-            fieldSource: fieldSource(from: map["fieldSource"])
+            fieldSource: fieldSource(from: map["fieldSource"]),
+            reviewPath: map["review_path"] as? String
         )
     }
 
@@ -33,7 +34,10 @@ public enum BoardStore {
             priorities: map["priorities"].map { priorities(from: $0) },
             types: map["types"].map { strings(from: $0) },
             tags: map["tags"].map { strings(from: $0) },
-            fieldSource: fieldSource(from: map["fieldSource"])
+            fieldSource: fieldSource(from: map["fieldSource"]),
+            reviewPath: map["review_path"] as? String,
+            icon: (map["icon"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            color: (map["color"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 
@@ -117,7 +121,7 @@ public enum BoardStore {
     /// Render a YAML scalar, quoting when the value could be misparsed: empty
     /// strings, or any value containing spaces, colons, dots or `#`, or one that
     /// begins with a digit. Backslashes and quotes are escaped inside the quotes.
-    static func yamlScalar(_ value: String) -> String {
+    public static func yamlScalar(_ value: String) -> String {
         let needsQuote = value.isEmpty
             || value.contains(where: { $0 == " " || $0 == ":" || $0 == "." || $0 == "#" || $0 == "\"" || $0 == "'" })
             || (value.first?.isNumber ?? false)
@@ -141,16 +145,64 @@ public enum BoardStore {
         default:
             fields = frontmatterFields(frontmatter, fileName: fileName)
         }
-        return Card(fields: fields, body: body, fileName: fileName)
+        var titled = fields
+        if titled.title.trimmingCharacters(in: .whitespaces).isEmpty {
+            // No usable title field: the card's heading, else its file name. Never blank.
+            titled.title = headingTitle(body)
+                ?? fileName.map { ($0 as NSString).deletingPathExtension.replacingOccurrences(of: "-", with: " ") }
+                ?? ""
+        }
+        return Card(fields: titled, body: body, fileName: fileName)
+    }
+
+    /// Top-level `key: value` lines read one by one, for frontmatter that is not valid
+    /// YAML. One unquoted colon in a value (`title: Check: a follow-up`) makes the whole
+    /// block unparseable, and a card must not lose its title, id and status over that.
+    public static func lenientFields(_ yaml: String) -> [String: Any] {
+        var map: [String: Any] = [:]
+        for line in yaml.components(separatedBy: "\n") {
+            guard let first = line.first, !first.isWhitespace, first != "#", first != "-",
+                  let colon = line.firstIndex(of: ":") else { continue }
+            let key = line[..<colon].trimmingCharacters(in: .whitespaces)
+            var value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            guard !key.isEmpty, !key.contains(" "), map[key] == nil else { continue }
+            if value.count >= 2, let quote = value.first, quote == "\"" || quote == "'", value.last == quote {
+                value = String(value.dropFirst().dropLast())
+            }
+            // Lists, nested maps and block scalars are not plain strings: leave them out.
+            if value.isEmpty || value == "null" || value == "~" || value.hasPrefix("[") || value.hasPrefix("{")
+                || value == "|" || value == ">" { continue }
+            map[key] = value
+        }
+        return map
+    }
+
+    /// The first `# Heading` of a card body, as a title for a card that has none.
+    static func headingTitle(_ body: String) -> String? {
+        for line in body.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("# ") {
+                let title = trimmed.dropFirst(2).trimmingCharacters(in: .whitespaces)
+                if !title.isEmpty { return title }
+            }
+        }
+        return nil
     }
 
     private static func frontmatterFields(_ yaml: String?, fileName: String?) -> CardFields {
-        let map = (yaml.flatMap { try? dictionary(from: $0) }) ?? [:]
+        let map: [String: Any]
+        if let yaml {
+            if let parsed = try? dictionary(from: yaml) { map = parsed } else { map = lenientFields(yaml) }
+        } else {
+            map = [:]
+        }
         func str(_ key: String) -> String? {
             // A YAML null (empty `key:`) parses to NSNull — treat it as absent rather
             // than stringifying it to "<null>".
             guard let value = map[key], !(value is NSNull) else { return nil }
             if let string = value as? String { return string }
+            // YAML timestamps (`updated_at: 2026-11-08T10:00:00Z`) load as Date.
+            if let date = value as? Date { return Review.timestamp(date) }
             return String(describing: value)
         }
         return CardFields(
@@ -162,7 +214,10 @@ public enum BoardStore {
             type: nonEmpty(str("type")),
             epic: nonEmpty(str("epic")),
             assignee: nonEmpty(str("assignee")),
-            order: nonEmpty(str("order"))
+            order: nonEmpty(str("order")),
+            updatedAt: nonEmpty(str("updated_at")),
+            readAt: nonEmpty(str("read_at")),
+            readBy: nonEmpty(str("read_by"))
         )
     }
 

@@ -7,10 +7,14 @@ import Security
 public struct KeychainService: Sendable {
     private let service: String
     private let account: String
+    /// Keychain access group. An App Group id works here, so an app and its extensions
+    /// that share the group read the same item. `nil` keeps the item private to the app.
+    private let accessGroup: String?
 
-    public init(service: String, account: String = "github-token") {
+    public init(service: String, account: String = "github-token", accessGroup: String? = nil) {
         self.service = service
         self.account = account
+        self.accessGroup = accessGroup
     }
 
     /// Save the secret. An empty/whitespace value deletes the item instead.
@@ -68,11 +72,13 @@ public struct KeychainService: Sendable {
     }
 
     private func baseQuery() -> [String: Any] {
-        [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
+        if let accessGroup { query[kSecAttrAccessGroup as String] = accessGroup }
+        return query
     }
 }
 

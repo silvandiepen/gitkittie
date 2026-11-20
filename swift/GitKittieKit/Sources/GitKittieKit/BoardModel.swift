@@ -90,6 +90,8 @@ public struct BoardConfig: Equatable, Sendable {
     public var types: [String]
     public var tags: [String]
     public var fieldSource: FieldSource?
+    /// `review_path`: where review requests live, relative to each project folder (see `Review`).
+    public var reviewPath: String?
 
     public init(
         lanes: [Lane] = [],
@@ -98,7 +100,8 @@ public struct BoardConfig: Equatable, Sendable {
         priorities: [Priority] = [],
         types: [String] = [],
         tags: [String] = [],
-        fieldSource: FieldSource? = nil
+        fieldSource: FieldSource? = nil,
+        reviewPath: String? = nil
     ) {
         self.lanes = lanes
         self.users = users
@@ -107,6 +110,7 @@ public struct BoardConfig: Equatable, Sendable {
         self.types = types
         self.tags = tags
         self.fieldSource = fieldSource
+        self.reviewPath = reviewPath
     }
 }
 
@@ -120,6 +124,12 @@ public struct ProjectConfig: Equatable, Sendable {
     public var types: [String]?
     public var tags: [String]?
     public var fieldSource: FieldSource?
+    /// `review_path`: where review requests live, relative to each project folder (see `Review`).
+    public var reviewPath: String?
+    /// `icon`: the board's SF Symbol name, and `color`: one of `BoardAppearance.colors`.
+    /// How the board looks in every app that lists it; kept in the board's own README.
+    public var icon: String?
+    public var color: String?
 
     public init(
         project: String? = nil,
@@ -129,8 +139,13 @@ public struct ProjectConfig: Equatable, Sendable {
         priorities: [Priority]? = nil,
         types: [String]? = nil,
         tags: [String]? = nil,
-        fieldSource: FieldSource? = nil
+        fieldSource: FieldSource? = nil,
+        reviewPath: String? = nil,
+        icon: String? = nil,
+        color: String? = nil
     ) {
+        self.icon = icon
+        self.color = color
         self.project = project
         self.lanes = lanes
         self.users = users
@@ -139,6 +154,7 @@ public struct ProjectConfig: Equatable, Sendable {
         self.types = types
         self.tags = tags
         self.fieldSource = fieldSource
+        self.reviewPath = reviewPath
     }
 }
 
@@ -152,6 +168,8 @@ public struct EffectiveConfig: Equatable, Sendable {
     public var types: [String]
     public var tags: [String]
     public var fieldSource: FieldSource?
+    /// `review_path`: where review requests live, relative to each project folder (see `Review`).
+    public var reviewPath: String?
 
     public init(
         project: String? = nil,
@@ -161,7 +179,8 @@ public struct EffectiveConfig: Equatable, Sendable {
         priorities: [Priority] = [],
         types: [String] = [],
         tags: [String] = [],
-        fieldSource: FieldSource? = nil
+        fieldSource: FieldSource? = nil,
+        reviewPath: String? = nil
     ) {
         self.project = project
         self.lanes = lanes
@@ -171,6 +190,7 @@ public struct EffectiveConfig: Equatable, Sendable {
         self.types = types
         self.tags = tags
         self.fieldSource = fieldSource
+        self.reviewPath = reviewPath
     }
 }
 
@@ -185,12 +205,21 @@ public struct CardFields: Equatable, Sendable {
     public var epic: String?
     public var assignee: String?
     public var order: String?
+    /// `updated_at`, ISO-8601 as written.
+    public var updatedAt: String?
+    /// `read_at` / `read_by`: when the reviewer last read the card (see `BoardProgress`).
+    public var readAt: String?
+    public var readBy: String?
 
     public init(
         id: String = "", title: String = "", project: String = "", status: String = "",
         priority: String? = nil, type: String? = nil, epic: String? = nil,
-        assignee: String? = nil, order: String? = nil
+        assignee: String? = nil, order: String? = nil,
+        updatedAt: String? = nil, readAt: String? = nil, readBy: String? = nil
     ) {
+        self.updatedAt = updatedAt
+        self.readAt = readAt
+        self.readBy = readBy
         self.id = id
         self.title = title
         self.project = project
@@ -231,4 +260,22 @@ public struct Column: Equatable, Sendable, Identifiable {
         self.lane = lane
         self.cards = cards
     }
+}
+
+/// The icons and colours a board can be given (`icon:` / `color:` in its README).
+public enum BoardAppearance {
+    public static let defaultIcon = "square.stack.3d.up.fill"
+    /// Colour names as written in the README; the apps map them to system colours.
+    public static let colors = ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "mint", "teal", "brown", "gray"]
+    /// SF Symbols offered in the picker. Any other symbol name in a README still shows.
+    public static let icons = [
+        "square.stack.3d.up.fill", "checklist", "list.bullet.rectangle.fill", "tray.full.fill", "folder.fill", "doc.text.fill",
+        "hammer.fill", "wrench.and.screwdriver.fill", "terminal.fill", "chevron.left.forwardslash.chevron.right", "cpu.fill", "ladybug.fill",
+        "iphone", "macbook", "globe", "cloud.fill", "server.rack", "shippingbox.fill",
+        "paintbrush.fill", "paintpalette.fill", "photo.fill", "camera.fill", "film.fill", "music.note",
+        "gamecontroller.fill", "book.fill", "graduationcap.fill", "pencil.and.outline", "megaphone.fill", "envelope.fill",
+        "cart.fill", "creditcard.fill", "chart.bar.fill", "banknote.fill", "briefcase.fill", "building.2.fill",
+        "house.fill", "leaf.fill", "heart.fill", "star.fill", "bolt.fill", "flame.fill",
+        "pawprint.fill", "fork.knife", "airplane", "car.fill", "map.fill", "sparkles",
+    ]
 }
