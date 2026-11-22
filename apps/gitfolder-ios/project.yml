@@ -17,7 +17,7 @@ packages:
   # iOS transport: hosted git provider REST API via git-pont (no local clone / no shell).
   git-pont:
     url: https://github.com/silvandiepen/git-pont.git
-    branch: codex/initial-git-pont-monorepo
+    branch: master
   # Shared Swift helpers (KeychainService).
   GitKittieKit:
     path: ../../swift/GitKittieKit
