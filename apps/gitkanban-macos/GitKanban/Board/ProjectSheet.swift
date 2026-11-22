@@ -2,8 +2,10 @@ import GitKittieKit
 import GitKanbanKit
 import SwiftUI
 
-/// Create a project, or edit an existing project's settings — name, description, lanes,
-/// priorities, members, types, and epics. Saving rewrites the project's README config.
+/// Create a board, or edit an existing board's settings. A new board (and the set-up of a
+/// detected one) is one short form. The settings of an existing board are a window with
+/// its parts on the left: General, Lanes, Priorities, Members, Types and Epics. Saving
+/// rewrites the board's README.
 struct ProjectSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -12,28 +14,106 @@ struct ProjectSheet: View {
     /// When set, prefill the form from an auto-detected config (board setup flow).
     var prefill: DetectedBoardConfig?
 
+    /// One row of a list: a lane, a priority, a member, a type or an epic.
+    struct Entry: Identifiable, Equatable {
+        let id = UUID()
+        var text: String
+        /// What the row was when the settings opened, for lanes and epics: they keep their id.
+        var lane: Lane?
+        var epic: Epic?
+    }
+
+    /// The parts of a board's settings, as the sidebar of the settings window lists them.
+    enum Category: String, CaseIterable, Identifiable {
+        case general = "General", products = "Products", lanes = "Lanes", priorities = "Priorities", members = "Members", types = "Types", epics = "Epics", docs = "Docs"
+        var id: String { rawValue }
+        var symbol: String {
+            switch self {
+            case .general: return "gearshape"
+            case .lanes: return "rectangle.split.3x1"
+            case .priorities: return "flag"
+            case .members: return "person.2"
+            case .types: return "tag"
+            case .epics: return "square.stack.3d.up"
+            case .docs: return "doc.text"
+            case .products: return "shippingbox"
+            }
+        }
+        var hint: String {
+            switch self {
+            case .general, .docs, .products: return ""
+            case .lanes: return "Lane name"
+            case .priorities: return "P0"
+            case .members: return "username"
+            case .types: return "feature"
+            case .epics: return "Epic name"
+            }
+        }
+        var singular: String {
+            switch self {
+            case .general, .docs, .products: return ""
+            case .lanes: return "Lane"
+            case .priorities: return "Priority"
+            case .members: return "Member"
+            case .types: return "Type"
+            case .epics: return "Epic"
+            }
+        }
+        /// Merging rewrites a field on every task. A lane is a folder of tasks, not a field.
+        var canMerge: Bool { self != .lanes && self != .general && self != .docs && self != .products }
+        /// Parts that are a plain list of names.
+        var isList: Bool { self != .general && self != .docs && self != .products }
+    }
+
+    /// A row folded into another one: what it was, and the row it went into.
+    struct PendingMerge: Identifiable {
+        let id = UUID()
+        var category: Category
+        var from: Entry
+        var into: UUID
+    }
+
     @State private var name = ""
     @State private var description = ""
-    @State private var laneItems: [LaneItem] = ProjectSheet.defaultLanes()
-    @State private var priorityItems: [TextItem] = ProjectSheet.defaultPriorities()
-    @State private var memberItems: [TextItem] = []
-    @State private var typeItems: [TextItem] = []
-    @State private var epicItems: [EpicItem] = []
+    @State private var icon: String?
+    @State private var color: String?
+    @State private var lanes: [Entry] = AppModel.defaultProjectLanes().map { Entry(text: $0.name) }
+    @State private var priorities: [Entry] = AppModel.defaultPriorities().map { Entry(text: $0.id) }
+    @State private var members: [Entry] = []
+    @State private var types: [Entry] = []
+    @State private var epics: [Entry] = []
+    @State private var merges: [PendingMerge] = []
+    /// Folders in other repositories whose pages the board shows under Docs.
+    @State private var docSources: [DocSource] = []
+    @State private var newSource = ""
+    /// The board's products, with the id each had when the settings opened.
+    @State private var productRows: [ProductRow] = []
+
+    struct ProductRow: Identifiable {
+        let id = UUID()
+        var name: String
+        var prefix: String
+        var original: BoardProduct?
+    }
+    @State private var sourceProblem: String?
+    @State private var selection: Set<UUID> = []
+    @State private var category: Category = .general
     @State private var seeded = false
     @State private var detecting = false
 
     private var isEditing: Bool { editing != nil }
     private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// Settings of an existing board come one part at a time.
+    private var isCategorized: Bool { isEditing && prefill == nil }
 
-    struct LaneItem: Identifiable { let id = UUID(); var name: String; var origin: Lane? }
-    struct EpicItem: Identifiable { let id = UUID(); var name: String; var origin: Epic? }
-    struct TextItem: Identifiable { let id = UUID(); var text: String }
-
-    static func defaultLanes() -> [LaneItem] {
-        AppModel.defaultProjectLanes().map { LaneItem(name: $0.name, origin: nil) }
-    }
-    static func defaultPriorities() -> [TextItem] {
-        AppModel.defaultPriorities().map { TextItem(text: $0.id) }
+    private func entries(_ category: Category) -> Binding<[Entry]> {
+        switch category {
+        case .lanes: return $lanes
+        case .priorities: return $priorities
+        case .members: return $members
+        case .types: return $types
+        case .epics, .general, .docs, .products: return $epics
+        }
     }
 
     static func laneColor(_ i: Int) -> Color {
@@ -53,96 +133,26 @@ struct ProjectSheet: View {
         return ramp[min(i, ramp.count - 1)]
     }
 
-    @ViewBuilder private func deleteButton(_ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+    /// A field without the leading label a macOS form gives every text field; the hint
+    /// shows inside the empty field instead.
+    private func field(_ hint: String, _ text: Binding<String>) -> some View {
+        TextField(hint, text: text, prompt: Text(hint)).labelsHidden()
+    }
+
+    @ViewBuilder private func decoration(_ category: Category, _ index: Int) -> some View {
+        switch category {
+        case .lanes: Circle().fill(Self.laneColor(index)).frame(width: 11, height: 11)
+        case .priorities: Image(systemName: "flag.fill").font(.caption).foregroundStyle(Self.priorityColor(index))
+        default: Image(systemName: category.symbol).font(.caption).foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Project") {
-                    TextField("Name", text: $name)
-                    TextField("Description (optional)", text: $description, axis: .vertical).lineLimit(1...4)
-                }
-
-                if isEditing {
-                    Section {
-                        Button { detect() } label: {
-                            HStack {
-                                Label("Detect from Folders", systemImage: "wand.and.stars")
-                                Spacer()
-                                if detecting { ProgressView().controlSize(.small) }
-                            }
-                        }
-                        .disabled(detecting)
-                    } footer: {
-                        Text("Read the board's folders and cards to fill in lanes, priorities, types, members, and epics.")
-                    }
-                }
-
-                Section("Lanes") {
-                    ForEach($laneItems) { $item in
-                        let index = laneItems.firstIndex { $0.id == item.id } ?? 0
-                        HStack(spacing: 10) {
-                            Circle().fill(Self.laneColor(index)).frame(width: 11, height: 11)
-                            TextField("Lane name", text: $item.name)
-                            deleteButton { laneItems.removeAll { $0.id == item.id } }
-                        }
-                    }
-                    Button { laneItems.append(LaneItem(name: "", origin: nil)) } label: { Label("Add Lane", systemImage: "plus") }
-                }
-
-                Section("Priorities") {
-                    ForEach($priorityItems) { $item in
-                        let index = priorityItems.firstIndex { $0.id == item.id } ?? 0
-                        HStack(spacing: 10) {
-                            Image(systemName: "flag.fill").font(.caption).foregroundStyle(Self.priorityColor(index))
-                            TextField("P0", text: $item.text)
-                            deleteButton { priorityItems.removeAll { $0.id == item.id } }
-                        }
-                    }
-                    Button { priorityItems.append(TextItem(text: "P\(priorityItems.count)")) } label: { Label("Add Priority", systemImage: "plus") }
-                }
-
-                Section("Members") {
-                    ForEach($memberItems) { $item in
-                        HStack {
-                            TextField("username", text: $item.text).autocorrectionDisabled()
-                            deleteButton { memberItems.removeAll { $0.id == item.id } }
-                        }
-                    }
-                    Button { memberItems.append(TextItem(text: "")) } label: { Label("Add Member", systemImage: "plus") }
-                }
-
-                Section("Types") {
-                    ForEach($typeItems) { $item in
-                        HStack {
-                            TextField("feature", text: $item.text)
-                            deleteButton { typeItems.removeAll { $0.id == item.id } }
-                        }
-                    }
-                    Button { typeItems.append(TextItem(text: "")) } label: { Label("Add Type", systemImage: "plus") }
-                }
-
-                Section("Epics") {
-                    ForEach($epicItems) { $item in
-                        HStack {
-                            TextField("Epic name", text: $item.name)
-                            deleteButton { epicItems.removeAll { $0.id == item.id } }
-                        }
-                    }
-                    Button { epicItems.append(EpicItem(name: "", origin: nil)) } label: { Label("Add Epic", systemImage: "plus") }
-                }
-
-                if let error = model.errorMessage {
-                    Section { Text(error).font(.callout).foregroundStyle(.red) }
-                }
+            Group {
+                if isCategorized { categorized } else { singleForm }
             }
-            .formStyle(.grouped)
-            .navigationTitle(prefill != nil ? "Set Up Board" : (isEditing ? "Project Settings" : "New Project"))
+            .navigationTitle(prefill != nil ? "Set Up Board" : (isEditing ? "Board Settings" : "New Project"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -152,29 +162,367 @@ struct ProjectSheet: View {
             }
             .onAppear(perform: seed)
         }
-        .frame(minWidth: 520, minHeight: 560)
+        .frame(minWidth: isCategorized ? 720 : 520, minHeight: 580)
     }
+
+    // MARK: An existing board: parts on the left
+
+    private var categorized: some View {
+        HStack(spacing: 0) {
+            List(Category.allCases, selection: Binding(get: { category }, set: { category = $0 ?? .general; selection = [] })) { item in
+                HStack {
+                    Label(item.rawValue, systemImage: item.symbol)
+                    Spacer()
+                    if item == .products {
+                        Text("\(productRows.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    } else if item == .docs {
+                        Text("\(docSources.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    } else if item != .general {
+                        Text("\(entries(item).wrappedValue.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    }
+                }
+                .tag(item)
+            }
+            .listStyle(.sidebar)
+            .frame(width: 180)
+            Divider()
+            VStack(spacing: 0) {
+                if category == .general { generalForm } else if category == .docs { docsForm } else if category == .products { productsForm } else { entryList(category) }
+                if let progress = model.settingsProgress {
+                    HStack { ProgressView().controlSize(.small); Text(progress).foregroundStyle(.secondary); Spacer() }.padding(10)
+                }
+                if let error = model.errorMessage {
+                    Text(error).font(.callout).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading).padding(10)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var generalForm: some View {
+        Form {
+            Section {
+                field("Name", $name)
+            } header: {
+                Text("Board")
+            } footer: {
+                Text("The board's own text is its About page, under Docs.")
+            }
+            Section {
+                BoardAppearancePicker(icon: $icon, color: $color)
+            } header: {
+                Text("Color and Icon")
+            } footer: {
+                Text("Saved in the board's README in the repository, so it is the same everywhere.")
+            }
+            Section {
+                Button { detect() } label: {
+                    HStack {
+                        Label("Detect from Folders", systemImage: "wand.and.stars")
+                        Spacer()
+                        if detecting { ProgressView().controlSize(.small) }
+                    }
+                }
+                .disabled(detecting)
+            } footer: {
+                Text("Read the board's folders and cards to fill in lanes, priorities, types, members, and epics.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// The products this board covers. A task can name one, and the board can be filtered on it.
+    private var productsForm: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("A board can cover several products. Tasks name the one they are for; the sidebar and the filter show one at a time.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            Divider()
+            List {
+                ForEach($productRows) { $row in
+                    HStack(spacing: 10) {
+                        Image(systemName: "shippingbox").font(.caption).foregroundStyle(.tertiary).frame(width: 16)
+                        field("Product name", $row.name)
+                        TextField("Prefix", text: $row.prefix, prompt: Text("Prefix (optional)"))
+                            .labelsHidden().frame(width: 130).autocorrectionDisabled()
+                            .help("With a prefix, new tasks of this product are numbered with it, such as \(BoardProduct.cleanPrefix(row.prefix) ?? "TASKS")-001. Without one they use the board's numbering.")
+                        Button { productRows.removeAll { $0.id == row.id } } label: {
+                            Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Remove \(row.name)")
+                        Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary).help("Drag to order")
+                    }
+                    .padding(.vertical, 2)
+                }
+                .onMove { productRows.move(fromOffsets: $0, toOffset: $1) }
+            }
+            .listStyle(.inset(alternatesRowBackgrounds: true))
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Removing a product leaves its tasks as they are; they only lose their place in the list.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button { productRows.append(ProductRow(name: "", prefix: "", original: nil)) } label: { Label("Add Product", systemImage: "plus") }
+                    .accessibilityIdentifier("settingsAddProduct")
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The rows as products. One that existed keeps its id, so its tasks stay with it when it is renamed.
+    private func builtProducts() -> [BoardProduct] {
+        var used = Set(productRows.compactMap { $0.original?.id })
+        return productRows.compactMap { row -> BoardProduct? in
+            let name = row.name.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return nil }
+            let prefix = BoardProduct.cleanPrefix(row.prefix)
+            if let original = row.original {
+                return BoardProduct(id: original.id, name: name, prefix: prefix, icon: original.icon, color: original.color)
+            }
+            var id = BoardProduct.id(for: name)
+            var number = 2
+            while used.contains(id) || id.isEmpty { id = "\(BoardProduct.id(for: name))-\(number)"; number += 1 }
+            used.insert(id)
+            return BoardProduct(id: id, name: name, prefix: prefix)
+        }
+    }
+
+    /// Where the board's pages come from besides its own `docs` folder.
+    private var docsForm: some View {
+        Form {
+            Section {
+                if docSources.isEmpty {
+                    Text("No linked folders. The board shows the pages in its own docs folder.").foregroundStyle(.secondary)
+                }
+                ForEach($docSources) { $source in
+                    HStack(spacing: 10) {
+                        Image(systemName: "folder").foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(source.repo)
+                            Text(source.folder.isEmpty ? "Whole repository" : source.folder).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("Editable", isOn: $source.editable)
+                            .toggleStyle(.switch).controlSize(.small)
+                            .help("On: pages can be changed here, and a save is a commit to \(source.repo)")
+                        Button { docSources.removeAll { $0.id == source.id } } label: {
+                            Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Remove \(source.repo)")
+                    }
+                }
+            } header: {
+                Text("Linked Folders")
+            } footer: {
+                Text("A linked folder keeps its pages in its own repository, such as the docs folder next to a project's code. They are shown here, not copied. With Editable on, a save is a commit to that repository; switch it off to only read.")
+            }
+            Section {
+                HStack {
+                    field("owner/repository/folder", $newSource).autocorrectionDisabled()
+                        .onSubmit(addSource)
+                        .accessibilityIdentifier("settingsDocSource")
+                    Button("Link", action: addSource)
+                        .disabled(newSource.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            } header: {
+                Text("Link a Folder")
+            } footer: {
+                if let sourceProblem {
+                    Text(sourceProblem).foregroundStyle(.red)
+                } else {
+                    Text("For example silvandiepen/arvik/docs. Your account must be able to read that repository.")
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func addSource() {
+        guard let source = DocSource(written: newSource) else {
+            sourceProblem = "Write it as owner/repository/folder, for example silvandiepen/arvik/docs."
+            return
+        }
+        guard !docSources.contains(where: { $0.id == source.id }) else {
+            sourceProblem = "\(source.repo) · \(source.folder) is already linked."
+            return
+        }
+        docSources.append(source)
+        newSource = ""
+        sourceProblem = nil
+    }
+
+    /// One part's rows: drag to order, select one or more for the actions above the list.
+    private func entryList(_ category: Category) -> some View {
+        let items = entries(category)
+        let chosen = items.wrappedValue.filter { selection.contains($0.id) }
+        let targets = items.wrappedValue.filter { !selection.contains($0.id) && !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+        let pending = merges.filter { $0.category == category }
+        return VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                if chosen.isEmpty {
+                    Text("Drag to order. Select rows (⌘ or ⇧ for more) to delete\(category.canMerge ? " or merge" : "") them.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Spacer()
+                } else {
+                    Text("\(chosen.count) selected").font(.callout.weight(.medium))
+                    Spacer()
+                    if category.canMerge {
+                        Menu("Merge Into") {
+                            ForEach(targets) { target in
+                                Button(target.text) { merge(chosen, into: target, in: category) }
+                            }
+                        }
+                        .fixedSize()
+                        .disabled(targets.isEmpty)
+                        .help("Every task that has the selected \(category.rawValue.lowercased()) gets the one you pick")
+                        .accessibilityIdentifier("settingsMergeInto")
+                    }
+                    Button("Delete", role: .destructive) { remove(selection, from: category) }
+                        .accessibilityIdentifier("settingsDeleteSelected")
+                    Button("Deselect") { selection = [] }
+                }
+            }
+            .padding(.horizontal, 14).frame(height: 40)
+            Divider()
+            List(selection: $selection) {
+                ForEach(items) { $item in
+                    let index = items.wrappedValue.firstIndex { $0.id == item.id } ?? 0
+                    HStack(spacing: 10) {
+                        decoration(category, index).frame(width: 16)
+                        field(category.hint, $item.text).autocorrectionDisabled()
+                        Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary)
+                            .help("Drag to order")
+                    }
+                    .padding(.vertical, 2)
+                    .tag(item.id)
+                }
+                .onMove { items.wrappedValue.move(fromOffsets: $0, toOffset: $1) }
+            }
+            .listStyle(.inset(alternatesRowBackgrounds: true))
+            .onDeleteCommand { remove(selection, from: category) }
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(pending) { merge in
+                    HStack {
+                        Image(systemName: "arrow.triangle.merge").foregroundStyle(.secondary)
+                        Text("\(merge.from.text) → \(items.wrappedValue.first { $0.id == merge.into }?.text ?? "")")
+                        Spacer()
+                        Button("Undo") { undo(merge) }
+                    }
+                }
+                if !pending.isEmpty {
+                    Text("When you save, every task that has a merged \(category.singular.lowercased()) is changed to the one it was merged into, in one commit.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Button {
+                    let entry = Entry(text: category == .priorities ? "P\(priorities.count)" : "")
+                    items.wrappedValue.append(entry)
+                    selection = [entry.id]
+                } label: { Label("Add \(category.singular)", systemImage: "plus") }
+                .accessibilityIdentifier("settingsAdd")
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func remove(_ ids: Set<UUID>, from category: Category) {
+        guard !ids.isEmpty else { return }
+        entries(category).wrappedValue.removeAll { ids.contains($0.id) }
+        // What was merged into a row that is now gone has nowhere to go.
+        merges.removeAll { $0.category == category && ids.contains($0.into) }
+        selection = []
+    }
+
+    private func merge(_ chosen: [Entry], into target: Entry, in category: Category) {
+        for entry in chosen {
+            // Whatever was merged into this row earlier follows it to the new one.
+            for index in merges.indices where merges[index].into == entry.id { merges[index].into = target.id }
+            if !entry.text.trimmingCharacters(in: .whitespaces).isEmpty {
+                merges.append(PendingMerge(category: category, from: entry, into: target.id))
+            }
+        }
+        let ids = Set(chosen.map(\.id))
+        entries(category).wrappedValue.removeAll { ids.contains($0.id) }
+        selection = [target.id]
+    }
+
+    private func undo(_ merge: PendingMerge) {
+        entries(merge.category).wrappedValue.append(merge.from)
+        merges.removeAll { $0.id == merge.id }
+    }
+
+    // MARK: A new board, or the set-up of a detected one: one form
+
+    private var singleForm: some View {
+        Form {
+            Section("Project") {
+                field("Name", $name)
+                TextField("Description (optional)", text: $description, prompt: Text("Description (optional)"), axis: .vertical)
+                    .labelsHidden().lineLimit(1...4)
+            }
+            ForEach(Category.allCases.filter(\.isList)) { category in
+                let items = entries(category)
+                Section(category.rawValue) {
+                    ForEach(items) { $item in
+                        let index = items.wrappedValue.firstIndex { $0.id == item.id } ?? 0
+                        HStack(spacing: 10) {
+                            decoration(category, index).frame(width: 16)
+                            field(category.hint, $item.text).autocorrectionDisabled()
+                            Button { items.wrappedValue.removeAll { $0.id == item.id } } label: {
+                                Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Remove")
+                        }
+                    }
+                    .onMove { items.wrappedValue.move(fromOffsets: $0, toOffset: $1) }
+                    Button { items.wrappedValue.append(Entry(text: category == .priorities ? "P\(priorities.count)" : "")) } label: {
+                        Label("Add \(category.singular)", systemImage: "plus")
+                    }
+                }
+            }
+            if let error = model.errorMessage {
+                Section { Text(error).font(.callout).foregroundStyle(.red) }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: Loading and saving
 
     private func seed() {
         guard !seeded else { return }
         seeded = true
+        // `GITKANBAN_SETTINGS_TAB=Members` — open on that part, for screenshots.
+        if let wanted = ProcessInfo.processInfo.environment["GITKANBAN_SETTINGS_TAB"], let tab = Category(rawValue: wanted) { category = tab }
         guard let editing else { return }
+        icon = editing.config.icon
+        color = editing.config.color
         if let prefill {
             name = model.board?.config.project ?? editing.name
-            laneItems = prefill.lanes.map { LaneItem(name: $0.name, origin: $0) }
-            priorityItems = prefill.priorities.map { TextItem(text: $0.id) }
-            memberItems = prefill.users.map { TextItem(text: $0.id) }
-            typeItems = prefill.types.map { TextItem(text: $0) }
-            epicItems = prefill.epics.map { EpicItem(name: $0.name ?? $0.id, origin: $0) }
+            lanes = prefill.lanes.map { Entry(text: $0.name, lane: $0) }
+            priorities = prefill.priorities.map { Entry(text: $0.id) }
+            members = prefill.users.map { Entry(text: $0.id) }
+            types = prefill.types.map { Entry(text: $0) }
+            epics = prefill.epics.map { Entry(text: $0.name ?? $0.id, epic: $0) }
             return
         }
+        docSources = model.docSources
+        productRows = model.products.map { ProductRow(name: $0.name, prefix: $0.prefix ?? "", original: $0) }
         guard let config = model.board?.config else { return }
         name = config.project ?? editing.name
-        laneItems = config.lanes.map { LaneItem(name: $0.name, origin: $0) }
-        priorityItems = config.priorities.map { TextItem(text: $0.id) }
-        memberItems = config.users.map { TextItem(text: $0.id) }
-        typeItems = config.types.map { TextItem(text: $0) }
-        epicItems = config.epics.map { EpicItem(name: $0.name ?? $0.id, origin: $0) }
+        lanes = config.lanes.map { Entry(text: $0.name, lane: $0) }
+        priorities = config.priorities.map { Entry(text: $0.id) }
+        members = config.users.map { Entry(text: $0.id) }
+        types = config.types.map { Entry(text: $0) }
+        epics = config.epics.map { Entry(text: $0.name ?? $0.id, epic: $0) }
+        if ProcessInfo.processInfo.environment["GITKANBAN_SETTINGS_SELECT"] != nil { selection = Set(members.prefix(2).map(\.id)) }
     }
 
     private func detect() {
@@ -188,78 +536,93 @@ struct ProjectSheet: View {
     }
 
     private func applyDetected(_ d: DetectedBoardConfig) {
-        if !d.lanes.isEmpty {
-            laneItems = d.lanes.map { LaneItem(name: $0.name, origin: $0) }
-        }
-        for p in d.priorities where !priorityItems.contains(where: { $0.text.caseInsensitiveCompare(p.id) == .orderedSame }) {
-            priorityItems.append(TextItem(text: p.id))
-        }
-        for u in d.users where !memberItems.contains(where: { $0.text.caseInsensitiveCompare(u.id) == .orderedSame }) {
-            memberItems.append(TextItem(text: u.id))
-        }
-        for t in d.types where !typeItems.contains(where: { $0.text.caseInsensitiveCompare(t) == .orderedSame }) {
-            typeItems.append(TextItem(text: t))
-        }
+        func has(_ list: [Entry], _ text: String) -> Bool { list.contains { $0.text.caseInsensitiveCompare(text) == .orderedSame } }
+        if !d.lanes.isEmpty { lanes = d.lanes.map { Entry(text: $0.name, lane: $0) } }
+        for p in d.priorities where !has(priorities, p.id) { priorities.append(Entry(text: p.id)) }
+        for u in d.users where !has(members, u.id) { members.append(Entry(text: u.id)) }
+        for t in d.types where !has(types, t) { types.append(Entry(text: t)) }
         for e in d.epics {
             let label = e.name ?? e.id
-            if !epicItems.contains(where: { ($0.origin?.id ?? "") == e.id || $0.name.caseInsensitiveCompare(label) == .orderedSame }) {
-                epicItems.append(EpicItem(name: label, origin: e))
+            if !epics.contains(where: { $0.epic?.id == e.id }) && !has(epics, label) { epics.append(Entry(text: label, epic: e)) }
+        }
+    }
+
+    private func texts(_ list: [Entry]) -> [String] {
+        list.map { $0.text.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    private func save() async {
+        let builtLanes = buildLanes()
+        let builtEpics = buildEpics()
+        if let editing {
+            await model.saveProjectSettings(
+                project: editing, name: trimmedName, description: description,
+                lanes: builtLanes, priorities: texts(priorities).map { Priority(id: $0) }, users: texts(members).map { User(id: $0) },
+                types: texts(types), epics: builtEpics.map(\.epic),
+                appearance: isCategorized ? (icon, color) : nil,
+                merges: fieldMerges(epicIDs: Dictionary(uniqueKeysWithValues: builtEpics.map { ($0.row, $0.epic.id) })))
+        } else {
+            await model.createProject(name: trimmedName, description: description, lanes: builtLanes,
+                                      priorities: texts(priorities).map { Priority(id: $0) }, users: texts(members).map { User(id: $0) },
+                                      epics: builtEpics.map(\.epic))
+        }
+        // The linked folders are their own lines in the README, written after the rest.
+        if model.errorMessage == nil, isCategorized, docSources != model.docSources { await model.saveDocSources(docSources) }
+        if model.errorMessage == nil, isCategorized, builtProducts() != model.products { await model.saveProducts(builtProducts()) }
+        if model.errorMessage == nil { dismiss() }
+    }
+
+    /// The merges as changes to make on the tasks.
+    private func fieldMerges(epicIDs: [UUID: String]) -> [FieldMerge] {
+        merges.compactMap { merge -> FieldMerge? in
+            let from = merge.from.text.trimmingCharacters(in: .whitespaces)
+            let target = entries(merge.category).wrappedValue.first { $0.id == merge.into }?.text.trimmingCharacters(in: .whitespaces) ?? ""
+            switch merge.category {
+            case .members: return target.isEmpty ? nil : .member(from: from, into: target)
+            case .types: return target.isEmpty ? nil : FieldMerge(fields: ["type"], from: from, into: target)
+            case .priorities: return target.isEmpty ? nil : FieldMerge(fields: ["priority"], from: from, into: target)
+            case .epics:
+                // Tasks hold an epic's id. An epic added in this window is on no task yet.
+                guard let old = merge.from.epic?.id, let new = epicIDs[merge.into] else { return nil }
+                return FieldMerge(fields: ["epic"], from: old, into: new)
+            case .lanes, .general, .docs, .products: return nil
             }
         }
     }
 
-    private func save() async {
-        let lanes = buildLanes()
-        let priorities = priorityItems.compactMap { t -> Priority? in
-            let id = t.text.trimmingCharacters(in: .whitespaces); return id.isEmpty ? nil : Priority(id: id)
-        }
-        let users = memberItems.compactMap { t -> User? in
-            let id = t.text.trimmingCharacters(in: .whitespaces); return id.isEmpty ? nil : User(id: id)
-        }
-        let types = typeItems.map { $0.text.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        let epics = buildEpics()
-
-        if let editing {
-            await model.saveProjectSettings(project: editing, name: trimmedName, description: description,
-                                            lanes: lanes, priorities: priorities, users: users, types: types, epics: epics)
-        } else {
-            await model.createProject(name: trimmedName, description: description,
-                                      lanes: lanes, priorities: priorities, users: users, epics: epics)
-        }
-        if model.errorMessage == nil { dismiss() }
+    private func slug(_ text: String, used: inout Set<String>) -> String {
+        let base = text.lowercased().replacingOccurrences(of: " ", with: "-")
+        var slug = base
+        var k = 2
+        while used.contains(slug) { slug = "\(base)-\(k)"; k += 1 }
+        used.insert(slug)
+        return slug
     }
 
     private func buildLanes() -> [Lane] {
-        var used = Set(laneItems.compactMap { $0.origin?.id })
+        var used = Set(lanes.compactMap { $0.lane?.id })
         var result: [Lane] = []
-        for (index, item) in laneItems.enumerated() {
-            let n = item.name.trimmingCharacters(in: .whitespaces)
+        for (index, item) in lanes.enumerated() {
+            let n = item.text.trimmingCharacters(in: .whitespaces)
             guard !n.isEmpty else { continue }
-            if let origin = item.origin {
+            if let origin = item.lane {
                 result.append(Lane(id: origin.id, name: n, folder: origin.folder, status: origin.status,
                                    terminal: origin.terminal, backlog: origin.backlog))
             } else {
-                var slug = n.lowercased().replacingOccurrences(of: " ", with: "-")
-                var k = 2
-                while used.contains(slug) { slug = "\(n.lowercased().replacingOccurrences(of: " ", with: "-"))-\(k)"; k += 1 }
-                used.insert(slug)
-                result.append(Lane(id: slug, name: n, folder: "\(index + 1). \(n)", status: slug))
+                let id = slug(n, used: &used)
+                result.append(Lane(id: id, name: n, folder: "\(index + 1). \(n)", status: id))
             }
         }
         return result
     }
 
-    private func buildEpics() -> [Epic] {
-        var used = Set(epicItems.compactMap { $0.origin?.id })
-        return epicItems.compactMap { item in
-            let n = item.name.trimmingCharacters(in: .whitespaces)
+    private func buildEpics() -> [(row: UUID, epic: Epic)] {
+        var used = Set(epics.compactMap { $0.epic?.id })
+        return epics.compactMap { item in
+            let n = item.text.trimmingCharacters(in: .whitespaces)
             guard !n.isEmpty else { return nil }
-            if let origin = item.origin { return Epic(id: origin.id, name: n) }
-            var slug = n.lowercased().replacingOccurrences(of: " ", with: "-")
-            var k = 2
-            while used.contains(slug) { slug = "\(n.lowercased().replacingOccurrences(of: " ", with: "-"))-\(k)"; k += 1 }
-            used.insert(slug)
-            return Epic(id: slug, name: n)
+            if let origin = item.epic { return (item.id, Epic(id: origin.id, name: n)) }
+            return (item.id, Epic(id: slug(n, used: &used), name: n))
         }
     }
 }

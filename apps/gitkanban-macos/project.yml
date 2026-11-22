@@ -20,7 +20,7 @@ packages:
   # Provider REST transport types used by the UI (GitRepository, OAuth session).
   git-pont:
     url: https://github.com/silvandiepen/git-pont.git
-    branch: codex/initial-git-pont-monorepo
+    branch: master
   # The shared GitKanban app layer (AppModel + provider transport), tested once.
   GitKanbanKit:
     path: ../../swift/GitKanbanKit
@@ -31,6 +31,12 @@ targets:
     platform: macOS
     sources:
       - path: GitKanban
+      # Views both apps draw the same way (the rendered Markdown page).
+      - path: ../../swift/TasksUI
+      # The rendered, editable Markdown view's web runtime (from Lezin), kept as a folder.
+      - path: ../../swift/RichEditorWeb
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: GitKanbanKit
         product: GitKanbanKit

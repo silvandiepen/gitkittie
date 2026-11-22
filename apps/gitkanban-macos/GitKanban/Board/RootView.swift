@@ -12,7 +12,7 @@ struct RootView: View {
         if model.isRestoring {
             SplashView()
         } else if model.isDemo {
-            NavigationStack { BoardScreen() }
+            NavigationStack { if model.isShowingDocs { DocsScreen() } else { BoardScreen() } }
         } else if !model.hasHome {
             ConnectView()
         } else {
@@ -33,7 +33,7 @@ private struct SplashView: View {
                 .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Theme.window)
         // No title bar while loading: the screen runs to the top of the window, so the
         // mark sits in the middle of the whole window.
         .ignoresSafeArea()
@@ -85,27 +85,117 @@ private struct WorkspaceSplit: View {
     @State private var serverAddress = ""
     @State private var isCheckingServer = false
     @State private var browseRepo: AddedRepo?
-    @State private var appearanceTarget: AppearanceTarget?
     @State private var showAgentAccess = false
+    @State private var showNotificationSettings = false
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openWindow) private var openWindow
 
-    private struct AppearanceTarget: Identifiable {
-        let repo: AddedRepo
-        let board: SelectedBoard
-        var id: String { "\(repo.id)|\(board.folder)" }
-    }
 
     private func openFolder() {
         guard let url = pickFolder() else { return }
         do { browseRepo = try model.addLocalFolder(url) } catch { model.errorMessage = error.localizedDescription }
     }
 
-    /// Sidebar selection is a "repoID|folder" key mirroring the open board.
+    private var selectionKey: String? { model.activeRepo.map { "\($0.id)|\(model.activeBoardFolder ?? "")" } }
+
+    private static let reviewsKey = "@reviews"
+    private static let allKey = "@all"
+    /// Repositories folded shut in the sidebar, by id.
+    @AppStorage("sidebarFoldedRepos") private var foldedRepos = ""
+
+    private func isFolded(_ repo: AddedRepo) -> Bool { foldedRepos.split(separator: "\n").contains(Substring(repo.id)) }
+    private func toggleFolded(_ repo: AddedRepo) {
+        var ids = foldedRepos.split(separator: "\n").map(String.init)
+        if let index = ids.firstIndex(of: repo.id) { ids.remove(at: index) } else { ids.append(repo.id) }
+        withAnimation(.snappy(duration: 0.25)) { foldedRepos = ids.joined(separator: "\n") }
+    }
+
+    /// A top row of the sidebar: icon, name, count.
+    private func topRow(_ title: String, _ symbol: String, tint: Color, count: Int) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).font(.body).foregroundStyle(tint).frame(width: 20)
+            Text(title).font(.body.weight(.medium))
+            Spacer(minLength: 4)
+            if count > 0 { CountBadge(count: count) }
+        }
+        .padding(.vertical, 3)
+    }
+    /// Parts of the open board, as rows under it: the board's key, this, and the part.
+    private static let partMark = "\u{1F}"
+
+    /// The open board's review requests, when it has any.
+    private func reviews(of key: String) -> BoardReviews? {
+        model.reviewInbox.first { $0.id == key && !$0.requests.isEmpty }
+    }
+
+    /// A board that holds more than tasks shows what it holds as rows under its name.
+    private func hasParts(_ key: String) -> Bool {
+        key == selectionKey && (model.hasDocs || model.isShowingDocs || reviews(of: key) != nil || !model.products.isEmpty)
+    }
+
+    /// Which board shows its parts, and which: what the sidebar animates on.
+    private var openParts: String {
+        guard let key = selectionKey, hasParts(key) else { return "" }
+        return "\(key)|\(reviews(of: key) != nil)|\(model.products.map(\.id).joined(separator: ","))"
+    }
+
+    @ViewBuilder private func partRow(_ title: String, _ symbol: String, key: String, part: String, count: Int = 0) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).font(.caption2).foregroundStyle(.secondary).frame(width: 14)
+            Text(title).font(.callout)
+            Spacer(minLength: 4)
+            if count > 0 {
+                Text("\(count)")
+                    .font(.caption2.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Color.orange, in: Capsule())
+                    .accessibilityLabel("\(count) waiting")
+            }
+        }
+        .padding(.leading, 30)
+        .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
+        .tag(key + Self.partMark + part)
+        .accessibilityIdentifier("sidebarPart-\(part)")
+    }
+
+    /// Sidebar selection is a "repoID|folder" key mirroring the open board, or the
+    /// Reviews entry.
     private var selection: Binding<String?> {
         Binding(
-            get: { model.activeRepo.map { "\($0.id)|\(model.activeBoardFolder ?? "")" } },
+            get: {
+                if model.isShowingAllTasks { return Self.allKey }
+                guard let board = selectionKey else { return model.isShowingReviews ? Self.reviewsKey : nil }
+                if model.isShowingReviews {
+                    return model.reviewsFocusBoard == board && hasParts(board) ? board + Self.partMark + "reviews" : Self.reviewsKey
+                }
+                if model.isShowingDocs { return board + Self.partMark + "docs" }
+                guard hasParts(board) else { return board }
+                if let product = model.filterProduct { return board + Self.partMark + "product:" + product }
+                return board + Self.partMark + "tasks"
+            },
             set: { key in
+                if key == Self.allKey { model.isShowingReviews = false; model.isShowingDocs = false; model.isShowingAllTasks = true; return }
+                model.isShowingAllTasks = false
+                if key == Self.reviewsKey { model.reviewsFocusBoard = nil; model.isShowingDocs = false; model.isShowingReviews = true; return }
+                // A part of the open board: the board stays, what is shown changes.
+                if let key, let mark = key.range(of: Self.partMark) {
+                    let board = String(key[..<mark.lowerBound])
+                    let part = String(key[mark.upperBound...])
+                    switch part {
+                    case "reviews": model.isShowingDocs = false; model.reviewsFocusBoard = board; model.isShowingReviews = true
+                    case "docs": model.isShowingReviews = false; model.isShowingDocs = true
+                    default:
+                        // All tasks, or the tasks of one product.
+                        model.isShowingReviews = false
+                        model.isShowingDocs = false
+                        model.filterProduct = part.hasPrefix("product:") ? String(part.dropFirst("product:".count)) : nil
+                    }
+                    return
+                }
                 guard let key, let sep = key.range(of: "|") else { return }
+                model.isShowingReviews = false
+                model.isShowingDocs = false
                 let repoID = String(key[..<sep.lowerBound])
                 let folder = String(key[sep.upperBound...])
                 if let repo = model.addedRepos.first(where: { $0.id == repoID }) {
@@ -117,50 +207,170 @@ private struct WorkspaceSplit: View {
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
 
+    /// A repository or folder as a row that folds its boards away.
+    private func repoHeader(_ repo: AddedRepo) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: repo.symbolName).font(.callout).foregroundStyle(.secondary).frame(width: 20)
+            Text(repo.displayName).font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.down")
+                .font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(isFolded(repo) ? -90 : 0))
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .onTapGesture { toggleFolded(repo) }
+        .selectionDisabled()
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("\(repo.displayName), \(isFolded(repo) ? "folded" : "open")")
+        .contextMenu {
+            Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
+            Divider()
+            Button(repo.kind.isFolder ? "Remove Folder" : "Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
+        }
+    }
+
+    /// Under the list: what to add on the left, the app's settings on the right.
+    private var footer: some View {
+        HStack {
+            Menu {
+                if model.selectedProject != nil, !model.isShowingAllTasks {
+                    Button("New Project…", systemImage: "plus.rectangle.on.folder") {
+                        model.isShowingReviews = false; model.isShowingDocs = false
+                        model.wantsNewProject = true
+                    }
+                    Divider()
+                }
+                if model.isConnected {
+                    Button("Add Repository…", systemImage: "book.closed") { showAdd = true }
+                }
+                Button("Open a Folder…", systemImage: "folder") { openFolder() }
+                Button("Add Folder Server…", systemImage: "server.rack") { showAddServer = true }
+                if !model.addedRepos.isEmpty {
+                    Divider()
+                    // More boards from something that is already in the sidebar.
+                    if model.addedRepos.count == 1, let only = model.addedRepos.first {
+                        Button("Add Board from \(only.displayName)…", systemImage: "square.stack.3d.up") { browseRepo = only }
+                    } else {
+                        Menu("Add Board from", systemImage: "square.stack.3d.up") {
+                            ForEach(model.addedRepos) { repo in
+                                Button(repo.displayName, systemImage: repo.symbolName) { browseRepo = repo }
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Label("New Project", systemImage: "plus").font(.callout)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityIdentifier("sidebarNew")
+            Spacer()
+            Menu {
+                if model.selectedProject != nil {
+                    Button("Board Settings…", systemImage: "gearshape") {
+                        model.isShowingReviews = false; model.isShowingDocs = false; model.isShowingAllTasks = false
+                        model.wantsProjectSettings = true
+                    }
+                    Button("Live Updates…", systemImage: "dot.radiowaves.left.and.right") {
+                        model.isShowingReviews = false; model.isShowingDocs = false; model.isShowingAllTasks = false
+                        model.wantsLiveUpdates = true
+                    }
+                    Divider()
+                }
+                Button("Agent Access…", systemImage: "point.3.connected.trianglepath.dotted") { showAgentAccess = true }
+                Button("Notifications…", systemImage: "bell") { showNotificationSettings = true }
+                Divider()
+                if let login = model.connection?.login {
+                    Text("Signed in as \(login)")
+                    Button("Sign Out", role: .destructive) { model.signOut() }
+                } else {
+                    Button("Connect a Git Provider…") { showConnect = true }
+                }
+            } label: {
+                Image(systemName: "gearshape").font(.callout)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Settings")
+            .accessibilityLabel("Settings")
+            .accessibilityIdentifier("sidebarSettings")
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: selection) {
+                Section {
+                    topRow("All Tasks", "tray.full", tint: .accentColor, count: model.allTasksCount)
+                        .tag(Self.allKey)
+                        .accessibilityIdentifier("sidebarAllTasks")
+                    // Every board's review requests in one place.
+                    topRow("Reviews", model.pendingReviewTotal > 0 ? "checkmark.seal.fill" : "checkmark.seal",
+                           tint: .orange, count: model.pendingReviewTotal)
+                        .tag(Self.reviewsKey)
+                        .accessibilityIdentifier("sidebarReviews")
+                }
+                Section("Projects") {
                 ForEach(model.addedRepos) { repo in
-                    Section {
-                        if repo.boards.isEmpty {
+                        repoHeader(repo)
+                        if isFolded(repo) {
+                        } else if repo.boards.isEmpty {
                             Button { browseRepo = repo } label: {
                                 Text("Browse boards…")
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
+                            .padding(.leading, 14)
                         } else {
                             ForEach(repo.boards) { board in
                                 HStack(spacing: 10) {
                                     Image(systemName: board.icon ?? BoardAppearance.defaultIcon)
-                                        .font(.caption)
+                                        .font(.body)
                                         .foregroundStyle(Color(boardColor: board.color))
-                                        .frame(width: 16)
+                                        .frame(width: 20)
                                     Text(board.name)
-                                        .font(.callout)
+                                        .font(.body)
                                     Spacer(minLength: 4)
                                     if model.isLoadingBoard, model.activeRepo?.id == repo.id, model.activeBoardFolder == board.folder {
                                         ProgressView().controlSize(.small)
                                     } else if let changed = model.boardSummary(repo, board.folder)?.changed, changed > 0 {
                                         // Cards that are new or moved lane since this board was last opened.
-                                        Text("\(changed)")
-                                            .font(.caption2.weight(.semibold).monospacedDigit())
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 6).padding(.vertical, 1)
-                                            .background(Color(boardColor: board.color), in: Capsule())
+                                        CountBadge(count: changed, color: Color(boardColor: board.color))
                                             .accessibilityLabel("\(changed) updated")
                                     }
                                 }
+                                .padding(.leading, 14).padding(.vertical, 2)
                                 .tag("\(repo.id)|\(board.folder)")
                                 .contextMenu {
+                                    Button("New Docs Page…", systemImage: "doc.badge.plus") {
+                                        Task {
+                                            model.isShowingReviews = false
+                                            if selectionKey != "\(repo.id)|\(board.folder)" { await model.openBoard(repo, folder: board.folder) }
+                                            model.isShowingDocs = true
+                                        }
+                                    }
                                     Button("Open", systemImage: "square.stack.3d.up") {
+                                        model.isShowingReviews = false
                                         Task { await model.openBoard(repo, folder: board.folder) }
                                     }
                                     Button("Reload", systemImage: "arrow.clockwise") {
+                                        model.isShowingReviews = false
                                         Task { await model.openBoard(repo, folder: board.folder) }
                                     }
                                     Button("Board Settings…", systemImage: "gearshape") {
-                                        appearanceTarget = AppearanceTarget(repo: repo, board: board)
+                                        // The settings are the open board's: open it, then its settings.
+                                        Task {
+                                            model.isShowingReviews = false
+                                            model.isShowingDocs = false
+                                            if selectionKey != "\(repo.id)|\(board.folder)" { await model.openBoard(repo, folder: board.folder) }
+                                            model.wantsProjectSettings = true
+                                        }
                                     }
                                     Divider()
                                     Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
@@ -170,38 +380,40 @@ private struct WorkspaceSplit: View {
                                         model.removeBoard(board, from: repo)
                                     }
                                 }
+                                let key = "\(repo.id)|\(board.folder)"
+                                if hasParts(key) {
+                                    partRow("Tasks", "rectangle.split.3x1", key: key, part: "tasks")
+                                    // The board's products: each shows only its own tasks.
+                                    ForEach(model.products) { product in
+                                        HStack(spacing: 8) {
+                                            Image(systemName: product.icon ?? "shippingbox")
+                                                .font(.caption2).foregroundStyle(Color(boardColor: product.color ?? board.color)).frame(width: 14)
+                                            Text(product.name).font(.callout).lineLimit(1)
+                                            Spacer(minLength: 4)
+                                            Text("\(model.taskCount(of: product))").font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+                                        }
+                                        .padding(.leading, 46)
+                                        .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
+                                        .tag(key + Self.partMark + "product:" + product.id)
+                                        .accessibilityIdentifier("sidebarProduct-\(product.id)")
+                                    }
+                                    if let waiting = reviews(of: key) {
+                                        partRow("Reviews", "checkmark.seal", key: key, part: "reviews", count: waiting.pending)
+                                    }
+                                    // Always there once a board shows its parts, so the
+                                    // first page has somewhere to be written.
+                                    partRow("Docs", "doc.text", key: key, part: "docs")
+                                }
                             }
                         }
-                    } header: {
-                        HStack(spacing: 8) {
-                            Image(systemName: repo.symbolName)
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                            Text(repo.displayName)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Menu {
-                                Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
-                                Divider()
-                                Button(repo.kind.isFolder ? "Remove Folder" : "Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .menuStyle(.borderlessButton)
-                            .fixedSize()
-                        }
-                        .contextMenu {
-                            Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
-                            Divider()
-                            Button(repo.kind.isFolder ? "Remove Folder" : "Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
-                        }
-                    }
+                }
                 }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(Theme.sidebar.ignoresSafeArea())
+            // The rows under a board slide open and closed; they do not jump in.
+            .animation(.snappy(duration: 0.28), value: openParts)
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
             .overlay {
                 if model.addedRepos.isEmpty {
@@ -224,49 +436,26 @@ private struct WorkspaceSplit: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) { footer }
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        if model.isConnected {
-                            Button("Add Repository…", systemImage: "book.closed") { showAdd = true }
-                        }
-                        Button("Open a Folder…", systemImage: "folder") { openFolder() }
-                        Button("Add Folder Server…", systemImage: "server.rack") { showAddServer = true }
-                        if !model.addedRepos.isEmpty {
-                            Divider()
-                            // More boards from something that is already in the sidebar.
-                            if model.addedRepos.count == 1, let only = model.addedRepos.first {
-                                Button("Add Board from \(only.displayName)…", systemImage: "square.stack.3d.up") { browseRepo = only }
-                            } else {
-                                Menu("Add Board from", systemImage: "square.stack.3d.up") {
-                                    ForEach(model.addedRepos) { repo in
-                                        Button(repo.displayName, systemImage: repo.symbolName) { browseRepo = repo }
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "plus")
+                // The app's name sits where a window title would, above the sidebar.
+                ToolbarItem(placement: .automatic) {
+                    HStack(spacing: 7) {
+                        TasksMark(animated: false).frame(width: 18, height: 18).foregroundStyle(.primary)
+                        Text("Tasks").font(.headline)
                     }
-                }
-                ToolbarItem(placement: .navigation) {
-                    Menu {
-                        Button("Agent Access…", systemImage: "point.3.connected.trianglepath.dotted") { showAgentAccess = true }
-                        Divider()
-                        if let login = model.connection?.login {
-                            Text("Signed in as \(login)")
-                            Divider()
-                            Button("Sign Out", role: .destructive) { model.signOut() }
-                        } else {
-                            Button("Connect a Git Provider…") { showConnect = true }
-                        }
-                    } label: {
-                        Image(systemName: "person.crop.circle")
-                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Tasks")
                 }
             }
         } detail: {
-            if model.activeRepo != nil {
+            if model.isShowingAllTasks {
+                AllTasksScreen()
+            } else if model.isShowingReviews {
+                ReviewsScreen()
+            } else if model.isShowingDocs, model.activeRepo != nil {
+                NavigationStack { DocsScreen() }
+            } else if model.activeRepo != nil {
                 BoardScreen()
             } else {
                 VStack(spacing: 14) {
@@ -278,12 +467,36 @@ private struct WorkspaceSplit: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.window)
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .toolbarBackground(Theme.window, for: .windowToolbar)
+        // Reviews on every board: on launch, whenever the app comes forward, and when a
+        // board is added or removed.
+        .task(id: "\(scenePhase == .active)\n\(model.reviewInboxKey)") { if scenePhase == .active { await model.loadReviewInbox() } }
+        // A board opened from anywhere else (the + menu, the board picker) takes the place of Reviews.
+        .onChange(of: selectionKey) { _, _ in model.isShowingReviews = false; model.isShowingDocs = false; model.isShowingAllTasks = false }
+        // The open board's pages decide whether it shows a Docs row.
+        .task(id: selectionKey) { await model.loadDocs() }
+        // `GITKANBAN_PANEL=<id>` — open that task in its own window, for screenshots.
+        .task {
+            guard let id = ProcessInfo.processInfo.environment["GITKANBAN_PANEL"] else { return }
+            for _ in 0..<40 where model.card(withID: id) == nil { try? await Task.sleep(for: .milliseconds(250)) }
+            openWindow(id: TaskPanel.windowID, value: id)
+        }
         .sheet(isPresented: $showAgentAccess) { AgentAccessSheet().environment(model) }
-        .sheet(item: $appearanceTarget) { target in
-            BoardSettingsSheet(repo: target.repo, board: target.board).environment(model)
+        .sheet(isPresented: $showNotificationSettings) { NotificationSettingsSheet().environment(model) }
+        // A tapped notification about reviews opens them.
+        .onChange(of: model.wantsReviews, initial: true) { _, wants in
+            if wants { model.wantsReviews = false; model.reviewsFocusBoard = nil; model.isShowingReviews = true }
+        }
+        .task {
+            // While Tasks runs: look for new reviews every few minutes.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(240))
+                if model.wantsBackgroundChecks { await model.checkForNews() }
+            }
         }
         // What changed on each board since it was last opened (the sidebar badges), and
         // each board's icon and colour: on launch, and again whenever the app comes forward.
@@ -546,7 +759,7 @@ private struct ConnectView: View {
                 .padding(.bottom, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Theme.window)
     }
 
     private func deviceCodeView(_ device: GitOAuthDeviceSession) -> some View {
