@@ -19,7 +19,7 @@ struct FolderAccessService: Sendable {
         panel.canChooseFiles = true
         panel.canCreateDirectories = false
         panel.prompt = "Choose SSH Key"
-        panel.message = "Choose the private SSH key GitFolder should use for GitHub pushes."
+        panel.message = "Choose the private SSH key GitKittie Folder should use for GitHub pushes."
         return panel.runModal() == .OK ? panel.url : nil
     }
 

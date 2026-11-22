@@ -31,7 +31,7 @@ struct SettingsView: View {
                     .help(isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar")
 
                     Spacer()
-                    Text("GitFolder")
+                    Text("GitKittie Folder")
                         .font(.headline)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -78,7 +78,7 @@ struct SettingsView: View {
             VStack(spacing: 10) {
                 AppLogoView(size: 44)
                 if isSidebarExpanded {
-                    Text("GitFolder")
+                    Text("GitKittie Folder")
                         .font(.headline)
                         .foregroundStyle(.secondary)
                 }
@@ -209,7 +209,7 @@ struct SettingsView: View {
     }
 
     private var githubSettings: some View {
-        SettingsPane(title: "GitHub", subtitle: "Connect GitFolder to GitHub and manage HTTPS token access.") {
+        SettingsPane(title: "GitHub", subtitle: "Connect GitKittie Folder to GitHub and manage HTTPS token access.") {
             SettingsCard {
                 SettingsFieldRow(systemImage: appModel.hasGitHubToken ? "key.fill" : "key", title: "Connection") {
                     HStack(spacing: 12) {
@@ -304,7 +304,7 @@ struct SettingsView: View {
                 }
             }
 
-            Text("GitFolder stores GitHub access in macOS Keychain and uses HTTPS repository URLs by default.")
+            Text("GitKittie Folder stores GitHub access in macOS Keychain and uses HTTPS repository URLs by default.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 2)
@@ -396,7 +396,7 @@ struct SettingsView: View {
                 let authorization = try await appModel.requestGitHubConnectionCode()
                 await MainActor.run {
                     gitHubAuthorization = authorization
-                    gitHubConnectionMessage = "Enter this code on GitHub, then approve GitFolder."
+                    gitHubConnectionMessage = "Enter this code on GitHub, then approve GitKittie Folder."
                     NSWorkspace.shared.open(authorization.verificationURI)
                 }
                 let connected = await appModel.finishGitHubConnection(authorization)
@@ -892,7 +892,7 @@ private struct AddFolderSheet: View {
                 let authorization = try await appModel.requestGitHubConnectionCode()
                 await MainActor.run {
                     gitHubAuthorization = authorization
-                    gitHubConnectionMessage = "Enter this code on GitHub, then approve GitFolder."
+                    gitHubConnectionMessage = "Enter this code on GitHub, then approve GitKittie Folder."
                     NSWorkspace.shared.open(authorization.verificationURI)
                 }
                 let connected = await appModel.finishGitHubConnection(authorization)

@@ -234,7 +234,7 @@ final class AppModel {
             try loginItemService.setEnabled(enabled)
             config.app.launchAtLogin = loginItemService.isEnabled
             userDefaults.set(true, forKey: launchAtLoginPromptKey)
-            save(message: config.app.launchAtLogin ? "GitFolder will open at login" : "GitFolder will not open at login")
+            save(message: config.app.launchAtLogin ? "GitKittie Folder will open at login" : "GitKittie Folder will not open at login")
         } catch {
             config.app.launchAtLogin = loginItemService.isEnabled
             lastMessage = "Could not update login item: \(error.localizedDescription)"
@@ -247,8 +247,8 @@ final class AppModel {
         }
 
         let alert = NSAlert()
-        alert.messageText = "Open GitFolder when you log in?"
-        alert.informativeText = "GitFolder can start automatically with macOS so folder syncing begins without opening it manually."
+        alert.messageText = "Open GitKittie Folder when you log in?"
+        alert.informativeText = "GitKittie Folder can start automatically with macOS so folder syncing begins without opening it manually."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Open at Login")
         alert.addButton(withTitle: "Not Now")
