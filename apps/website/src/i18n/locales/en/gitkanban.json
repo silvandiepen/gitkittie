@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "GitKittie Tasks — Your task board is a git repo",
-    "description": "GitKittie Tasks is a task board whose only data source is a git repo of markdown files. One file = one card, history from git, and agents can work on it through the app. On Mac, iPhone and iPad."
+    "description": "GitKittie Tasks is a task board whose only data source is a git repo of markdown files. One file = one card, history from git, agents work on it through the app, and you review what they make. On Mac, iPhone and iPad."
   },
   "hero": {
     "badge": "On Mac, iPhone & iPad",
@@ -74,6 +74,16 @@
         "icon": "bot",
         "title": "Agents work through the app",
         "desc": "On the Mac, turn on Agent Access and Claude Code, Codex and other agents can list, create, claim and update cards through Tasks. They need no copy of the repository, and they get the board's own rules with it."
+      },
+      {
+        "icon": "check",
+        "title": "Review what agents make",
+        "desc": "An agent that made images, models, audio or video asks you to judge them. Reviews lists every request across your boards; approve, reject or ask for changes, and comment. On iPhone and iPad you go through them one per screen and can draw on an image to show what you mean."
+      },
+      {
+        "icon": "bell",
+        "title": "Notifications you choose",
+        "desc": "Get told when a review is waiting for you, and if you want, when tasks are new or moved. The app icon can show how many items are waiting. Each one is a switch under Notifications."
       }
     ]
   },

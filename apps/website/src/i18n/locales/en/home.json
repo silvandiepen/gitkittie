@@ -40,7 +40,7 @@
         "points": [
           "Your board is a git repo of markdown files",
           "Share a screenshot on iPhone and it becomes a task",
-          "Agents work on the board through the Mac app"
+          "Agents work on the board, and you review what they make"
         ],
         "to": "/gitkanban",
         "cta": "Explore GitKittie Tasks",

@@ -279,7 +279,7 @@
               "items": [
                 {
                   "term": "Create",
-                  "md": "A new markdown file with frontmatter and a slug id, committed to the lane folder. On iPhone and iPad you can add images while creating a task."
+                  "md": "A new markdown file with frontmatter, committed to the lane folder. On a board whose cards are numbered, the new card gets the board's prefix and the next free number (`ARVIK-502`), and the file name starts with it; on other boards the id comes from the title. On iPhone and iPad you can add images while creating a task."
                 },
                 {
                   "term": "Edit",
@@ -434,6 +434,34 @@
               "icon": "💡",
               "title": "What the relay sees",
               "md": "Your git host tells a small GitKittie relay that a push happened, and the relay tells the open apps which files changed. It sees the repository's name and the paths of changed files. It never receives file contents or your access token. Live updates reach apps that are open; a closed app updates when you open it."
+            },
+            {
+              "type": "prose",
+              "md": "**Notifications.** Open the account menu (the person icon) → **Notifications…** to choose what Tasks tells you about. The settings are per device."
+            },
+            {
+              "type": "specs",
+              "items": [
+                {
+                  "term": "Reviews to do",
+                  "md": "A review request that newly has items waiting for your answer. On by default. Tapping the notification opens Reviews."
+                },
+                {
+                  "term": "New and moved tasks",
+                  "md": "Changes on a board since you last opened it. Off by default."
+                },
+                {
+                  "term": "Count on the app icon",
+                  "md": "The number of items waiting for your review. On by default."
+                }
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "info",
+              "icon": "💡",
+              "title": "When a notification arrives",
+              "md": "Nothing is pushed to your devices by a server. Tasks looks for news itself: every few minutes while it is open, and on iPhone and iPad also when the system gives it time in the background. A notification can therefore arrive some time after the change."
             }
           ]
         },
@@ -462,6 +490,67 @@
                   "md": "If you add a folder that has no cards in any lane, the app says so, and offers the board of the same name next to your other boards when there is one."
                 }
               ]
+            }
+          ]
+        },
+        {
+          "id": "kanban-reviews",
+          "label": "Reviews",
+          "title": "Reviews",
+          "blocks": [
+            {
+              "type": "prose",
+              "md": "When an agent makes something you have to judge (images, 3D models, audio, animations, video), it asks for a review instead of deciding for you. A review request is a folder in the board with the files and one `review.md`, so your answers are commits in your repository like everything else."
+            },
+            {
+              "type": "specs",
+              "items": [
+                {
+                  "term": "Where you find them",
+                  "md": "On iPhone and iPad the home screen has a **Reviews** section with the number of items waiting, per board. On the Mac, **Reviews** is in the sidebar, and an open board shows a button in its header with the number waiting for that board."
+                },
+                {
+                  "term": "Answering",
+                  "md": "Each item gets **Approve**, **Changes** or **Reject**, and you can add a comment to any of them. When the agent asks you to pick one of several options, **Pick This** marks that one as picked and turns the others down."
+                },
+                {
+                  "term": "One per screen",
+                  "md": "On iPhone and iPad a request opens as slides, one item per screen, starting at the first one you have not answered. If you close it with items unanswered, Tasks asks whether to continue with those or close anyway. **Review All** walks through every open request in turn."
+                },
+                {
+                  "term": "Drawing on an image",
+                  "md": "On iPhone and iPad, tap an image to see it full screen and swipe it down to close. The pencil button next to the comment field lets you draw on it; the marked copy is saved with your comment so the agent sees exactly what you mean."
+                },
+                {
+                  "term": "Other files",
+                  "md": "3D models (USDZ) open in Quick Look, audio and video play in the app, and sprite sheets play as an animation."
+                },
+                {
+                  "term": "After your answer",
+                  "md": "The agent reads your decisions and comments, acts on them, and marks each item as handled. A request with nothing left to answer or handle is removed from the board; git history keeps it."
+                }
+              ]
+            },
+            {
+              "type": "prose",
+              "md": "**The format.** Requests live in a `review` folder inside the board, next to the lane folders. Another folder name can be set with `review_path` in the board's or the repository's `README.md`."
+            },
+            {
+              "type": "list",
+              "items": [
+                "`<board>/review/<request>/review.md` holds the request: a title, the question, and a list of `items`.",
+                "Each item names a `file` in the same folder, a `kind` (`image`, `model`, `audio`, `animation`, `video`, `other`) and a `status`: `pending`, `approved`, `rejected` or `changes-requested`.",
+                "Items with the same `group` are options for one thing; `pick: one` on the group means you choose one of them.",
+                "A redo is a new item with `revises` set to the item it replaces, so the comments stay together.",
+                "The agent writes the request and the items. Tasks writes `status`, `decided_by` and `decided_at`. Comments are only ever added."
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "info",
+              "icon": "💡",
+              "title": "Anything can ask for a review",
+              "md": "A request is plain files. An agent makes one with `create_review` (see Agents), and a script or a person can make one by committing the folder."
             }
           ]
         },
@@ -529,6 +618,26 @@
                 {
                   "term": "attach_file",
                   "md": "Attaches a file, such as a screenshot, to a card."
+                },
+                {
+                  "term": "create_review",
+                  "md": "Asks you to judge files: writes them and the request into the board. Also adds a redo to an existing request."
+                },
+                {
+                  "term": "list_reviews",
+                  "md": "Your decisions and comments. By default only the items you decided that the agent has not acted on yet."
+                },
+                {
+                  "term": "wait_for_reviews",
+                  "md": "Waits until you have decided something and returns it, or returns nothing after at most four minutes so the agent can ask again. This is how an agent listens for your answers while it works."
+                },
+                {
+                  "term": "handle_review_item",
+                  "md": "Records that the agent acted on a decision, and where an approved file went. When nothing is left to answer or handle, the request is removed."
+                },
+                {
+                  "term": "close_review",
+                  "md": "Removes a finished request. Refused while items are still waiting, unless forced."
                 }
               ]
             },
@@ -584,6 +693,14 @@
                 {
                   "q": "Can an agent use my board without cloning the repository?",
                   "md": "Yes, on the Mac. Turn on Agent Access and the agent works on the board through Tasks. See Agents."
+                },
+                {
+                  "q": "How does an agent find out that I answered a review?",
+                  "md": "It asks Tasks. `list_reviews` returns what you decided, and `wait_for_reviews` holds on until there is something new. There is no webhook to set up. See Reviews and Agents."
+                },
+                {
+                  "q": "Why did a notification arrive late?",
+                  "md": "Tasks finds news by looking for it, not by being pushed to. On iPhone and iPad it looks while open and when the system gives it background time. See Sync & Updates."
                 },
                 {
                   "q": "Why does a card show its file name as its title?",
