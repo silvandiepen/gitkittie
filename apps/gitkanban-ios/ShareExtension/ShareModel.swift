@@ -209,7 +209,10 @@ final class ShareModel {
             app: app, images: images, pointers: pointers, confirmed: issueNotes, recognizedText: &known)
         recognizedText = known
         guard let ticket = drafted else {
-            if !keepingTypedText { message = app.aiError ?? "There is nothing to work from yet. Type a note or mark part of the image." }
+            // A draft that failed is said out loud, also on the automatic pass: otherwise
+            // the task is saved bare and nothing tells why.
+            if let error = app.aiError { message = "The task was not drafted: \(error)" }
+            else if !keepingTypedText { message = "There is nothing to work from yet. Type a note or mark part of the image." }
             return
         }
         let titleIsEmpty = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -243,6 +246,16 @@ final class ShareModel {
         guard canSave else { return false }
         phase = .saving
         message = nil
+        // Add was tapped while the draft is still being written, or after new marks that
+        // were not drafted from yet: finish the draft first, so the task is not saved bare.
+        if target == .new, analyzesAutomatically, analysisProvider != nil {
+            savingStep = "Writing the task"
+            savingProgress = 0.02
+            while isAnalyzing { try? await Task.sleep(for: .milliseconds(100)) }
+            if textIsDrafted, !images.isEmpty, annotationNotes != draftedAnnotations || draftedTitle.isEmpty {
+                await analyze(keepingTypedText: false)
+            }
+        }
         let steps = Double(images.count + 1)
         savingProgress = 0.05
         let stamp = Self.stamp.string(from: Date())

@@ -94,6 +94,7 @@ struct ShareView: View {
 
     private var form: some View {
         Form {
+            NoDraftingNotice(app: share.app)
             projectSection
             if !share.images.isEmpty { imageSection }
             if !share.foundIssues.isEmpty { issuesSection }

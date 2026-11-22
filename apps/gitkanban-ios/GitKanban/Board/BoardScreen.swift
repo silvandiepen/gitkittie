@@ -25,10 +25,15 @@ struct BoardScreen: View {
             if model.isLoadingBoard && model.board == nil {
                 ProgressView("Loading board…")
             } else if let board = model.board {
-                switch model.boardViewMode {
-                case .lanes: LanesView(columns: displayColumns(board))
-                case .list: ListBoardView(columns: displayColumns(board))
+                VStack(spacing: 0) {
+                    modeBar
+                    switch model.boardViewMode {
+                    // The calendar is a Mac view; on iPhone it shows as the board.
+                    case .lanes, .calendar: LanesView(columns: displayColumns(board))
+                    case .list: ListBoardView(columns: displayColumns(board))
+                    }
                 }
+                .background(Theme.window)
             } else {
                 ContentUnavailableView("No board", systemImage: "square.stack.3d.up",
                                        description: Text("This repo has no project boards."))
@@ -36,6 +41,7 @@ struct BoardScreen: View {
         }
         .navigationTitle(model.selectedProject?.name ?? model.activeRepo?.name ?? "Board")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden()
         .overlay(alignment: .top) { savingBanner }
         .toolbar { toolbarContent }
         .sheet(item: $model.selectedCard) { card in CardDetailSheet(card: card).environment(model) }
@@ -75,35 +81,59 @@ struct BoardScreen: View {
         }
     }
 
+    /// Under the title: the board as lanes or as a list, and the filters.
+    private var modeBar: some View {
+        HStack(spacing: 0) {
+            modeButton("rectangle.split.3x1", "Board", isOn: model.boardViewMode != .list) { model.boardViewMode = .lanes }
+            modeButton("list.bullet", "List", isOn: model.boardViewMode == .list) { model.boardViewMode = .list }
+                .accessibilityIdentifier("viewModeButton")
+            Divider().frame(height: 20).padding(.horizontal, 4)
+            filterMenu.frame(width: 76, height: 36)
+        }
+        .padding(4)
+        .background(Theme.panel, in: Capsule())
+        .padding(.top, 6).padding(.bottom, 8)
+    }
+
+    private func modeButton(_ symbol: String, _ name: String, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button { withAnimation(.snappy(duration: 0.2)) { action() } } label: {
+            Image(systemName: symbol)
+                .font(.body.weight(.medium))
+                .foregroundStyle(isOn ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .frame(width: 76, height: 36)
+                .background(isOn ? Theme.card : .clear, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(name)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            Button { model.closeRepo() } label: {
-                HStack(spacing: 2) { Image(systemName: "chevron.left"); Text("Boards") }
+            Button { model.closeRepo() } label: { Image(systemName: "chevron.left") }
+                .accessibilityLabel("Boards")
+        }
+        ToolbarItem(placement: .principal) {
+            HStack(spacing: 7) {
+                Image(systemName: "folder").foregroundStyle(.secondary)
+                Text(model.selectedProject?.name ?? model.activeRepo?.name ?? "Board").font(.headline).lineLimit(1)
             }
+            .accessibilityElement(children: .combine)
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Button {
-                model.boardViewMode = model.boardViewMode == .list ? .lanes : .list
-            } label: {
-                Image(systemName: model.boardViewMode == .list ? "rectangle.split.3x1" : "list.bullet.rectangle")
-            }
-            .accessibilityIdentifier("viewModeButton")
-            .accessibilityLabel(model.boardViewMode == .list ? "Show lanes" : "Show progress list")
-            .help(model.boardViewMode == .list ? "Lanes" : "Progress list")
             if !model.reviews.isEmpty {
                 Button { showReviews = true } label: {
                     Image(systemName: model.pendingReviewCount > 0 ? "checkmark.seal.fill" : "checkmark.seal")
                         .overlay(alignment: .topTrailing) {
+                            // A dot, not the number: a count like 211 does not fit on an icon.
+                            // The number is on the Reviews screen and on the home row.
                             if model.pendingReviewCount > 0 {
-                                Text("\(model.pendingReviewCount)")
-                                    .font(.system(size: 10, weight: .bold).monospacedDigit())
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 4).padding(.vertical, 1)
-                                    .background(Color.accentColor, in: Capsule())
-                                    .offset(x: 10, y: -8)
+                                Circle().fill(Color.orange).frame(width: 8, height: 8).offset(x: 3, y: -2)
                             }
                         }
                 }
+                .accessibilityLabel(model.pendingReviewCount > 0 ? "Reviews, \(model.pendingReviewCount) waiting" : "Reviews")
                 .accessibilityIdentifier("reviewsButton")
                 .help("Reviews")
             }
@@ -113,10 +143,6 @@ struct BoardScreen: View {
                     .accessibilityLabel("New task")
                     .accessibilityIdentifier("newTaskButton")
             }
-            Button { model.showQuickCreate = true } label: { Image(systemName: "sparkles") }
-                .help("Quick Create with AI")
-            Button { model.isShowingSearch = true } label: { Image(systemName: "magnifyingglass") }
-            filterMenu
             overflowMenu
         }
     }
@@ -141,10 +167,9 @@ struct BoardScreen: View {
     private var overflowMenu: some View {
         @Bindable var model = model
         return Menu {
-            Picker("View", selection: $model.boardViewMode) {
-                Label("Lanes", systemImage: "rectangle.split.3x1").tag(BoardViewMode.lanes)
-                Label("Progress List", systemImage: "list.bullet").tag(BoardViewMode.list)
-            }
+            Button("Search…", systemImage: "magnifyingglass") { model.isShowingSearch = true }
+            Button("Quick Create with AI…", systemImage: "sparkles") { model.showQuickCreate = true }
+            Divider()
             Picker("Sort", selection: $model.cardSort) {
                 ForEach(CardSort.allCases) { Text($0.title).tag($0) }
             }
@@ -161,8 +186,9 @@ struct BoardScreen: View {
                 Button("Project Settings…", systemImage: "gearshape") { settingsProject = project }
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
+            Image(systemName: "ellipsis")
         }
+        .accessibilityLabel("More")
     }
 
     private var filterMenu: some View {
@@ -201,8 +227,13 @@ struct BoardScreen: View {
                 Button("Clear Filters", role: .destructive) { model.clearFilters() }
             }
         } label: {
-            Image(systemName: model.hasActiveFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+            Image(systemName: "slider.horizontal.3")
+                .font(.body.weight(.medium))
+                .foregroundStyle(model.hasActiveFilters ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
         }
+        .accessibilityLabel(model.hasActiveFilters ? "Filters, on" : "Filters")
     }
 
     @ViewBuilder private func filterLabel(_ text: String, _ selected: Bool) -> some View {
@@ -239,93 +270,99 @@ struct BoardScreen: View {
     }
 }
 
-// MARK: - Lanes (horizontal kanban)
+// MARK: - Lanes (one under the other)
 
+/// The board on a phone: each lane a section that folds, its tasks as cards, and a way
+/// to add one at the end. A card dragged onto another lane moves there.
 private struct LanesView: View {
     @Environment(AppModel.self) private var model
     let columns: [Column]
+    /// Lanes folded shut, by id. Done and the backlog start folded: they are the long ones.
+    @State private var folded: Set<String>?
+
+    private func isFolded(_ lane: Lane) -> Bool {
+        (folded ?? Set(columns.map(\.lane).filter { $0.terminal == true || $0.isBacklog }.map(\.id))).contains(lane.id)
+    }
+
+    private func toggle(_ lane: Lane) {
+        var now = folded ?? Set(columns.map(\.lane).filter { $0.terminal == true || $0.isBacklog }.map(\.id))
+        if now.contains(lane.id) { now.remove(lane.id) } else { now.insert(lane.id) }
+        withAnimation(.snappy(duration: 0.25)) { folded = now }
+    }
 
     var body: some View {
-        GeometryReader { geo in
-            let viewport = geo.size.width
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(columns) { column in
-                        LaneColumn(column: column, maxHeight: geo.size.height - 24)
-                            .visualEffect { content, proxy in
-                                content.scaleEffect(
-                                    laneScale(frame: proxy.frame(in: .scrollView(axis: .horizontal)), viewport: viewport),
-                                    anchor: .top)
-                            }
-                    }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                ForEach(columns) { column in
+                    LaneSection(column: column, isFolded: isFolded(column.lane)) { toggle(column.lane) }
                 }
-                .padding(.horizontal, 20).padding(.vertical, 16)
-                .scrollTargetLayout()
             }
-            .scrollTargetBehavior(.viewAligned)
+            .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 32)
         }
+        .refreshable { if let project = model.selectedProject { await model.selectProject(project) } }
     }
 }
 
-/// 1.0 when a lane is fully inside the viewport; shrinks toward 0.5 as it scrolls off
-/// either edge, so the focused lanes stay large and the rest recede.
-private func laneScale(frame: CGRect, viewport: CGFloat) -> CGFloat {
-    let overflow = max(max(0, -frame.minX), max(0, frame.maxX - viewport))
-    let width = frame.width > 0 ? frame.width : 1
-    return 1 - min(1, overflow / width) * 0.5
-}
-
-private struct LaneColumn: View {
+private struct LaneSection: View {
     @Environment(AppModel.self) private var model
     let column: Column
-    let maxHeight: CGFloat
+    let isFolded: Bool
+    let toggle: () -> Void
     @State private var isTargeted = false
 
     private var color: Color { laneColor(column.lane, model.board?.config ?? EffectiveConfig()) }
     private var isLane: Bool { !column.lane.folder.isEmpty }
+    private var needsLoading: Bool { column.lane.isBacklog && !model.loadedBacklogLanes.contains(column.lane.id) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 7) {
-                Circle().fill(color).frame(width: 9, height: 9)
-                Text(column.lane.name).font(.subheadline).fontWeight(.semibold)
-                Spacer()
-                Text("\(column.cards.count)")
-                    .font(.caption).fontWeight(.medium).foregroundStyle(color)
-                    .padding(.horizontal, 6).padding(.vertical, 1)
-                    .background(color.opacity(0.16), in: Capsule())
-            }
-            if column.lane.isBacklog && !model.loadedBacklogLanes.contains(column.lane.id) {
-                Button {
-                    Task { await model.loadBacklogLane(column.lane) }
-                } label: {
-                    if model.loadingBacklogLane == column.lane.id {
-                        ProgressView().frame(maxWidth: .infinity)
-                    } else {
-                        Label("Load Backlog", systemImage: "tray.and.arrow.down")
-                            .font(.callout).frame(maxWidth: .infinity)
-                    }
+        VStack(alignment: .leading, spacing: 10) {
+            Button(action: toggle) {
+                HStack(spacing: 10) {
+                    Circle().fill(color).frame(width: 13, height: 13)
+                    Text(column.lane.name).font(.headline)
+                    Text("\(column.cards.count)").font(.body).foregroundStyle(.secondary).monospacedDigit()
+                    Spacer()
+                    Image(systemName: "chevron.down").font(.callout.weight(.semibold)).foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isFolded ? -90 : 0))
                 }
-                .buttonStyle(.bordered)
-                .padding(.top, 20)
-                Spacer(minLength: 0)
-            } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(spacing: 8) {
-                        ForEach(model.sorted(column.cards)) { card in
-                            LaneCardCell(card: card)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(column.lane.name), \(column.cards.count) tasks, \(isFolded ? "folded" : "open")")
+
+            if !isFolded {
+                if needsLoading {
+                    Button {
+                        Task { await model.loadBacklogLane(column.lane) }
+                    } label: {
+                        if model.loadingBacklogLane == column.lane.id {
+                            ProgressView().frame(maxWidth: .infinity)
+                        } else {
+                            Label("Load \(column.lane.name)", systemImage: "tray.and.arrow.down").font(.callout).frame(maxWidth: .infinity)
                         }
+                    }
+                    .buttonStyle(.bordered)
+                } else {
+                    ForEach(model.sorted(column.cards)) { card in
+                        LaneCardCell(card: card, done: column.lane.terminal == true)
+                    }
+                    if isLane {
+                        Button { model.newTaskLane = column.lane } label: {
+                            Label("Add task", systemImage: "plus")
+                                .font(.callout).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity).padding(.vertical, 10)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
         }
-        .padding(12)
-        .frame(width: 300)
-        .frame(maxHeight: maxHeight, alignment: .top)
-        .background((isTargeted ? color.opacity(0.14) : Color.clear), in: RoundedRectangle(cornerRadius: 14))
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(isTargeted ? color : color.opacity(0.3), lineWidth: isTargeted ? 2 : 1))
-        .dropDestination(for: String.self) { ids, _ in handleDrop(ids) } isTargeted: { isTargeted = $0 }
+        .padding(isTargeted ? 8 : 0)
+        .background(isTargeted ? color.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 14))
+        .animation(.snappy(duration: 0.2), value: isTargeted)
+        .dropDestination(for: String.self) { ids, _ in handleDrop(ids) } isTargeted: { isTargeted = $0 && isLane }
     }
 
     /// Move dropped cards (by id) into this lane.
@@ -346,45 +383,37 @@ private struct LaneColumn: View {
 private struct LaneCardCell: View {
     @Environment(AppModel.self) private var model
     let card: Card
+    var done = false
     private var priorities: [Priority] { model.board?.config.priorities ?? [] }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
                 if model.isUnseen(card) {
-                    Circle().fill(Color.blue).frame(width: 8, height: 8)
+                    Circle().fill(Color.blue).frame(width: 8, height: 8).padding(.top, 6)
                         .accessibilityLabel("Updated since you last looked")
                 }
                 Text(card.fields.title.isEmpty ? card.fields.id : card.fields.title)
-                    .font(.callout.weight(model.isUnseen(card) ? .semibold : .regular))
+                    .font(.body.weight(model.isUnseen(card) ? .semibold : .medium))
                     .lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
+                Menu { cardMenu(card, model: model) } label: {
+                    Image(systemName: "ellipsis").font(.body.weight(.semibold)).foregroundStyle(.tertiary)
+                        .frame(width: 32, height: 24).contentShape(Rectangle())
+                }
+                .accessibilityLabel("Task menu")
             }
-            HStack(spacing: 6) {
-                if let p = card.fields.priority, let color = PriorityPalette.color(p, priorities) {
-                    Text(p).font(.caption2.weight(.medium))
-                        .padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(color.opacity(0.18), in: Capsule()).foregroundStyle(color)
-                }
-                if let a = card.fields.assignee {
-                    Text("@\(a)").font(.caption2).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                if let updated = card.fields.updatedAt {
-                    Text(ReviewFormat.relative(updated)).font(.caption2).foregroundStyle(.secondary)
-                        .accessibilityLabel("Updated \(ReviewFormat.relative(updated))")
-                }
-            }
+            TaskMetaLine(card: card, priorities: priorities, done: done)
         }
-        .padding(10)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary, lineWidth: 1))
-        .contentShape(Rectangle())
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.quaternary, lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: 14))
         .onTapGesture { model.selectedCard = card }
         .draggable(card.fields.id) {
             // Drag preview: a compact chip of the card title.
             Text(card.fields.title.isEmpty ? card.fields.id : card.fields.title)
                 .font(.callout).lineLimit(1).padding(10)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10))
+                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 10))
         }
         .contextMenu { cardMenu(card, model: model) }
     }
@@ -444,9 +473,11 @@ private struct ListBoardView: View {
                 } header: {
                     header(group)
                 }
+                .listRowBackground(Theme.panel)
             }
         }
         .listStyle(.insetGrouped)
+        .themedList()
         .refreshable {
             if let project = model.selectedProject { await model.selectProject(project) }
             await model.loadAttachmentIndex()

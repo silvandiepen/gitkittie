@@ -1,5 +1,6 @@
 import GitKanbanKit
 import GitKittieKit
+import SwiftUI
 import UIKit
 
 /// Turns images, the marks made on them and the user's own pointers into a task draft.
@@ -55,13 +56,18 @@ enum ImageTaskDrafter {
         guard let provider = provider(app) else { return nil }
         var parts = [provider == .onDevice
             // Stated outright, or the small model fills in what the picture "shows".
-            ? "Create exactly one ticket. A screenshot belongs to it, but you cannot see it: use only the comments and text below, and do not say where on the screen something is or what it looks like unless they say so."
+            ? "A screenshot belongs to these notes, but you cannot see it."
             : "Create exactly one ticket from the attached screenshot(s)."]
         let own = pointers.trimmingCharacters(in: .whitespacesAndNewlines)
         if !own.isEmpty { parts.append("The user's own pointers. Follow them and keep their intent:\n\(own)") }
         if !confirmed.isEmpty { parts.append("Problems the user confirmed:\n\(confirmed)") }
         let marks = annotationNotes(images)
-        if !marks.isEmpty { parts.append("Parts of the image the user marked:\n\(marks)") }
+        if !marks.isEmpty {
+            // The small model takes a Markdown heading for the subject of the ticket.
+            parts.append(provider == .onDevice
+                ? "Notes the person wrote on the screenshot, each pointing at something in it:\n" + marks.replacingOccurrences(of: "## Annotations\n", with: "")
+                : "Parts of the image the user marked:\n\(marks)")
+        }
         for image in images {
             let text: String
             if let known = recognizedText[image.id] {
@@ -79,7 +85,7 @@ enum ImageTaskDrafter {
         }
         let attachments = provider == .onDevice ? [] : images.compactMap { $0.analysisAttachment() }
         guard parts.count > 1 || !attachments.isEmpty else { return nil }
-        await app.generateTicketsFromInput(parts.joined(separator: "\n\n"), using: provider, images: attachments)
+        await app.generateTicketsFromInput(parts.joined(separator: "\n\n"), using: provider, images: attachments, single: true)
         guard var ticket = app.generatedTickets.first else { return nil }
         // The on-device model often hands a comment back as the title. A title that is
         // just what the user said is not a title: have it rewritten on its own.
@@ -91,5 +97,30 @@ enum ImageTaskDrafter {
             }
         }
         return ticket
+    }
+}
+
+/// Said at the top of a form when no model can write the task: otherwise the title is
+/// silently the first comment and nothing tells why.
+struct NoDraftingNotice: View {
+    let app: AppModel
+
+    var body: some View {
+        if ImageTaskDrafter.provider(app) == nil {
+            Section {
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("The task will not be written for you").font(.subheadline.weight(.semibold))
+                        Text(OnDeviceAI.unavailableReason ?? "No AI is available.")
+                        Text("Check Settings → Apple Intelligence & Siri, or add an AI key in Tasks (account menu → AI Settings). Until then the title is your first comment and the description is what you type.")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.footnote)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                }
+                .accessibilityIdentifier("noDraftingNotice")
+            }
+        }
     }
 }

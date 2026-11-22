@@ -2,6 +2,7 @@ import BackgroundTasks
 import Network
 import SwiftUI
 import GitKanbanKit
+import GitKittieKit
 import UIKit
 
 @main
@@ -17,7 +18,28 @@ struct GitKanbanApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
-                .preferredColorScheme(CaptureHooks.colorScheme)
+                #if DEBUG
+                .task {
+                    // `-aiDiagnostics`: say what the on-device model answers on this device.
+                    guard ProcessInfo.processInfo.arguments.contains("-aiDiagnostics") else { return }
+                    print("AI-DIAG available=\(OnDeviceAI.isAvailable) reason=\(OnDeviceAI.unavailableReason ?? "none")")
+                    print("AI-DIAG \(OnDeviceAI.diagnostics)")
+                    print("AI-DIAG provider=\(model.aiProvider) imageProvider=\(String(describing: model.imageAnalysisProvider)) locale=\(Locale.current.identifier) languages=\(Locale.preferredLanguages)")
+                    let context = AITicketContext(projectName: "GitKittie", lanes: ["To do"], priorities: ["P0", "P1", "P2", "P3"],
+                                                  types: ["feature", "fix", "chore"], epics: [], existingTicketTitles: [])
+                    let input = "A screenshot belongs to these notes, but you cannot see it.\n\nNotes the person wrote on the screenshot, each pointing at something in it:\n1. Make this just an edit button.\n2. Title is still the first comment."
+                    let started = Date()
+                    do {
+                        let ticket = try await OnDeviceAI.draftTicket(input: input, context: context)
+                        print("AI-DIAG draft ok in \(Date().timeIntervalSince(started)) s: \(ticket.title) || \(ticket.description.replacingOccurrences(of: "\n", with: " / "))")
+                    } catch {
+                        print("AI-DIAG draft FAILED in \(Date().timeIntervalSince(started)) s: \(error) || \(error.localizedDescription)")
+                    }
+                    print("AI-DIAG done")
+                }
+                #endif
+                .tint(Theme.accent)
+                .preferredColorScheme(CaptureHooks.colorScheme ?? .dark)
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
                     case .active:
@@ -25,6 +47,7 @@ struct GitKanbanApp: App {
                         Task { await model.refreshSyncItems(); await model.flushOutbox() }
                     case .background:
                         finishSendingInBackground()
+                        scheduleNewsCheck()
                     default:
                         break
                     }
@@ -39,13 +62,39 @@ struct GitKanbanApp: App {
                         CaptureHooks.applyRoute(to: model)
                     } else {
                         await model.restore()
+                        await model.startNotifications()
+                    }
+                }
+                .task {
+                    // While the app is open: look for new reviews every few minutes.
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(240))
+                        if scenePhase == .active, model.wantsBackgroundChecks { await model.checkForNews() }
                     }
                 }
         }
         .backgroundTask(.appRefresh(Self.syncTask)) {
             await model.refreshSyncItems()
             await model.flushOutbox()
+            // The same wake-up looks for reviews to announce, and asks for the next one.
+            await model.startNotifications()
+            if await model.wantsBackgroundChecks {
+                await model.checkForNews()
+                await MainActor.run { Self.submitNewsCheck() }
+            }
         }
+    }
+
+    /// Ask iOS to wake the app now and then to look for news. It decides when.
+    private func scheduleNewsCheck() {
+        guard model.wantsBackgroundChecks else { return }
+        Self.submitNewsCheck()
+    }
+
+    private static func submitNewsCheck() {
+        let request = BGAppRefreshTaskRequest(identifier: syncTask)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        try? BGTaskScheduler.shared.submit(request)
     }
 
     /// Leaving the app with changes still unsent: keep going for the time iOS allows, and

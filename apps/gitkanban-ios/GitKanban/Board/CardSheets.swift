@@ -21,6 +21,10 @@ struct CardDetailSheet: View {
     @State private var showPhotoPicker = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
     @State private var shareItem: CardShareItem?
+    @State private var showActivity = false
+    @State private var showDue = false
+    @State private var showNewLabel = false
+    @State private var newLabel = ""
 
     // Editable state.
     @State private var title = ""
@@ -58,8 +62,22 @@ struct CardDetailSheet: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle(navigationTitle)
+                .navigationTitle(editing ? navigationTitle : "")
                 .navigationBarTitleDisplayMode(.inline)
+                .sheet(isPresented: $showActivity) {
+                    NavigationStack { TaskActivityView(cardID: card.id) }.environment(model)
+                        .presentationDetents([.medium, .large])
+                }
+                .sheet(isPresented: $showDue) { dueSheet.presentationDetents([.medium]) }
+                .alert("New Label", isPresented: $showNewLabel) {
+                    TextField("Label", text: $newLabel)
+                    Button("Add") {
+                        let label = newLabel.trimmingCharacters(in: .whitespaces)
+                        newLabel = ""
+                        if !label.isEmpty { Task { await model.setCardTags(current, current.fields.tags + [label]) } }
+                    }
+                    Button("Cancel", role: .cancel) { newLabel = "" }
+                }
                 .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
                     Button("Delete", role: .destructive) { Task { await model.deleteCard(card); dismiss() } }
                 }
@@ -137,30 +155,82 @@ struct CardDetailSheet: View {
 
     // MARK: Read
 
+    /// The description without a repeated "# Title" and without the activity log.
+    /// The description as the rendered page has it, and as the task had it when it was shown.
+    @State private var pageText = ""
+    @State private var shownNotes = ""
+
+    private var notes: String {
+        CardActivity.split(stripLeadingTitle(current.body, title: current.fields.title)).notes
+    }
+
+    /// What was typed on the rendered description: written when the cursor leaves it.
+    private func savePage() {
+        guard pageText != shownNotes else { return }
+        shownNotes = pageText
+        let card = current
+        let fields = card.fields
+        let whole = card.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A leading "# Title" is not shown in the description; it stays in the file.
+        let hadHeading = stripLeadingTitle(card.body, title: fields.title).trimmingCharacters(in: .whitespacesAndNewlines) != whole
+        let text = CardActivity.join(notes: pageText, log: CardActivity.split(card.body).log)
+        Task {
+            await model.updateCard(card, title: fields.title, laneID: model.location(ofCard: card)?.id ?? "",
+                                   priority: fields.priority ?? "", type: fields.type ?? "",
+                                   assignee: fields.assignee ?? "", epic: fields.epic ?? "",
+                                   body: hadHeading ? "# \(fields.title)\n\n\(text)" : text)
+        }
+    }
+
     private var readView: some View {
-        ScrollView {
+        let card = current
+        let fields = card.fields
+        return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Show ID as subtitle if different from title
-                if !card.fields.id.isEmpty && card.fields.id != card.fields.title {
-                    Text(card.fields.id)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        if let priority = fields.priority { PriorityBadge(id: priority, priorities: priorities) }
+                        if !fields.id.isEmpty && fields.id != fields.title {
+                            Text(fields.id).font(.caption.monospaced()).foregroundStyle(.secondary)
+                        }
+                    }
+                    Text(fields.title.isEmpty ? fields.id : fields.title)
+                        .font(.title.weight(.bold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 20) {
+                        Label(fields.assignee.map { "@\($0)" } ?? "No assignee", systemImage: "person")
+                        Button { showDue = true } label: {
+                            Label(CardDates.short(fields.due, year: true) ?? "No due date", systemImage: "calendar")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Changes the due date")
+                    }
+                    .font(.callout).foregroundStyle(.secondary)
                 }
 
-                // Metadata chips
-                metadata
+                if !fields.tags.isEmpty || fields.type != nil || fields.epic != nil {
+                    FlowLayout(spacing: 8) {
+                        if let epic = fields.epic { LabelChip(text: epics.first { $0.id == epic }?.name ?? epic, color: .purple) }
+                        ForEach(fields.tags, id: \.self) { LabelChip(text: $0) }
+                        if let type = fields.type { LabelChip(text: type, color: .secondary) }
+                    }
+                }
 
                 if isCheckedOff { readBanner }
 
-                // Description - strip leading title if it matches
-                let body = stripLeadingTitle(card.body, title: card.fields.title)
-                if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("No description.")
-                        .font(.body)
-                        .foregroundStyle(.tertiary)
-                } else {
-                    MarkdownWebView(markdown: body)
-                }
+                Text("Details").font(.headline)
+                details(card)
+
+                // The description: rendered, and edited where it is read.
+                RichMarkdownEditor(text: $pageText, fontSize: 17, minHeight: 120, onEndEditing: savePage)
+                    .onAppear { pageText = notes; shownNotes = notes }
+                    // The task changed underneath: show that, unless something is being typed here.
+                    .onChange(of: current.body) { _, _ in
+                        let fresh = notes
+                        if pageText == shownNotes { pageText = fresh }
+                        shownNotes = fresh
+                    }
+                    .onDisappear(perform: savePage)
 
                 // Review requests linked to this card (`card:` in their review.md).
                 let cardReviews = model.reviews(for: card)
@@ -173,25 +243,179 @@ struct CardDetailSheet: View {
                     }
                 }
 
-                // Attachments: only show if present or expanded via add button
-                if !attachments.isEmpty || showImporter {
+                if !attachments.isEmpty {
                     Divider()
                     attachmentsSection
-                } else {
-                    // Compact add attachment button when no attachments
-                    HStack {
-                        Spacer()
-                        addAttachmentMenu {
-                            Label("Add Attachment", systemImage: "paperclip")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
+            .padding(.horizontal, 20).padding(.top, 4).padding(.bottom, 24)
+        }
+        .background(Theme.window.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) { actionBar(card) }
+    }
+
+    /// Status, priority, assignee, product and labels: each row opens its choices.
+    private func details(_ card: Card) -> some View {
+        let cfg = config ?? EffectiveConfig()
+        let fields = card.fields
+        let lane = model.location(ofCard: card) ?? laneForStatus
+        return VStack(spacing: 0) {
+            detailRow("Status", "circle.dotted.circle") {
+                HStack(spacing: 7) {
+                    Circle().fill(lane.map { laneColor($0, cfg) } ?? .secondary).frame(width: 10, height: 10)
+                    Text(lane?.name ?? "No lane")
+                }
+            } options: {
+                ForEach(lanes.filter { !$0.folder.isEmpty }) { option in
+                    Button { Task { await model.moveCard(card, to: option) } } label: { check(option.name, option.id == lane?.id) }
+                }
+            }
+            Divider().padding(.leading, 46)
+            detailRow("Priority", "flag") {
+                if let priority = fields.priority {
+                    HStack(spacing: 7) {
+                        Circle().fill(PriorityPalette.color(priority, priorities) ?? .gray).frame(width: 10, height: 10)
+                        Text(priority).foregroundStyle(PriorityPalette.color(priority, priorities) ?? .primary)
+                    }
+                } else { Text("None").foregroundStyle(.tertiary) }
+            } options: {
+                Button { set(card, "priority", nil) } label: { check("None", fields.priority == nil) }
+                ForEach(priorities, id: \.id) { option in
+                    Button { set(card, "priority", option.id) } label: { check(option.name ?? option.id, fields.priority == option.id) }
+                }
+            }
+            Divider().padding(.leading, 46)
+            detailRow("Assignee", "person") {
+                if let assignee = fields.assignee { Text("@\(assignee)") } else { Text("Unassigned").foregroundStyle(.tertiary) }
+            } options: {
+                Button { set(card, "assignee", nil) } label: { check("Unassigned", fields.assignee == nil) }
+                ForEach(users, id: \.id) { user in
+                    Button { set(card, "assignee", user.id) } label: { check(user.name ?? user.id, fields.assignee == user.id) }
+                }
+            }
+            if !model.products.isEmpty || fields.product != nil {
+                Divider().padding(.leading, 46)
+                detailRow("Product", "shippingbox") {
+                    if let id = fields.product { Text(model.products.first { $0.id == id }?.name ?? id) } else { Text("None").foregroundStyle(.tertiary) }
+                } options: {
+                    Button { set(card, "product", nil) } label: { check("None", fields.product == nil) }
+                    ForEach(model.products) { product in
+                        Button { set(card, "product", product.id) } label: { check(product.name, fields.product == product.id) }
+                    }
+                }
+            }
+            Divider().padding(.leading, 46)
+            detailRow("Labels", "tag") {
+                if fields.tags.isEmpty { Text("None").foregroundStyle(.tertiary) } else { Text(fields.tags.joined(separator: ", ")).lineLimit(1) }
+            } options: {
+                let all = Array(Set(model.boardTags + fields.tags)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                ForEach(all, id: \.self) { label in
+                    Button {
+                        let next = fields.tags.contains(label) ? fields.tags.filter { $0 != label } : fields.tags + [label]
+                        Task { await model.setCardTags(card, next) }
+                    } label: { check(label, fields.tags.contains(label)) }
+                }
+                Divider()
+                Button("New Label…", systemImage: "plus") { showNewLabel = true }
+            }
+        }
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func set(_ card: Card, _ key: String, _ value: String?) {
+        Task { await model.setCardField(card, [key: value]) }
+    }
+
+    @ViewBuilder private func check(_ text: String, _ selected: Bool) -> some View {
+        if selected { Label(text, systemImage: "checkmark") } else { Text(text) }
+    }
+
+    private func detailRow<Value: View, Options: View>(_ name: String, _ symbol: String,
+                                                       @ViewBuilder value: () -> Value,
+                                                       @ViewBuilder options: () -> Options) -> some View {
+        Menu(content: options) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol).foregroundStyle(.secondary).frame(width: 22)
+                Text(name).foregroundStyle(.secondary).frame(width: 92, alignment: .leading)
+                value().foregroundStyle(.primary)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .font(.callout)
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(name)
+    }
+
+    /// Under the task: done, edit, activity, attach, and the rest.
+    private func actionBar(_ card: Card) -> some View {
+        let entries = CardActivity.count(in: card.body)
+        let doneLane = lanes.first { $0.terminal == true && !$0.folder.isEmpty }
+        return HStack {
+            Button {
+                if !isCheckedOff, let doneLane { Task { await model.moveCard(card, to: doneLane) } }
+            } label: {
+                Image(systemName: "checkmark").font(.body.weight(.bold)).foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(isCheckedOff ? Color.green : Color.accentColor, in: Circle())
+            }
+            .disabled(isCheckedOff || doneLane == nil)
+            .accessibilityLabel(isCheckedOff ? "Done" : "Move to \(doneLane?.name ?? "done")")
+            .accessibilityIdentifier("taskDone")
+            Spacer()
+            Button { editing = true } label: { Image(systemName: "pencil").frame(width: 44, height: 44) }
+                .accessibilityLabel("Edit")
+                .accessibilityIdentifier("taskEdit")
+            Spacer()
+            Button { showActivity = true } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "bubble.left")
+                    if entries > 0 { Text("\(entries)").font(.callout.monospacedDigit()) }
+                }
+                .frame(minWidth: 44, minHeight: 44)
+            }
+            .accessibilityLabel("Activity, \(entries) entr\(entries == 1 ? "y" : "ies")")
+            .accessibilityIdentifier("taskActivity")
+            Spacer()
+            addAttachmentMenu { Image(systemName: "photo").frame(width: 44, height: 44) }
+                .accessibilityLabel("Add attachment")
+            Spacer()
+            Menu {
+                cardMenu(card, model: model)
+            } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
+            .accessibilityLabel("More")
+        }
+        .font(.title3)
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 14).padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
+        .padding(.horizontal, 16).padding(.bottom, 4)
+    }
+
+    private var dueSheet: some View {
+        NavigationStack {
+            VStack {
+                DatePicker("Due", selection: Binding(
+                    get: { current.fields.due.flatMap(CardDates.date) ?? Date() },
+                    set: { day in Task { await model.setCardDue(current, day) } }
+                ), displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .padding(.horizontal)
+                Spacer(minLength: 0)
+            }
+            .navigationTitle("Due Date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if current.fields.due != nil {
+                        Button("No Due Date", role: .destructive) { showDue = false; Task { await model.setCardDue(current, nil) } }
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { showDue = false } }
+            }
         }
     }
 
@@ -254,42 +478,21 @@ struct CardDetailSheet: View {
         }
     }
 
-    @ViewBuilder private var metadata: some View {
-        let cfg = config ?? EffectiveConfig()
-        HStack(spacing: 6) {
-            if let lane = laneForStatus {
-                chip(lane.name, color: laneColor(lane, cfg))
-            }
-            if let p = card.fields.priority, let color = PriorityPalette.color(p, priorities) {
-                chip(p, color: color)
-            }
-            if let t = card.fields.type { chip(t, color: .secondary) }
-            if let e = card.fields.epic {
-                chip(epics.first { $0.id == e }?.name ?? e, color: .purple)
-            }
-            if let a = card.fields.assignee {
-                Label("@\(a)", systemImage: "person.crop.circle").labelStyle(.titleOnly)
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    private func chip(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(color.opacity(0.16), in: Capsule())
-            .foregroundStyle(color)
-    }
-
     @ToolbarContentBuilder private var readToolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
-        ToolbarItem(placement: .primaryAction) { Button("Edit") { editing = true } }
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .topBarLeading) {
+            Button { dismiss() } label: { Image(systemName: "chevron.left") }
+                .accessibilityLabel("Done")
+                .accessibilityIdentifier("taskClose")
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
             Menu {
+                Button("Edit", systemImage: "pencil") { editing = true }
                 Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
-            } label: { Image(systemName: "ellipsis.circle") }
+            } label: { Image(systemName: "ellipsis") }
+            .accessibilityLabel("More")
+            if let url = model.githubURL(for: card) {
+                ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }
+            }
         }
     }
 
@@ -345,8 +548,9 @@ struct CardDetailSheet: View {
         ToolbarItem(placement: .confirmationAction) {
             Button("Save") {
                 Task {
+                    let text = CardActivity.join(notes: body_, log: CardActivity.split(current.body).log)
                     await model.updateCard(card, title: title, laneID: laneID, priority: priority,
-                                           type: type, assignee: assignee, epic: epic, body: body_)
+                                           type: type, assignee: assignee, epic: epic, body: text)
                     dismiss()
                 }
             }
@@ -363,7 +567,8 @@ struct CardDetailSheet: View {
         type = card.fields.type ?? ""
         assignee = card.fields.assignee ?? ""
         epic = card.fields.epic ?? ""
-        body_ = card.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The activity log is not edited here: it is put back under the text on save.
+        body_ = CardActivity.split(card.body.trimmingCharacters(in: .whitespacesAndNewlines)).notes
     }
 
     private func stripLeadingTitle(_ markdown: String, title: String) -> String {
@@ -399,6 +604,8 @@ struct NewTaskSheet: View {
     /// The image open in the markup editor.
     @State private var annotating: SharedImage.ID?
     @State private var isDrafting = false
+    /// Why the last draft gave nothing, shown under the Enhance button.
+    @State private var draftProblem: String?
     /// What was last written for the user, so a new draft may replace it but never their own text.
     @State private var draftedTitle = ""
     @State private var draftedBody = ""
@@ -415,10 +622,30 @@ struct NewTaskSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("New Task") {
+                if !images.isEmpty { NoDraftingNotice(app: model) }
+                Section {
                     TextField("Title", text: $title)
                     Picker("Lane", selection: $laneID) {
                         ForEach(lanes) { Text($0.name).tag($0.id) }
+                    }
+                    if ImageTaskDrafter.provider(model) != nil {
+                        Button { Task { await enhance() } } label: {
+                            HStack {
+                                Label("Enhance", systemImage: "wand.and.stars")
+                                if isDrafting { Spacer(); ProgressView() }
+                            }
+                        }
+                        .disabled(isDrafting || (title.trimmingCharacters(in: .whitespaces).isEmpty
+                                                 && body_.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty))
+                        .accessibilityIdentifier("newTaskEnhanceButton")
+                    }
+                } header: {
+                    Text("New Task")
+                } footer: {
+                    if let draftProblem {
+                        Text(draftProblem).foregroundStyle(.red)
+                    } else if ImageTaskDrafter.provider(model) != nil {
+                        Text("Type a rough note, then Enhance writes the title and description from it.")
                     }
                 }
                 Section {
@@ -560,8 +787,9 @@ struct NewTaskSheet: View {
                             if !images.isEmpty { await model.loadAttachmentIndex() }
                         }
                     }
-                    // With an image a title is written if none is given.
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty && images.isEmpty)
+                    // With an image a title is written if none is given. While it is being
+                    // written, creating would save the task without it.
+                    .disabled(isDrafting || (title.trimmingCharacters(in: .whitespaces).isEmpty && images.isEmpty))
                 }
             }
         }
@@ -572,6 +800,28 @@ struct NewTaskSheet: View {
         Binding(
             get: { $images.first { $0.wrappedValue.id == annotating } },
             set: { if $0 == nil { annotating = nil } })
+    }
+
+    /// "Enhance": what is typed (and the images, if any) are pointers, and the draft
+    /// replaces the title and description. Why nothing came back is said in `draftProblem`.
+    private func enhance() async {
+        guard !isDrafting else { return }
+        let pointers = [title, body_].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: "\n")
+        guard !pointers.isEmpty || !images.isEmpty else { return }
+        isDrafting = true
+        draftProblem = nil
+        var known = recognizedText
+        let ticket = await ImageTaskDrafter.draft(app: model, images: images, pointers: pointers, recognizedText: &known)
+        recognizedText = known
+        isDrafting = false
+        guard let ticket else {
+            draftProblem = "The task was not written: \(model.aiError ?? OnDeviceAI.unavailableReason ?? "the model gave nothing back.")"
+            return
+        }
+        title = ticket.title; draftedTitle = ticket.title
+        body_ = ticket.description; draftedBody = ticket.description
+        if priority.isEmpty, let suggested = ticket.priority, priorities.contains(where: { $0.id == suggested }) { priority = suggested }
+        if type.isEmpty, let suggested = ticket.type, types.contains(suggested) { type = suggested }
     }
 
     /// Write the title and description from the images and marks, where the user has not
@@ -596,9 +846,12 @@ struct NewTaskSheet: View {
             if open(body_, draftedBody), body_ == bodyAtStart { body_ = ticket.description; draftedBody = ticket.description }
             if priority.isEmpty, let suggested = ticket.priority, priorities.contains(where: { $0.id == suggested }) { priority = suggested }
             if type.isEmpty, let suggested = ticket.type, types.contains(suggested) { type = suggested }
-        } else if open(title, draftedTitle), let comment = ImageTaskDrafter.firstComment(images) {
-            title = comment
-            draftedTitle = comment
+        } else {
+            if let error = model.aiError { draftProblem = "The task was not written: \(error)" }
+            if open(title, draftedTitle), let comment = ImageTaskDrafter.firstComment(images) {
+                title = comment
+                draftedTitle = comment
+            }
         }
     }
 }
@@ -974,6 +1227,76 @@ private struct AttachmentImage: View {
             preview = QuickLookItem(url: url)
         } catch {
             model.errorMessage = "Couldn't open \(entry.name): \(error.localizedDescription)"
+        }
+    }
+}
+
+
+/// A task's activity log, newest first, with a field to add a comment to it.
+struct TaskActivityView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let cardID: String
+    @State private var comment = ""
+    @State private var isSending = false
+    @FocusState private var focused: Bool
+
+    private var card: Card? { model.card(withID: cardID) }
+
+    var body: some View {
+        let entries = card.map { CardActivity.entries(in: $0.body) } ?? []
+        List {
+            if entries.isEmpty {
+                Text("Nothing yet. A comment starts the log.").font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(entries.reversed()) { entry in
+                HStack(alignment: .top, spacing: 10) {
+                    Avatar(name: entry.author, size: 28)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(entry.author ?? "Note").font(.callout.weight(.semibold))
+                            if let date = entry.date {
+                                Text(date.formatted(.relative(presentation: .named))).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        Text(MarkdownPage.inline(entry.text)).font(.callout)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+        .listStyle(.plain)
+        .themedList()
+        .navigationTitle("Activity")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+        .safeAreaInset(edge: .bottom) {
+            HStack(spacing: 10) {
+                Avatar(name: model.reviewerID, size: 28)
+                TextField("Add a comment…", text: $comment, axis: .vertical)
+                    .lineLimit(1...5)
+                    .focused($focused)
+                    .accessibilityIdentifier("taskCommentField")
+                if isSending { ProgressView() } else {
+                    Button { send() } label: { Image(systemName: "arrow.up.circle.fill").font(.title2) }
+                        .disabled(comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel("Add comment")
+                        .accessibilityIdentifier("taskCommentSend")
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+            .padding(.horizontal, 12).padding(.bottom, 6)
+        }
+    }
+
+    private func send() {
+        guard let card, !isSending else { return }
+        let text = comment
+        isSending = true
+        Task {
+            if await model.addComment(card, text) { comment = "" }
+            isSending = false
         }
     }
 }
