@@ -156,19 +156,3 @@ final class OutboxTests: XCTestCase {
         XCTAssertEqual(writes, ["-Board/1. To do/existing.md"])
     }
 }
-
-final class BulkReadTests: XCTestCase {
-    func testGraphQLTreeAnswerBecomesFileTexts() {
-        let answer = #"""
-        {"data":{"repository":{"object":{"entries":[
-          {"name":"A-1.md","type":"blob","object":{"text":"---\nid: A-1\n---\n","isTruncated":false}},
-          {"name":"big.md","type":"blob","object":{"text":"cut","isTruncated":true}},
-          {"name":"shot.png","type":"blob","object":{"text":null,"isTruncated":false}},
-          {"name":"sub","type":"tree","object":{}}
-        ]}}}}
-        """#
-        XCTAssertEqual(GitPontFileSource.texts(inGraphQLTree: Data(answer.utf8)), ["A-1.md": "---\nid: A-1\n---\n"])
-        XCTAssertNil(GitPontFileSource.texts(inGraphQLTree: Data(#"{"data":{"repository":{"object":null}}}"#.utf8)))
-        XCTAssertNil(GitPontFileSource.texts(inGraphQLTree: Data(#"{"errors":[{"message":"nope"}]}"#.utf8)))
-    }
-}

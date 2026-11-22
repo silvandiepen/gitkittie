@@ -28,6 +28,8 @@ public enum ProviderChoice: String, CaseIterable, Identifiable, Codable {
 public enum BoardViewMode: String, CaseIterable, Identifiable {
     case lanes
     case list
+    /// A month, with each task on the day it is due.
+    case calendar
     public var id: String { rawValue }
 }
 
@@ -48,6 +50,17 @@ public struct ProviderConnection {
         )
         return GitProviderRequestContext(connection: connection, credential: GitCredential(accessToken: token))
     }
+}
+
+/// A board as it was last on screen (see `AppModel.boardCache`).
+struct CachedBoard {
+    var workspace: Workspace
+    var project: BoardProject
+    var board: LoadedBoard
+    var loadedBacklogLanes: Set<String>
+    var docs: [BoardDoc]
+    var docSources: [DocSource]
+    var products: [BoardProduct] = []
 }
 
 /// The top-level GitKanban view model, shared by the iOS and macOS apps. Provider-
@@ -106,6 +119,9 @@ public final class AppModel {
     public var isLoadingBoard = false
     /// Set to ask the board screen for the open board's full settings (lanes, priorities, members).
     public var wantsProjectSettings = false
+    /// Asked for from the sidebar's footer; the board screen shows the sheet.
+    public var wantsNewProject = false
+    public var wantsLiveUpdates = false
     public var isSaving = false
 
     // MARK: Agent access
@@ -116,7 +132,6 @@ public final class AppModel {
 
     // MARK: Presentation
     public var selectedCard: Card?
-    public var sheetCard: Card?  // Opens card in full sheet/panel
     public var newTaskLane: Lane?
     public var boardViewMode: BoardViewMode = .lanes
     public var showQuickCreate = false
@@ -133,23 +148,66 @@ public final class AppModel {
     public var filterAssignee: String?
     public var filterPriority: String?
     public var filterType: String?
+    /// Show only the tasks of this product (a product id of the open board).
+    public var filterProduct: String?
+    /// The products the open board's README lists.
+    public var products: [BoardProduct] = []
     public var isShowingSearch = false
+    /// Notifications (see AppModel+Notifications.swift). Off until the app turns them on
+    /// at launch: an extension or a test has no notification centre to talk to.
+    @ObservationIgnored var notificationRouter: NotificationRouter?
+    /// What the system allows: `nil` until asked.
+    public internal(set) var notificationsAllowed: Bool?
+    /// Counted up when a notification setting changes, so the settings screen redraws.
+    var notificationSettingsVersion = 0
+    /// A notification about reviews was tapped: show them.
+    public var wantsReviews = false
+    /// The Mac's detail area shows every board's reviews instead of a board.
+    public var isShowingReviews = false
+    /// The open board's documentation pages (see AppModel+Docs.swift).
+    public var docs: [BoardDoc] = []
+    public var isLoadingDocs = false
+    /// True while the Mac shows the open board's pages in place of its lanes.
+    public var isShowingDocs = false
+    /// The detail pane shows the tasks of every board instead of one board.
+    public var isShowingAllTasks = false
+    /// The open tasks of each board in the sidebar (see `loadAllTasks`).
+    public var allTasks: [BoardTasks] = []
+    public var isLoadingAllTasks = false
+    /// A task to select once its board is on screen (picked in All Tasks).
+    @ObservationIgnored var pendingSelection: String?
+    /// The board `docs` was read for.
+    @ObservationIgnored var docsBoardKey: String?
+    /// Folders of pages in other repositories that the open board links to.
+    public var docSources: [DocSource] = []
+    /// Linked folders that could not be read, with why.
+    public var docSourceProblems: [String: String] = [:]
+    /// What each board looked like when it was last on screen in this session, by
+    /// "repoID|folder": going back to a board shows this at once while it is read again.
+    @ObservationIgnored var boardCache: [String: CachedBoard] = [:]
+    /// Default branches found for linked repositories, so each is asked once.
+    @ObservationIgnored var docBranches: [String: String] = [:]
+    /// The board ("repoID|folder") whose requests the reviews screen starts on, when it
+    /// was opened from that board.
+    public var reviewsFocusBoard: String?
     public var searchText = ""
 
     public var hasActiveFilters: Bool {
-        filterAssignee != nil || filterPriority != nil || filterType != nil
+        filterAssignee != nil || filterPriority != nil || filterType != nil || filterProduct != nil
     }
 
     public func clearFilters() {
         filterAssignee = nil
         filterPriority = nil
         filterType = nil
+        filterProduct = nil
     }
 
     public func matchesFilters(_ card: Card) -> Bool {
         if let filterAssignee, card.fields.assignee != filterAssignee { return false }
         if let filterPriority, card.fields.priority != filterPriority { return false }
         if let filterType, card.fields.type != filterType { return false }
+        if let filterProduct, card.fields.product != filterProduct { return false }
         return true
     }
 
@@ -180,6 +238,8 @@ public final class AppModel {
     @ObservationIgnored private let aiAPIKeyKey = "gitkanban.aiAPIKey"
 
     @ObservationIgnored var source: (any BoardWritable)?
+    /// What a long settings save is doing right now (merging members rewrites tasks one by one).
+    public var settingsProgress: String?
     /// True when viewing the offline in-memory demo board (no provider connection).
     public var isDemo = false
 
@@ -190,6 +250,11 @@ public final class AppModel {
     /// The source-relative folder the open board's reviews come from, if configured.
     public var reviewFolder: String?
     public var isLoadingReviews = false
+    /// Review requests of every added board, per board (see AppModel+ReviewInbox.swift).
+    public internal(set) var reviewInbox: [BoardReviews] = []
+    public internal(set) var isLoadingReviewInbox = false
+    /// Whether the inbox has been loaded at least once since launch.
+    public internal(set) var hasLoadedReviewInbox = false
     /// Ids of the cards in the selected project that have files in `attachments/<id>/`.
     public internal(set) var attachmentCardIDs: Set<String> = []
     /// The signed-in identity reported by a folder server (`Tailscale-User-Login`).
@@ -640,16 +705,32 @@ public final class AppModel {
             if transient { errorMessage = "Open the app and sign in to use this board." }
             return
         }
-        // Another board: do not leave the previous one on screen while this one loads.
+        let key = "\(repo.id)|\(folder)"
+        // Another board: keep what the one on screen had loaded, and show what this one
+        // had the last time, so switching back and forth does not start from nothing.
+        var remembered: CachedBoard?
         if activeRepo?.id != repo.id || activeBoardFolder != folder {
-            board = nil
-            selectedProject = nil
+            rememberOpenBoard()
+            // A product filter belongs to the board it was set on.
+            filterProduct = nil
+            products = []
+            remembered = transient ? nil : boardCache[key]
+            board = remembered?.board
+            selectedProject = remembered?.project
+            if let remembered {
+                workspace = remembered.workspace
+                docs = remembered.docs
+                docSources = remembered.docSources
+                products = remembered.products
+                docSourceProblems = [:]
+                docsBoardKey = key
+            }
         }
         activeRepo = repo
         activeBoardFolder = folder
         self.source = source
         errorMessage = nil
-        loadedBacklogLanes = []
+        loadedBacklogLanes = remembered?.loadedBacklogLanes ?? []
         isLoadingBoard = true
         defer { isLoadingBoard = false }
         if !transient {
@@ -668,9 +749,26 @@ public final class AppModel {
                 board = shell.board
                 transientListing = shell.listing
             } else {
-                let loaded = try await RemoteBoardStore.loadBoard(source: source, folder: folder, loadBacklog: false)
+                var loaded = try await RemoteBoardStore.loadBoard(source: source, folder: folder, loadBacklog: false)
+                // A backlog lane that was loaded before stays loaded: this read skips it.
+                if let before = remembered?.board ?? (board?.columns.isEmpty == false ? board : nil) {
+                    for index in loaded.board.columns.indices where loadedBacklogLanes.contains(loaded.board.columns[index].lane.id) {
+                        if let old = before.columns.first(where: { $0.lane.id == loaded.board.columns[index].lane.id }) {
+                            loaded.board.columns[index].cards = old.cards
+                        }
+                    }
+                }
+                let fresh = Workspace(rootConfig: loaded.rootConfig, projects: [loaded.project])
+                // Another board was opened while this one was being read: keep the result
+                // for when it is opened again, and leave the screen alone.
+                guard activeRepo?.id == repo.id, activeBoardFolder == folder else {
+                    boardCache[key] = CachedBoard(workspace: fresh, project: loaded.project, board: loaded.board,
+                                                  loadedBacklogLanes: remembered?.loadedBacklogLanes ?? [],
+                                                  docs: remembered?.docs ?? [], docSources: remembered?.docSources ?? [])
+                    return
+                }
                 // A single-project workspace, so edit/reload paths keep working.
-                workspace = Workspace(rootConfig: loaded.rootConfig, projects: [loaded.project])
+                workspace = fresh
                 selectedProject = loaded.project
                 board = loaded.board
             }
@@ -678,9 +776,21 @@ public final class AppModel {
             errorMessage = error.localizedDescription
         }
         guard !transient else { return }
+        await loadProducts()
         if board != nil { await boardWasOpened(repo, folder: folder) }
         await loadReviews()
         startWatching()
+    }
+
+    /// Keep the board that is on screen for when it is opened again.
+    func rememberOpenBoard() {
+        guard let repo = activeRepo, let folder = activeBoardFolder, let workspace, let project = selectedProject, let board,
+              transientListing == nil, !isDemo else { return }
+        let key = "\(repo.id)|\(folder)"
+        boardCache[key] = CachedBoard(workspace: workspace, project: project, board: board, loadedBacklogLanes: loadedBacklogLanes,
+                                      docs: docsBoardKey == key ? docs : [], docSources: docsBoardKey == key ? docSources : [], products: products)
+        // Only a handful: a board with hundreds of cards is not small.
+        if boardCache.count > 8, let oldest = boardCache.keys.first(where: { $0 != key }) { boardCache[oldest] = nil }
     }
 
     /// Load the cards of a transiently opened board after all (to pick an existing card).
@@ -824,23 +934,67 @@ public final class AppModel {
 
     /// Save a project's settings by rewriting its README config (one commit).
     public func saveProjectSettings(project: BoardProject, name: String, description: String, lanes: [Lane],
-                            priorities: [Priority], users: [User], types: [String], epics: [Epic]) async {
+                            priorities: [Priority], users: [User], types: [String], epics: [Epic],
+                            appearance: (icon: String?, color: String?)? = nil,
+                            merges: [FieldMerge] = []) async {
         guard let source else { return }
-        // The settings form rewrites the README; what it has no field for is carried over.
-        let readme = CardText.update(
-            BoardStore.renderProjectReadme(
-                name: name, description: description, lanes: lanes,
-                priorities: priorities, users: users, types: types, epics: epics),
-            set: ["icon": project.config.icon, "color": project.config.color, "review_path": project.config.reviewPath])
+        let path = project.folder.isEmpty ? "README.md" : "\(project.folder)/README.md"
+        // The form only knows ids and names. What the board holds beyond that (a member's
+        // role, an epic's description) is kept for every id that is still there.
+        let known = board?.config
+        let fullUsers = users.map { user in known?.users.first { $0.id == user.id } ?? user }
+        let fullPriorities = priorities.map { priority in known?.priorities.first { $0.id == priority.id } ?? priority }
+        let fullEpics = epics.map { epic -> Epic in
+            guard var existing = known?.epics.first(where: { $0.id == epic.id }) else { return epic }
+            existing.name = epic.name
+            return existing
+        }
+        func render(_ lanes: [Lane], _ priorities: [Priority], _ users: [User], _ types: [String], _ epics: [Epic]) -> String {
+            BoardStore.renderProjectReadme(name: name, description: description, lanes: lanes,
+                                           priorities: priorities, users: users, types: types, epics: epics)
+        }
+        let rendered = render(lanes, fullPriorities, fullUsers, types, fullEpics)
+        let managed = ["project", "lanes", "priorities", "users", "types", "epics"]
+        let readme: String
+        if let original = try? await source.readText(path), !original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // A part the board inherits, and that was not changed here, stays inherited:
+            // it is not copied into this README.
+            var unchanged = Set<String>()
+            if let known {
+                let before = ReadmePatch.blocks(BoardMarkdown.splitFrontmatter(
+                    render(known.lanes, known.priorities, known.users, known.types, known.epics)).frontmatter ?? "")
+                let after = ReadmePatch.blocks(BoardMarkdown.splitFrontmatter(rendered).frontmatter ?? "")
+                let own = Set(ReadmePatch.blocks(BoardMarkdown.splitFrontmatter(original).frontmatter ?? "").map(\.key))
+                // A board that never named itself keeps going by its folder's name.
+                if !own.contains("project"), name == project.name { unchanged.insert("project") }
+                for key in managed where key != "project" && !own.contains(key) {
+                    if before.first(where: { $0.key == key }) == after.first(where: { $0.key == key }) { unchanged.insert(key) }
+                }
+            }
+            // Only the parts the settings window edits are replaced. The README's text,
+            // its linked docs and any other key stay exactly as they are.
+            let patched = ReadmePatch.apply(rendered, to: original, keys: managed, unchanged: unchanged)
+            readme = appearance.map { CardText.update(patched, set: ["icon": $0.icon, "color": $0.color]) } ?? patched
+        } else {
+            readme = CardText.update(rendered, set: ["icon": appearance.map(\.icon) ?? project.config.icon,
+                                                    "color": appearance.map(\.color) ?? project.config.color,
+                                                    "review_path": project.config.reviewPath])
+        }
         isSaving = true; errorMessage = nil
-        do { try await source.write(path: "\(project.folder)/README.md", text: readme, message: "Update \(name) settings") }
+        do { try await source.write(path: path, text: readme, message: "Update \(name) settings") }
         catch { errorMessage = error.localizedDescription }
+        // Tasks follow a merged value only once the README itself is saved.
+        if errorMessage == nil { await mergeValues(merges, in: project) }
         isSaving = false
         // Reload the open board with its new config (lanes now match the cards).
         if let repo = activeRepo, let folder = activeBoardFolder, folder == project.folder {
             if let ri = addedRepos.firstIndex(where: { $0.id == repo.id }),
                let bi = addedRepos[ri].boards.firstIndex(where: { $0.folder == folder }) {
                 addedRepos[ri].boards[bi].name = name
+                if let appearance {
+                    addedRepos[ri].boards[bi].icon = appearance.icon
+                    addedRepos[ri].boards[bi].color = appearance.color
+                }
                 persistAddedRepos()
             }
             boardSummaries["\(repo.id)|\(folder)"] = nil
@@ -867,20 +1021,28 @@ public final class AppModel {
     @discardableResult
     public func createTask(
         title rawTitle: String, lane: Lane,
-        priority: String?, type: String?, assignee: String?, epic: String? = nil, body: String
+        priority: String?, type: String?, assignee: String?, epic: String? = nil, product: String? = nil, body: String
     ) async -> String? {
         let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let source, let project = selectedProject, !title.isEmpty, !lane.folder.isEmpty else { return nil }
-        let id = uniqueID(for: title, lane: lane)
-        let path = "\(project.folder)/\(lane.folder)/\(id).md"
+        // Ask the repository which cards exist now: an agent may have added some since
+        // the board was loaded, and a skipped backlog lane holds numbers too. Offline,
+        // what is known here has to do.
+        let listed = (try? await RemoteBoardStore.listing(source: source, folder: project.folder))
+            .map { Array($0.files.values.joined()) } ?? []
+        // A product with a prefix of its own numbers its tasks with it.
+        let ownPrefix = products.first { $0.id == product }?.prefix
+        let (id, fileName) = newCardName(for: title, lane: lane, alsoTaken: listed, prefix: ownPrefix)
+        let path = "\(project.folder)/\(lane.folder)/\(fileName)"
         var content = CardText.make(
             id: id, title: title, project: project.name, status: lane.status,
             priority: priority, type: type, assignee: assignee, body: body
         )
         if let epic, !epic.isEmpty { content = CardText.update(content, set: ["epic": epic]) }
+        if let product, !product.isEmpty { content = CardText.update(content, set: ["product": product]) }
         await performWrite { try await source.write(path: path, text: content, message: "Add task \(id)") }
         guard errorMessage == nil else { return nil }
-        transientListing?.files[lane.id, default: []].append("\(id).md")
+        transientListing?.files[lane.id, default: []].append(fileName)
         return id
     }
 
@@ -1063,6 +1225,93 @@ public final class AppModel {
         await selectProject(project)
     }
 
+    /// Put a task at a place in a lane: before the task `beforeID`, or at the end when that
+    /// is nil. Covers both a move to another lane and a reorder inside one, and saves it as
+    /// one commit where the source can.
+    public func placeCard(_ card: Card, in lane: Lane, before beforeID: String?) async {
+        guard let source, let project = selectedProject, var board,
+              let location = location(of: card), !lane.folder.isEmpty,
+              let from = board.columns.firstIndex(where: { $0.lane.id == location.lane.id }),
+              let to = board.columns.firstIndex(where: { $0.lane.id == lane.id }),
+              beforeID != card.fields.id else { return }
+        let id = card.fields.id
+        let crossing = location.lane.id != lane.id
+
+        var target = board.columns[to].cards.filter { $0.fields.id != id }
+        let index = beforeID.flatMap { before in target.firstIndex { $0.fields.id == before } } ?? target.count
+        // Dropped where it already is: nothing to save.
+        if !crossing, board.columns[to].cards.firstIndex(where: { $0.fields.id == id }) == index { return }
+
+        var moved = card
+        moved.fields.status = lane.status
+        target.insert(moved, at: index)
+        let orders = Self.orders(placing: index, in: target.map(\.fields.order))
+        for (position, order) in orders { target[position].fields.order = order }
+
+        // Optimistic: the task is in its new place before the commit is made.
+        board.columns[from].cards.removeAll { $0.fields.id == id }
+        board.columns[to].cards = target
+        self.board = board
+
+        isSaving = true
+        errorMessage = nil
+        do {
+            var texts: [String: String] = [:]
+            for (position, order) in orders {
+                let changed = target[position]
+                guard let name = changed.fileName else { continue }
+                let isMoved = changed.fields.id == id
+                let readPath = isMoved ? location.path : "\(project.folder)/\(lane.folder)/\(name)"
+                let original = (try? await source.readText(readPath)) ?? changed.body
+                var fields: [String: String?] = ["order": order]
+                if isMoved, crossing { fields["status"] = lane.status }
+                texts["\(project.folder)/\(lane.folder)/\(name)"] = CardText.update(original, set: fields)
+            }
+            let message = crossing ? "Move \(id) to \(lane.name)" : "Reorder \(id)"
+            let asOne = try await (source as? any BatchWritable)?.writeTexts(texts, message: message) ?? false
+            if !asOne {
+                for (path, text) in texts.sorted(by: { $0.key < $1.key }) {
+                    try await source.write(path: path, text: text, message: message)
+                }
+            }
+            if crossing { try await source.delete(path: location.path, message: message) }
+        } catch {
+            errorMessage = error.localizedDescription
+            if let project = selectedProject { await selectProject(project) } // revert
+        }
+        isSaving = false
+    }
+
+    /// The `order` values to write so the task at `index` sorts where it was put, keyed by
+    /// position. Between two numbered neighbours that is one value (their midpoint); in a
+    /// lane that is not numbered yet, every task gets its position.
+    nonisolated static func orders(placing index: Int, in existing: [String?]) -> [Int: String] {
+        let others = existing.enumerated().filter { $0.offset != index }.map { $0.element.flatMap(Double.init) }
+        let numbered = others.compactMap { $0 }
+        let ordered = numbered.count == others.count && zip(numbered, numbered.dropFirst()).allSatisfy { $0 < $1 }
+        if ordered {
+            let before = index > 0 ? numbered[index - 1] : nil
+            let after = index < numbered.count ? numbered[index] : nil
+            let value: Double = switch (before, after) {
+            case let (b?, a?): (b + a) / 2
+            case let (b?, nil): b.rounded(.down) + 1
+            case let (nil, a?): a.rounded(.up) - 1
+            case (nil, nil): 1
+            }
+            let text = value == value.rounded() ? String(Int(value)) : String(format: "%.4f", value)
+                .replacingOccurrences(of: "0+$", with: "", options: .regularExpression)
+            // Only when the midpoint is still a value of its own; otherwise renumber below.
+            if let parsed = Double(text), before.map({ $0 < parsed }) ?? true, after.map({ parsed < $0 }) ?? true {
+                return [index: text]
+            }
+        }
+        var all: [Int: String] = [:]
+        for position in existing.indices where existing[position] != String(position + 1) {
+            all[position] = String(position + 1)
+        }
+        return all
+    }
+
     // MARK: Write helpers
 
     func performWrite(_ operation: @escaping () async throws -> Void) async {
@@ -1082,6 +1331,26 @@ public final class AppModel {
             column.cards.contains { $0.fields.id == card.fields.id }
         }) else { return nil }
         return (column.lane, "\(project.folder)/\(column.lane.folder)/\(fileName)")
+    }
+
+    /// The id and file of a new card. A board whose cards are numbered (`PETS-012-…`), or
+    /// that has no cards yet, gets the next number; a board of plainly named cards keeps
+    /// naming them after their title.
+    func newCardName(for title: String, lane: Lane, alsoTaken: [String] = [], prefix ownPrefix: String? = nil) -> (id: String, fileName: String) {
+        let known = (board?.columns.flatMap { $0.cards.compactMap(\.fileName) } ?? [])
+            + (transientListing?.files.values.joined().map { $0 } ?? []) + alsoTaken
+        if let ownPrefix {
+            let id = AgentBoard.nextID(prefix: ownPrefix, among: known)
+            return (id, AgentBoard.fileName(id: id, title: title))
+        }
+        let numbered = known.contains { $0.range(of: #"^[A-Z][A-Z0-9]*-\d+"#, options: .regularExpression) != nil }
+        if numbered || known.isEmpty,
+           let prefix = AgentBoard.prefix(among: known, fallback: selectedProject?.name ?? "", ignoring: Set(products.compactMap(\.prefix))) {
+            let id = AgentBoard.nextID(prefix: prefix, among: known)
+            return (id, AgentBoard.fileName(id: id, title: title))
+        }
+        let id = uniqueID(for: title, lane: lane)
+        return (id, "\(id).md")
     }
 
     private func uniqueID(for title: String, lane: Lane) -> String {
@@ -1145,7 +1414,7 @@ public final class AppModel {
 
     /// Generate tickets from natural language input using AI.
     public func generateTicketsFromInput(
-        _ input: String, using override: AIPontProvider? = nil, images: [AIImageAttachment] = []
+        _ input: String, using override: AIPontProvider? = nil, images: [AIImageAttachment] = [], single: Bool = false
     ) async {
         guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let provider = override ?? aiProvider
@@ -1187,6 +1456,12 @@ public final class AppModel {
         )
 
         do {
+            if provider == .onDevice, single {
+                // One ticket from the small model goes field by field; see `draftTicket`.
+                generatedTickets = [try await OnDeviceAI.draftTicket(input: input, context: context)]
+                isGeneratingTickets = false
+                return
+            }
             let service = AITicketService()
             generatedTickets = try await service.generateTickets(
                 configuration: config,

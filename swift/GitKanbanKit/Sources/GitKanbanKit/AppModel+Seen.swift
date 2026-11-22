@@ -155,6 +155,7 @@ extension AppModel {
         for repo in addedRepos {
             for board in repo.boards { await loadBoardSummary(repo, board.folder, force: true) }
         }
+        await boardSummariesDidRefresh()
     }
 
     /// Opening a board is looking at it: its listing becomes the new reference, and the

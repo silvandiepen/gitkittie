@@ -44,8 +44,7 @@ extension AppModel {
             let hookID: Int
             do {
                 hookID = try await ProviderWebhook.create(
-                    on: connection.instance, repo: repo.fullName, token: connection.token,
-                    url: registration.hookURL, secret: registration.hookSecret)
+                    with: connection, repo: repo.fullName, url: registration.hookURL, secret: registration.hookSecret)
             } catch {
                 // No webhook, so no use for the channel: do not leave it behind on the relay.
                 await RelayClient.remove(RelayConfig(relay: relayURL, channel: registration.channel,
@@ -70,7 +69,7 @@ extension AppModel {
         errorMessage = nil
         stopWatching()
         if let hookID = config.hookID, let connection {
-            await ProviderWebhook.remove(hookID, on: connection.instance, repo: repo.fullName, token: connection.token)
+            await ProviderWebhook.remove(hookID, with: connection, repo: repo.fullName)
         }
         await RelayClient.remove(config)
         do {

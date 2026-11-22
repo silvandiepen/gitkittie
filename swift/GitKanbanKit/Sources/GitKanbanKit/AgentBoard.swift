@@ -129,9 +129,19 @@ public struct AgentBoard {
     /// The board's folder, relative to the source's root ("" = the root itself).
     let folder: String
     var now: () -> Date = Date.init
+    /// Opens a linked docs folder in another repository; nil where there is no way to (a
+    /// board in a plain folder, no connection).
+    var linkedSource: (@Sendable (DocSource) async -> (any BoardWritable)?)?
 
     private func join(_ parts: String...) -> String { parts.filter { !$0.isEmpty }.joined(separator: "/") }
     private var stamp: String { Review.timestamp(now()) }
+
+    /// The products this board's README lists.
+    func products() async -> [BoardProduct] {
+        let path = folder.isEmpty ? "README.md" : "\(folder)/README.md"
+        guard let readme = try? await source.readText(path) else { return [] }
+        return BoardStore.products(inReadme: readme)
+    }
 
     struct Shell {
         let project: BoardProject
@@ -156,7 +166,7 @@ public struct AgentBoard {
         return [
             "name": shell.project.name,
             "folder": folder,
-            "card_id_prefix": Self.prefix(in: shell.listing, fallback: shell.project.name) as Any,
+            "card_id_prefix": Self.prefix(in: shell.listing, fallback: shell.project.name, ignoring: Set(await products().compactMap(\.prefix))) as Any,
             "lanes": config.lanes.map { lane -> [String: Any] in
                 ["id": lane.id, "name": lane.name, "status": lane.status, "cards": shell.listing.count(in: lane),
                  "backlog": lane.isBacklog, "terminal": lane.terminal == true]
@@ -165,6 +175,11 @@ public struct AgentBoard {
             "types": config.types,
             "epics": config.epics.map { ["id": $0.id, "name": $0.name ?? $0.id] },
             "users": config.users.map { ["id": $0.id, "name": $0.name ?? $0.id] },
+            "products": await products().map { product -> [String: Any] in
+                var out: [String: Any] = ["id": product.id, "name": product.name]
+                out["card_id_prefix"] = product.prefix
+                return out
+            },
         ]
     }
 
@@ -234,7 +249,7 @@ public struct AgentBoard {
         return texts
     }
 
-    private static let summaryKeys = ["id", "title", "status", "priority", "type", "epic", "assignee",
+    private static let summaryKeys = ["id", "title", "status", "priority", "type", "epic", "product", "assignee",
                                       "picked_up_by", "claim_expires_at", "blocked", "updated_at"]
 
     private func summary(_ text: String, fileName: String, lane: Lane) -> [String: Any] {
@@ -324,10 +339,18 @@ public struct AgentBoard {
     }
 
     /// The id prefix the board's cards use (`PETS` for `PETS-12-…`): the most common one.
-    static func prefix(in listing: BoardListing, fallback: String) -> String? {
+    static func prefix(in listing: BoardListing, fallback: String, ignoring: Set<String> = []) -> String? {
+        prefix(among: listing.files.values.joined(), fallback: fallback, ignoring: ignoring)
+    }
+
+    /// The board's own id prefix: the one most of its tasks use. `ignoring` are prefixes
+    /// that belong to products, which number their tasks apart from the board's.
+    static func prefix(among fileNames: some Sequence<String>, fallback: String, ignoring: Set<String> = []) -> String? {
         var counts: [String: Int] = [:]
-        for name in listing.files.values.joined() {
-            if let match = name.range(of: #"^[A-Z][A-Z0-9]*(?=-\d+)"#, options: .regularExpression) { counts[String(name[match]), default: 0] += 1 }
+        for name in fileNames {
+            if let match = name.range(of: #"^[A-Z][A-Z0-9]*(?=-\d+)"#, options: .regularExpression), !ignoring.contains(String(name[match])) {
+                counts[String(name[match]), default: 0] += 1
+            }
         }
         if let common = counts.max(by: { ($0.value, $1.key) < ($1.value, $0.key) })?.key { return common }
         let letters = fallback.uppercased().filter { $0.isLetter || $0.isNumber }
@@ -336,9 +359,13 @@ public struct AgentBoard {
 
     /// The next unused id for `prefix`, numbered as wide as the board's existing ids.
     static func nextID(prefix: String, in listing: BoardListing) -> String {
+        nextID(prefix: prefix, among: listing.files.values.joined())
+    }
+
+    static func nextID(prefix: String, among fileNames: some Sequence<String>) -> String {
         var highest = 0
         var width = 3
-        for name in listing.files.values.joined() where name.hasPrefix(prefix + "-") {
+        for name in fileNames where name.hasPrefix(prefix + "-") {
             let digits = name.dropFirst(prefix.count + 1).prefix { $0.isNumber }
             if let number = Int(digits) {
                 highest = max(highest, number)
@@ -347,6 +374,12 @@ public struct AgentBoard {
         }
         let number = String(highest + 1)
         return prefix + "-" + String(repeating: "0", count: max(0, width - number.count)) + number
+    }
+
+    /// The file a new card titled `title` gets: `PETS-013-fix-the-door.md`.
+    static func fileName(id: String, title: String) -> String {
+        let slug = slug(title)
+        return slug.isEmpty ? "\(id).md" : "\(id)-\(slug).md"
     }
 
     static func slug(_ title: String) -> String {
@@ -365,12 +398,21 @@ public struct AgentBoard {
         let lanes = shell.config.lanes.filter { !$0.folder.isEmpty }
         let lane = try wantedLane.map { try Self.lane($0, in: shell.config) }
             ?? lanes.first { $0.status == "todo" } ?? lanes.first { !$0.isBacklog } ?? lanes[0]
-        guard let prefix = Self.prefix(in: shell.listing, fallback: shell.project.name) else {
+        // A task for a product that numbers its own tasks takes that prefix.
+        let known = await products()
+        guard let prefix = Self.prefix(in: shell.listing, fallback: shell.project.name, ignoring: Set(known.compactMap(\.prefix))) else {
             throw AgentBoardError("Could not work out an id prefix for this board.")
         }
         try Self.validate(fields, config: shell.config)
-        let id = Self.nextID(prefix: prefix, in: shell.listing)
-        let fileName = "\(id)-\(Self.slug(title)).md".replacingOccurrences(of: "-.md", with: ".md")
+        var ownPrefix: String?
+        if let field = fields.first(where: { $0.key == "product" }), case .string(let wanted) = field.value {
+            guard let product = known.first(where: { $0.id == wanted }) else {
+                throw AgentBoardError("\"\(wanted)\" is not one of this board's products. Use one of: \(known.map(\.id).joined(separator: ", ")).")
+            }
+            ownPrefix = product.prefix
+        }
+        let id = Self.nextID(prefix: ownPrefix ?? prefix, in: shell.listing)
+        let fileName = Self.fileName(id: id, title: title)
         let heading = "# \(title)"
 
         var text: String

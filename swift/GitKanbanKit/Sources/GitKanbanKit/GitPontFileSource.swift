@@ -93,85 +93,16 @@ struct GitPontFileSource: BoardFileSource, BulkTextSource {
     /// A file's raw bytes (for attachments/images).
     func readData(_ path: String) async throws -> Data {
         let reference = GitFileReference(repository: repository, path: full(path), ref: ref)
-        do {
-            return try await provider.readFile(reference, context: context).content
-        } catch GitPontError.fileTooLarge where provider is GitHubProvider {
-            // GitHub's JSON contents endpoint only inlines files up to 1 MB, and git-pont
-            // reports anything bigger as too large. Screenshots and review assets pass
-            // that easily, so fetch those through the raw media type (up to 100 MB).
-            // This belongs in git-pont's GitHubProvider; see GITKITTIE-022.
-            return try await described(path, "read") { try await readRawFromGitHub(full(path)) }
-        } catch {
-            throw Self.readable(error, path: path, action: "read")
-        }
+        return try await described(path, "read") { try await provider.readFile(reference, context: context).content }
     }
 
-    /// Every text file of a folder in one GraphQL request (GitHub only): the REST API has
-    /// no way to read more than one file per request, which makes a lane of a hundred
-    /// cards a hundred requests. `nil` for other providers and whenever it does not work,
-    /// so the caller reads file by file as before. Belongs in git-pont; see GITKITTIE-022.
+    /// Every text file of a folder in one request, where the provider can: a lane of a
+    /// hundred cards is otherwise a hundred requests. `nil` for providers that cannot and
+    /// whenever it does not work, so the caller reads file by file as before.
     func readTexts(in directory: String) async -> [String: String]? {
-        guard provider is GitHubProvider, let token = context.credential?.accessToken else { return nil }
-        let query = """
-        query($owner: String!, $name: String!, $expression: String!) {
-          repository(owner: $owner, name: $name) {
-            object(expression: $expression) {
-              ... on Tree { entries { name type object { ... on Blob { text isTruncated } } } }
-            }
-          }
-        }
-        """
-        let variables = ["owner": repository.namespace, "name": repository.name, "expression": "\(ref):\(full(directory))"]
-        var request = URLRequest(url: GitProviderInstance.github.apiBaseURL.appendingPathComponent("graphql"))
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["query": query, "variables": variables])
-        guard let (data, response) = try? await UncachedHTTPClient.session.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return Self.texts(inGraphQLTree: data)
-    }
-
-    /// File name → text out of the GraphQL answer; `nil` when it holds no folder.
-    static func texts(inGraphQLTree data: Data) -> [String: String]? {
-        struct Answer: Decodable {
-            struct Payload: Decodable { let repository: Repository? }
-            struct Repository: Decodable { let object: Tree? }
-            struct Tree: Decodable { let entries: [Entry]? }
-            struct Entry: Decodable { let name: String; let type: String; let object: Blob? }
-            struct Blob: Decodable { let text: String?; let isTruncated: Bool? }
-            let data: Payload?
-        }
-        guard let entries = (try? JSONDecoder().decode(Answer.self, from: data))?.data?.repository?.object?.entries else { return nil }
-        var texts: [String: String] = [:]
-        // Binary and cut-off files carry no usable text: leave them to a single read.
-        for entry in entries where entry.type == "blob" {
-            if let text = entry.object?.text, entry.object?.isTruncated != true { texts[entry.name] = text }
-        }
-        return texts
-    }
-
-    private func readRawFromGitHub(_ path: String) async throws -> Data {
-        guard let token = context.credential?.accessToken else { throw GitPontError.authenticationRequired }
-        let base = GitProviderInstance.github.apiBaseURL
-            .appendingPathComponent("repos").appendingPathComponent(repository.namespace)
-            .appendingPathComponent(repository.name).appendingPathComponent("contents")
-            .appendingPathComponent(path)
-        var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
-        components?.queryItems = [URLQueryItem(name: "ref", value: ref)]
-        guard let url = components?.url else { throw GitPontError.unsupportedURL(path) }
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github.raw+json", forHTTPHeaderField: "Accept")
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, response) = try await UncachedHTTPClient.session.data(for: request)
-        switch (response as? HTTPURLResponse)?.statusCode ?? 0 {
-        case 200..<300: return data
-        case 401: throw GitPontError.authenticationFailed("GitHub authentication failed")
-        case 403: throw GitPontError.permissionDenied("GitHub permission denied")
-        case 404: throw GitPontError.notFound("GitHub resource not found")
-        case let status: throw GitPontError.invalidProviderResponse("GitHub returned \(status)")
-        }
+        guard provider.capabilities.contains(.directoryTextRead) else { return nil }
+        let reference = GitFileReference(repository: repository, path: full(directory), ref: ref)
+        return try? await provider.readTextFiles(inDirectory: reference, context: context)
     }
 
     // MARK: Writes
@@ -201,20 +132,50 @@ struct GitPontFileSource: BoardFileSource, BulkTextSource {
         }
     }
 
-    /// Delete a file in one commit. Fetches the current version first (providers that
-    /// require the blob sha to delete), falling back to a blind delete.
+    /// Delete a file in one commit, whatever version of it is there now.
     func delete(path: String, message: String) async throws {
-        let reference = GitFileReference(repository: repository, path: full(path), ref: ref)
-        let version = try? await provider.readFile(reference, context: context).version
         let request = GitFileDeleteRequest(
-            reference: reference,
-            message: message,
-            targetBranch: ref,
-            expectedVersion: version,
-            allowBlindOverwrite: version == nil
-        )
+            reference: GitFileReference(repository: repository, path: full(path), ref: ref),
+            message: message, targetBranch: ref, expectedVersion: nil, allowBlindOverwrite: true)
         _ = try await described(path, "delete") { try await provider.deleteFile(request, context: context) }
     }
+
+}
+
+extension GitPontFileSource: WebLinkingSource {
+    func webURL(forPath path: String) -> URL? {
+        provider.webURL(for: GitFileReference(repository: repository, path: full(path), ref: ref))
+    }
+}
+
+extension GitPontFileSource: TreeListingSource {
+    func listFiles(under directory: String) async -> [BoardFileEntry]? {
+        guard provider.capabilities.contains(.treeList) else { return nil }
+        let reference = GitFileReference(repository: repository, path: full(directory), ref: ref)
+        guard let tree = try? await provider.listTree(reference, context: context), !tree.truncated else { return nil }
+        let prefix = basePath.isEmpty ? "" : basePath + "/"
+        return tree.items.filter { $0.type == .file }.map { entry in
+            // Paths come back as repository paths; callers work relative to this source.
+            let relative = !prefix.isEmpty && entry.path.hasPrefix(prefix) ? String(entry.path.dropFirst(prefix.count)) : entry.path
+            return BoardFileEntry(name: entry.name, path: relative, kind: .file)
+        }
+    }
+}
+
+extension GitPontFileSource: BatchWritable {
+    /// One commit for all the files, where the provider can. The commit is built on the
+    /// branch as it is now and not forced, so a push in between refuses it and nothing changes.
+    func writeTexts(_ texts: [String: String], message: String) async throws -> Bool {
+        guard provider.capabilities.contains(.batchCommit), !texts.isEmpty else { return false }
+        let commit = GitMultiFileCommit(
+            repository: repository, branch: ref, message: message,
+            operations: texts.sorted { $0.key < $1.key }.map { .write(full($0.key), Data($0.value.utf8)) })
+        _ = try await described("\(texts.count) files", "save") { try await provider.commitFiles(commit, context: context) }
+        return true
+    }
+}
+
+extension GitPontFileSource {
 
     // MARK: Errors
 

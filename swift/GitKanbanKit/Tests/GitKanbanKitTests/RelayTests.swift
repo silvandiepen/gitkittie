@@ -49,28 +49,15 @@ final class RelayTests: XCTestCase {
         XCTAssertNotEqual(header.suffix(64), RelayClientProof.header(clientID: String(repeating: "f", count: 32), body: body, time: time).suffix(64))
     }
 
-    func testWebhookRequestsPerProvider() throws {
-        let github = try ProviderWebhook.createRequest(
-            on: .github, repo: "octo/board", token: "t", url: "https://relay.dev/hook/abc", secret: "s")
-        XCTAssertEqual(github.url?.absoluteString, "https://api.github.com/repos/octo/board/hooks")
-        XCTAssertEqual(github.value(forHTTPHeaderField: "Authorization"), "Bearer t")
-        let githubBody = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(github.httpBody)) as? [String: Any])
-        XCTAssertEqual(githubBody["events"] as? [String], ["push"])
-        XCTAssertEqual((githubBody["config"] as? [String: String])?["secret"], "s")
-
-        let gitlab = try ProviderWebhook.createRequest(
-            on: .gitLabCloud, repo: "group/sub/board", token: "t", url: "https://relay.dev/hook/abc", secret: "s")
-        XCTAssertEqual(gitlab.url?.absoluteString, "https://gitlab.com/api/v4/projects/group%2Fsub%2Fboard/hooks")
-        XCTAssertEqual(gitlab.value(forHTTPHeaderField: "PRIVATE-TOKEN"), "t")
-        XCTAssertNil(gitlab.value(forHTTPHeaderField: "Authorization"))
-        let gitlabBody = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(gitlab.httpBody)) as? [String: Any])
-        XCTAssertEqual(gitlabBody["url"] as? String, "https://relay.dev/hook/abc")
-        XCTAssertEqual(gitlabBody["token"] as? String, "s")
-        XCTAssertEqual(gitlabBody["push_events"] as? Bool, true)
-
-        let selfHosted = GitProviderInstance.gitLabSelfHosted(baseURL: URL(string: "https://git.example.org")!)
-        XCTAssertEqual(ProviderWebhook.hooksURL(selfHosted, repo: "team/board", hookID: 12).absoluteString,
-                       "https://git.example.org/api/v4/projects/team%2Fboard/hooks/12")
+    /// The requests themselves are git-pont's and tested there; here only the split of a
+    /// repo's full name, which GitLab subgroups make more than two parts.
+    func testWebhookRepositoryReferenceKeepsSubgroups() {
+        let nested = ProviderWebhook.reference(.gitLabCloud, "group/sub/board")
+        XCTAssertEqual(nested.namespace, "group/sub")
+        XCTAssertEqual(nested.name, "board")
+        let plain = ProviderWebhook.reference(.github, "octo/board")
+        XCTAssertEqual(plain.namespace, "octo")
+        XCTAssertEqual(plain.name, "board")
     }
 
     /// Against a running relay (`RELAY_URL=http://127.0.0.1:8787`, e.g. `wrangler dev`):

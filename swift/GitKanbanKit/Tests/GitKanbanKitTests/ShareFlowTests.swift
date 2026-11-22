@@ -98,6 +98,37 @@ final class ShareFlowTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: image), png)
     }
 
+    /// A board of numbered cards: a card made in the app takes the next number, counted
+    /// over every lane and over cards added since the board was opened.
+    func testNewCardOnANumberedBoardGetsTheNextNumber() async throws {
+        try FileManager.default.removeItem(at: root.appendingPathComponent("Tasks/Morrow/1. To do/login-button-is-cut-off.md"))
+        try write("Tasks/Morrow/1. To do/MORROW-007-fix-the-door.md", CardText.make(
+            id: "MORROW-007", title: "Fix the door", project: "Morrow", status: "todo"))
+        try write("Tasks/Morrow/5. Done/MORROW-041-paint-the-wall.md", CardText.make(
+            id: "MORROW-041", title: "Paint the wall", project: "Morrow", status: "done"))
+        let repo = try await addBoardInApp()
+        let share = model()
+        await share.restoreForSharing()
+        await share.openBoard(repo, folder: "Tasks/Morrow", transient: true)
+        // Someone else adds a card after the board was opened here.
+        try write("Tasks/Morrow/1. To do/MORROW-042-added-meanwhile.md", CardText.make(
+            id: "MORROW-042", title: "Added meanwhile", project: "Morrow", status: "todo"))
+
+        let lane = try XCTUnwrap(share.quickCreateDefaultLane)
+        let first = await share.createTask(title: "The way people hold wood is weird", lane: lane,
+                                           priority: nil, type: nil, assignee: nil, body: "")
+        XCTAssertEqual(first, "MORROW-043")
+        let second = await share.createTask(title: "Watchtower!", lane: lane, priority: nil, type: nil, assignee: nil, body: "")
+        XCTAssertEqual(second, "MORROW-044")
+
+        let card = root.appendingPathComponent("Tasks/Morrow/1. To do/MORROW-043-the-way-people-hold-wood-is-weird.md")
+        XCTAssertTrue(try String(contentsOf: card, encoding: .utf8).contains("id: MORROW-043"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("Tasks/Morrow/1. To do/MORROW-044-watchtower.md").path))
+        let attached = await share.attachFile(toCardID: "MORROW-043", data: Data([1]), filename: "shot.png")
+        XCTAssertTrue(attached)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("Tasks/Morrow/attachments/MORROW-043/shot.png").path))
+    }
+
     func testCreateTaskReturnsNilWhenNothingIsOpen() async {
         let share = model()
         await share.restoreForSharing()

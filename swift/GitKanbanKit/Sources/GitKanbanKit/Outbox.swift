@@ -253,7 +253,7 @@ struct ReadCache: Sendable {
 }
 
 /// A source whose writes go through the outbox and whose reads include what is still in it.
-struct OutboxSource: BoardWritable, BulkTextSource {
+struct OutboxSource: BatchWritable, BulkTextSource, WebLinkingSource {
     let base: any BoardWritable
     let outbox: Outbox
     let repoKey: String
@@ -348,6 +348,19 @@ struct OutboxSource: BoardWritable, BulkTextSource {
             texts[String(item.path.dropFirst(prefix.count))] = nil
         }
         return texts
+    }
+
+    func webURL(forPath path: String) -> URL? { (base as? any WebLinkingSource)?.webURL(forPath: path) }
+
+    /// Several files in one commit, sent now and not queued: a queue entry is one file.
+    /// False when the provider cannot, or when one of the files still has an unsent
+    /// change that would overwrite this one later; the caller then writes them singly.
+    func writeTexts(_ texts: [String: String], message: String) async throws -> Bool {
+        guard let batch = base as? any BatchWritable else { return false }
+        for item in await waiting() where texts[item.path] != nil { return false }
+        guard try await batch.writeTexts(texts, message: message) else { return false }
+        for (path, text) in texts { cache.store(Data(text.utf8), for: "text|\(repoKey)|\(path)") }
+        return true
     }
 
     func write(path: String, text: String, message: String) async throws {

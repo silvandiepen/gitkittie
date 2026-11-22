@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/silvandiepen/git-pont.git",
       "state" : {
-        "branch" : "codex/initial-git-pont-monorepo",
-        "revision" : "74caf328b524edb5bff825fa759bb1dcf4846e01"
+        "branch" : "master",
+        "revision" : "3fad7d8d8fb341177c7fb26328aa0a525db1b958"
       }
     },
     {

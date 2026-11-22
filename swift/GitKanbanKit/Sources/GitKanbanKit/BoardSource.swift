@@ -11,6 +11,27 @@ protocol BoardWritable: BoardFileSource {
     func readData(_ path: String) async throws -> Data
 }
 
+/// A source that can list everything under a folder, at any depth, in one go.
+protocol TreeListingSource: BoardFileSource {
+    /// Every file under `directory`, with source-relative paths; nil when this source
+    /// cannot do that here, or the answer was cut short. The caller then walks the folders.
+    func listFiles(under directory: String) async -> [BoardFileEntry]?
+}
+
+/// A source whose files have a page someone can open: in a host's web interface, or on disk.
+protocol WebLinkingSource: BoardFileSource {
+    /// The link to `path` for a person, nil when there is none.
+    func webURL(forPath path: String) -> URL?
+}
+
+/// A source that can change several files in one commit. A change that touches many
+/// tasks at once (merging members) is then one entry in the history, not one per task.
+protocol BatchWritable: BoardWritable {
+    /// Write every path → text in a single commit. Returns false, having written
+    /// nothing, when this source cannot do that here; the caller then writes one by one.
+    func writeTexts(_ texts: [String: String], message: String) async throws -> Bool
+}
+
 extension GitPontFileSource: BoardWritable {}
 
 /// A fully in-memory, writable board — used for the offline demo so the app can be

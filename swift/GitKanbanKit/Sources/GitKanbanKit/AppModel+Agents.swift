@@ -224,6 +224,12 @@ extension AppModel {
         await loadBoardSummary(repo, folder, force: true)
     }
 
+    /// An agent changed a board's review requests: show it where reviews are on screen.
+    private func agentReviewsDidChange(_ repo: AddedRepo, _ folder: String) async {
+        if activeRepo?.id == repo.id, activeBoardFolder == folder { await loadReviews() }
+        await loadReviewInbox()
+    }
+
     // MARK: Tools
 
     func runAgentTool(_ name: String, arguments: Data) async throws -> String {
@@ -277,7 +283,8 @@ extension AppModel {
         }
 
         let (repo, selected) = try await agentBoard(try required("board"))
-        let board = AgentBoard(source: try agentSource(for: repo), folder: selected.folder)
+        var board = AgentBoard(source: try agentSource(for: repo), folder: selected.folder)
+        board.linkedSource = { [weak self] linked in await self?.linkedDocSource(linked) }
         switch name {
         case "get_board":
             return json(try await board.describe())
@@ -310,6 +317,62 @@ extension AppModel {
             let result = try await board.attach(try required("card"), fileName: try required("file_name"), data: data)
             await agentDidChange(repo, selected.folder)
             return json(result)
+        case "list_reviews":
+            return json(try await board.listReviews(state: string("state"), card: string("card")))
+        case "create_review":
+            guard let rawItems = args["items"] as? [[String: Any]], !rawItems.isEmpty else {
+                throw AgentBoardError("\"items\" must be a list with at least one item.")
+            }
+            let uploads = try rawItems.map { raw -> AgentBoard.ReviewUpload in
+                func text(_ key: String) -> String? { (raw[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
+                guard let id = text("id"), let file = text("file_name"), let encoded = text("content_base64"),
+                      let data = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters) else {
+                    throw AgentBoardError("Every item needs \"id\", \"file_name\" and valid \"content_base64\".")
+                }
+                var preview: Data?
+                if let encoded = text("preview_base64") {
+                    guard let decoded = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters), text("preview_file_name") != nil else {
+                        throw AgentBoardError("A preview needs \"preview_file_name\" and valid \"preview_base64\".")
+                    }
+                    preview = decoded
+                }
+                return AgentBoard.ReviewUpload(
+                    item: Review.NewItem(id: id, file: file, preview: text("preview_file_name"), kind: text("kind"), group: text("group"),
+                                         pickOne: raw["pick_one"] as? Bool ?? false, note: text("note"), revises: text("revises")),
+                    data: data, preview: preview)
+            }
+            let result = try await board.createReview(request: string("request"), card: string("card"), title: string("title"),
+                                                      question: string("question"), notes: string("notes"), uploads: uploads,
+                                                      agent: try required("agent"))
+            await agentReviewsDidChange(repo, selected.folder)
+            return json(result)
+        case "handle_review_item":
+            let result = try await board.handleReviewItem(request: try required("request"), item: try required("item"),
+                                                          shippedTo: string("shipped_to"), keep: args["keep"] as? Bool ?? false)
+            await agentReviewsDidChange(repo, selected.folder)
+            return json(result)
+        case "close_review":
+            let result = try await board.closeReview(request: try required("request"), force: args["force"] as? Bool ?? false)
+            await agentReviewsDidChange(repo, selected.folder)
+            return json(result)
+        case "list_docs":
+            return json(await board.listDocs())
+        case "get_doc":
+            return json(try await board.getDoc(try required("path")))
+        case "search_docs":
+            return json(await board.searchDocs(try required("query")))
+        case "write_doc":
+            let result = try await board.writeDoc(path: string("path"), title: string("title"), text: try required("text"),
+                                                  replaces: string("replaces"), agent: string("agent"))
+            if activeRepo?.id == repo.id, activeBoardFolder == selected.folder { await loadDocs() }
+            return json(result)
+        case "delete_doc":
+            let result = try await board.deleteDoc(try required("path"))
+            if activeRepo?.id == repo.id, activeBoardFolder == selected.folder { await loadDocs() }
+            return json(result)
+        case "wait_for_reviews":
+            let seconds = min(max(args["timeout_seconds"] as? Double ?? 120, 0), 240)
+            return json(try await board.waitForReviews(card: string("card"), timeout: seconds))
         default:
             throw AgentBoardError("Unknown tool \(name).")
         }
@@ -415,6 +478,26 @@ enum AgentTools {
                 inputSchema: #"{"type": "object", "properties": {\#(board), \#(card), \#(fields), "body": {"type": "string", "description": "The whole new Markdown body (everything below the frontmatter). Omit to keep it."}, "lane": {"type": "string", "description": "Lane id, name or status to move the card to."}, "activity": {"type": "string", "description": "What happened, as one sentence; written to the activity log with the time and your handle."}, \#(agent)}, "required": ["board", "card", "agent"]}"#),
         MCPTool(name: "claim_card", description: "Claim a card before implementing it: records you as the owner with a lease, moves it to In Progress. Refused when another owner holds an unexpired claim.",
                 inputSchema: #"{"type": "object", "properties": {\#(board), \#(card), \#(agent), "hours": {"type": "number", "description": "Lease length, default 24."}, "working_branch": {"type": "string"}}, "required": ["board", "card", "agent"]}"#),
+        MCPTool(name: "list_reviews", description: "The board's asset review requests and the reviewer's decisions and comments. state: to_handle (default; items the reviewer decided that you have not acted on yet), pending (still waiting for the reviewer), all.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "state": {"type": "string", "enum": ["to_handle", "pending", "all"]}, "card": {"type": "string", "description": "Only requests of this card."}}, "required": ["board"]}"#),
+        MCPTool(name: "create_review", description: "Ask the reviewer to judge files (images, models, audio, video): writes the files and the request. Give \"title\" for a new request, or \"request\" to add items to an existing one (a redo: set \"revises\" to the item it replaces). Large files can instead be committed in the board's repository under <board>/review/<request>/.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "request": {"type": "string", "description": "Id of an existing request to add items to."}, "card": {"type": "string", "description": "The card the request belongs to."}, "title": {"type": "string"}, "question": {"type": "string", "description": "What the reviewer should decide, in one line."}, "notes": {"type": "string"}, "items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "file_name": {"type": "string"}, "content_base64": {"type": "string"}, "preview_file_name": {"type": "string", "description": "A PNG shown for a model or video."}, "preview_base64": {"type": "string"}, "kind": {"type": "string", "enum": ["image", "model", "audio", "animation", "video", "other"]}, "group": {"type": "string", "description": "Items in one group are shown side by side."}, "pick_one": {"type": "boolean", "description": "The reviewer chooses one item of the group."}, "note": {"type": "string"}, "revises": {"type": "string"}}, "required": ["id", "file_name", "content_base64"]}}, \#(agent)}, "required": ["board", "items", "agent"]}"#),
+        MCPTool(name: "handle_review_item", description: "Record that you acted on a decided review item (shipped the approved file, dropped the rejected one, submitted the redo). When that leaves the request with nothing pending and nothing to handle, the request is finished and its folder is removed, unless keep is true.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "request": {"type": "string"}, "item": {"type": "string"}, "shipped_to": {"type": "string", "description": "Where an approved file now lives."}, "keep": {"type": "boolean", "description": "Leave a finished request in place. Default false."}}, "required": ["board", "request", "item"]}"#),
+        MCPTool(name: "close_review", description: "Remove a finished review request and its files. Refused while items are waiting for the reviewer or decided but not handled, unless force is true.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "request": {"type": "string"}, "force": {"type": "boolean"}}, "required": ["board", "request"]}"#),
+        MCPTool(name: "wait_for_reviews", description: "Wait until the reviewer has decided something you have not handled yet, then return it (as list_reviews with state to_handle). Returns an empty list when the time is up; call again to keep listening.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "card": {"type": "string"}, "timeout_seconds": {"type": "number", "description": "How long to wait, up to 240. Default 120."}}, "required": ["board"]}"#),
+        MCPTool(name: "list_docs", description: "The board's documentation pages: README.md (the text under its configuration) and the Markdown files in docs/. Plans, specs and decisions about the project live here.",
+                inputSchema: #"{"type": "object", "properties": {\#(board)}, "required": ["board"]}"#),
+        MCPTool(name: "get_doc", description: "One documentation page's full text.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "path": {"type": "string", "description": "As list_docs gives it, e.g. docs/plan.md or README.md."}}, "required": ["board", "path"]}"#),
+        MCPTool(name: "search_docs", description: "Search the board's documentation pages. Returns the lines that contain every word of the query, with their page and heading.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "query": {"type": "string"}}, "required": ["board", "query"]}"#),
+        MCPTool(name: "write_doc", description: "Create a documentation page (give \"title\"), or replace an existing one (give \"path\" and, as \"replaces\", the exact text you read with get_doc; refused when the page changed since). Prefer adding to a page or writing a new one over rewriting what the owner wrote.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "path": {"type": "string"}, "title": {"type": "string"}, "text": {"type": "string", "description": "The page's whole Markdown text."}, "replaces": {"type": "string"}, "agent": {"type": "string"}}, "required": ["board", "text"]}"#),
+        MCPTool(name: "delete_doc", description: "Delete a documentation page in docs/.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "path": {"type": "string"}}, "required": ["board", "path"]}"#),
         MCPTool(name: "attach_file", description: "Attach a file (a screenshot) to a card.",
                 inputSchema: #"{"type": "object", "properties": {\#(board), \#(card), "file_name": {"type": "string"}, "content_base64": {"type": "string"}}, "required": ["board", "card", "file_name", "content_base64"]}"#),
     ]

@@ -68,8 +68,10 @@ final class SecurityScopedAccess: Sendable {
     deinit { if started { url.stopAccessingSecurityScopedResource() } }
 }
 
-struct LocalFolderSource: VersionedBoardSource, AssetLinkingSource, ChangeObservingSource {
+struct LocalFolderSource: VersionedBoardSource, AssetLinkingSource, ChangeObservingSource, WebLinkingSource {
     let root: URL
+
+    func webURL(forPath path: String) -> URL? { root.appendingPathComponent(path) }
     private let access: SecurityScopedAccess?
 
     init(root: URL, securityScoped: Bool) {

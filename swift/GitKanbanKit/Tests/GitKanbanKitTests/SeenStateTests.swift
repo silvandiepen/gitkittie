@@ -151,6 +151,34 @@ final class SeenStateTests: XCTestCase {
 /// A board's icon and colour live in its README and are remembered for the sidebar.
 @MainActor
 final class BoardAppearanceTests: XCTestCase {
+    func testMergingAMemberRewritesOnlyThePeopleFields() {
+        let card = "---\nid: PETS-001\ntitle: sil was here\nassignee: \"sil\"\nreviewer: herma\ncreated_by: sil\npicked_up_by: sil\n---\n\nBody by sil\n"
+        let merged = AppModel.replacingValue(in: card, from: "sil", into: "Sil van Diepen")
+        XCTAssertEqual(merged, "---\nid: PETS-001\ntitle: sil was here\nassignee: \"Sil van Diepen\"\nreviewer: herma\ncreated_by: sil\npicked_up_by: \"Sil van Diepen\"\n---\n\nBody by sil\n")
+        XCTAssertNil(AppModel.replacingValue(in: card, from: "nobody", into: "x"))
+        XCTAssertNil(AppModel.replacingValue(in: "no frontmatter, assignee: sil", from: "sil", into: "x"))
+        let typed = "---\nid: PETS-002\ntype: bug\nepic: bug\n---\n\nBody\n"
+        XCTAssertEqual(AppModel.replacingValue(in: typed, fields: ["type"], from: "bug", into: "fix"), "---\nid: PETS-002\ntype: fix\nepic: bug\n---\n\nBody\n")
+    }
+
+    func testSymbolCatalogueFiltersByNameAndSearchWords() {
+        let catalog = SymbolCatalog(names: ["folder", "folder.fill", "gamecontroller", "character.ar", "tray"],
+                                    order: ["tray", "folder", "folder.fill", "gamecontroller"],
+                                    search: ["gamecontroller": ["play", "joystick"]], first: ["folder.fill"])
+        XCTAssertEqual(catalog.symbols.map(\.name), ["folder.fill", "tray", "folder", "gamecontroller"])
+        XCTAssertEqual(catalog.matching("fold").map(\.name), ["folder.fill", "folder"])
+        XCTAssertEqual(catalog.matching("folder fill").map(\.name), ["folder.fill"])
+        XCTAssertEqual(catalog.matching("Joystick").map(\.name), ["gamecontroller"])
+        XCTAssertTrue(catalog.matching("nothing").isEmpty)
+    }
+
+    func testSystemSymbolCatalogueHasTheWholeSet() {
+        let all = SymbolCatalog.system.symbols
+        XCTAssertGreaterThan(all.count, 3000)
+        XCTAssertEqual(all.first?.name, BoardAppearance.defaultIcon)
+        XCTAssertFalse(SymbolCatalog.system.matching("pawprint").isEmpty)
+    }
+
     func testIconAndColourAreWrittenToTheReadmeAndReadBack() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("gk-look-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
