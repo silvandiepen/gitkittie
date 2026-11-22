@@ -135,7 +135,7 @@ public enum RemoteBoardStore {
         var uncategorised: [Card] = []
         let subEntries = (try? await source.list(project.folder)) ?? []
         for entry in subEntries where entry.kind == .directory {
-            guard !entry.name.hasPrefix("."), !laneFolders.contains(entry.name), entry.name != "attachments" else { continue }
+            guard !entry.name.hasPrefix("."), !laneFolders.contains(entry.name), entry.name != "attachments", entry.name != "docs", entry.name != Review.defaultReviewPath else { continue }
             uncategorised += try await loadCards(source: source, dir: entry.path, fieldSource: effective.fieldSource)
         }
 
@@ -183,6 +183,16 @@ public enum RemoteBoardStore {
         result.icon = projectConfig.icon
         result.color = projectConfig.color
         return result
+    }
+
+    /// A board's effective config (its own README over the root it inherits from) and
+    /// name, read from the two READMEs alone.
+    public static func loadEffectiveConfig(source: BoardFileSource, folder: String) async -> (name: String, config: EffectiveConfig) {
+        let rootConfig = await resolveRootConfig(source: source, projectFolder: folder)
+        let projectConfig = (try? await loadProjectConfig(source: source, dir: folder)) ?? ProjectConfig()
+        let fallback = folder.split(separator: "/").last.map(String.init) ?? "Board"
+        let name = projectConfig.project?.isEmpty == false ? projectConfig.project! : fallback
+        return (name, resolveEffectiveConfig(rootConfig, projectConfig))
     }
 
     /// A board without its cards: the project, its config and lanes, and which card files

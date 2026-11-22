@@ -194,6 +194,36 @@ public struct EffectiveConfig: Equatable, Sendable {
     }
 }
 
+/// A product a board works on: a board can cover several (GitKittie has Folder, Tasks and
+/// Bud). Tasks name the product they are for, the board can be filtered on it, and a
+/// product may number its tasks with its own prefix.
+public struct BoardProduct: Codable, Equatable, Sendable, Identifiable, Hashable {
+    public var id: String
+    public var name: String
+    /// When set, a new task for this product gets `<PREFIX>-<number>` as its id.
+    public var prefix: String?
+    public var icon: String?
+    public var color: String?
+
+    public init(id: String, name: String, prefix: String? = nil, icon: String? = nil, color: String? = nil) {
+        self.id = id; self.name = name; self.prefix = prefix; self.icon = icon; self.color = color
+    }
+
+    /// `GitKittie Tasks` → `gitkittie-tasks`.
+    public static func id(for name: String) -> String {
+        let slug = name.lowercased().map { $0.isLetter || $0.isNumber ? $0 : "-" }
+            .reduce(into: "") { text, character in if !(character == "-" && text.hasSuffix("-")) { text.append(character) } }
+        return slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+
+    /// A prefix as ids need it: capitals and digits, starting with a letter. Nil when nothing is left.
+    public static func cleanPrefix(_ raw: String?) -> String? {
+        let kept = (raw ?? "").uppercased().filter { $0.isLetter || $0.isNumber }
+        guard let first = kept.first, first.isLetter else { return nil }
+        return String(kept.prefix(12))
+    }
+}
+
 /// The fields GitKanban models on a card. Unknown frontmatter is preserved on `Card`.
 public struct CardFields: Equatable, Sendable {
     public var id: String
@@ -203,6 +233,8 @@ public struct CardFields: Equatable, Sendable {
     public var priority: String?
     public var type: String?
     public var epic: String?
+    /// The product of the board this card belongs to (`product:`), by its id.
+    public var product: String?
     public var assignee: String?
     public var order: String?
     /// `updated_at`, ISO-8601 as written.
@@ -210,13 +242,21 @@ public struct CardFields: Equatable, Sendable {
     /// `read_at` / `read_by`: when the reviewer last read the card (see `BoardProgress`).
     public var readAt: String?
     public var readBy: String?
+    /// `tags`: the task's labels.
+    public var tags: [String] = []
+    /// `due`: the day the task is due, as `yyyy-MM-dd`.
+    public var due: String?
+    /// `created_at`, ISO-8601 as written.
+    public var createdAt: String?
 
     public init(
         id: String = "", title: String = "", project: String = "", status: String = "",
         priority: String? = nil, type: String? = nil, epic: String? = nil,
         assignee: String? = nil, order: String? = nil,
-        updatedAt: String? = nil, readAt: String? = nil, readBy: String? = nil
+        updatedAt: String? = nil, readAt: String? = nil, readBy: String? = nil,
+        product: String? = nil
     ) {
+        self.product = product
         self.updatedAt = updatedAt
         self.readAt = readAt
         self.readBy = readBy

@@ -205,7 +205,7 @@ public enum BoardStore {
             if let date = value as? Date { return Review.timestamp(date) }
             return String(describing: value)
         }
-        return CardFields(
+        var fields = CardFields(
             id: str("id") ?? "",
             title: str("title") ?? "",
             project: str("project") ?? "",
@@ -217,8 +217,19 @@ public enum BoardStore {
             order: nonEmpty(str("order")),
             updatedAt: nonEmpty(str("updated_at")),
             readAt: nonEmpty(str("read_at")),
-            readBy: nonEmpty(str("read_by"))
+            readBy: nonEmpty(str("read_by")),
+            product: nonEmpty(str("product"))
         )
+        // Labels: a list (`tags: [ios, bug]` or one per line), or a single value.
+        if let list = map["tags"] as? [Any] {
+            fields.tags = list.compactMap { $0 is NSNull ? nil : String(describing: $0) }.filter { !$0.isEmpty }
+        } else if let one = nonEmpty(str("tags")) {
+            fields.tags = one.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        // A due date is a day: `due: 2026-11-24` (YAML may hand it over as a full timestamp).
+        fields.due = nonEmpty(str("due")).map { String($0.prefix(10)) }
+        fields.createdAt = nonEmpty(str("created_at"))
+        return fields
     }
 
     private static func bodySectionFields(body: String, section: String?, map: [String: String], fileName: String?) -> CardFields {
@@ -285,8 +296,9 @@ public enum BoardStore {
 
     private static func compare(_ a: Card, _ b: Card, config: EffectiveConfig) -> Int {
         if let oa = a.fields.order, let ob = b.fields.order, oa != ob {
-            if let ia = Int(oa), let ib = Int(ob), ia != ib { return ia < ib ? -1 : 1 }
-            if Int(oa) == nil || Int(ob) == nil { return oa < ob ? -1 : 1 }
+            // Numbers, not text: a task dropped between 1 and 2 gets 1.5.
+            if let ia = Double(oa), let ib = Double(ob), ia != ib { return ia < ib ? -1 : 1 }
+            if Double(oa) == nil || Double(ob) == nil { return oa < ob ? -1 : 1 }
         }
         let pa = priorityRank(a.fields.priority, config)
         let pb = priorityRank(b.fields.priority, config)
@@ -298,6 +310,44 @@ public enum BoardStore {
         guard let priority else { return config.priorities.count }
         let index = config.priorities.firstIndex { $0.id == priority }
         return index ?? config.priorities.count
+    }
+
+    // MARK: Products
+
+    /// The products a board's README lists (`products:`), in order.
+    public static func products(inReadme text: String) -> [BoardProduct] {
+        guard let frontmatter = BoardMarkdown.splitFrontmatter(text).frontmatter,
+              let map = try? dictionary(from: frontmatter), let list = map["products"] as? [Any] else { return [] }
+        var seen = Set<String>()
+        return list.compactMap { entry -> BoardProduct? in
+            let product: BoardProduct
+            if let name = entry as? String {
+                product = BoardProduct(id: BoardProduct.id(for: name), name: name)
+            } else if let fields = entry as? [String: Any] {
+                func text(_ key: String) -> String? { (fields[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
+                guard let name = text("name") ?? text("id") else { return nil }
+                product = BoardProduct(id: text("id") ?? BoardProduct.id(for: name), name: name,
+                                       prefix: BoardProduct.cleanPrefix(text("prefix")), icon: text("icon"), color: text("color"))
+            } else { return nil }
+            return !product.id.isEmpty && seen.insert(product.id).inserted ? product : nil
+        }
+    }
+
+    /// The `products:` lines of a README, as a frontmatter of their own (for patching one in).
+    public static func renderProducts(_ products: [BoardProduct]) -> String {
+        var lines = ["---"]
+        if !products.isEmpty {
+            lines.append("products:")
+            for product in products {
+                lines.append("  - id: \(yamlScalar(product.id))")
+                lines.append("    name: \(yamlScalar(product.name))")
+                if let prefix = product.prefix { lines.append("    prefix: \(yamlScalar(prefix))") }
+                if let icon = product.icon { lines.append("    icon: \(yamlScalar(icon))") }
+                if let color = product.color { lines.append("    color: \(yamlScalar(color))") }
+            }
+        }
+        lines.append("---")
+        return lines.joined(separator: "\n") + "\n"
     }
 
     // MARK: YAML helpers

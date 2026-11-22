@@ -44,7 +44,9 @@ public struct ReviewComment: Equatable, Sendable, Hashable {
     public var by: String
     public var at: String
     public var text: String
-    public init(by: String, at: String, text: String) { self.by = by; self.at = at; self.text = text }
+    /// A marked-up copy of the item the comment is about, relative to the request folder.
+    public var image: String?
+    public init(by: String, at: String, text: String, image: String? = nil) { self.by = by; self.at = at; self.text = text; self.image = image }
 }
 
 public struct ReviewItem: Equatable, Sendable, Identifiable, Hashable {
@@ -91,8 +93,13 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
     public var requestedAt: String?
     public var items: [ReviewItem]
     public var body: String
+    /// Which repository or folder the request was loaded from (the app's id for it).
+    /// Two sources can hold the same folder path, so a request is told apart by both.
+    public var origin: String = ""
 
     public var path: String { Review.join(folder, Review.fileName) }
+    /// What tells this request apart from every other one the app has loaded.
+    public var ref: ReviewRef { ReviewRef(origin: origin, folder: folder) }
 
     public var summary: ReviewSummary {
         var s = ReviewSummary()
@@ -130,6 +137,14 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
         }
         return result
     }
+}
+
+/// Addresses one review request: the source it lives in and its folder there.
+public struct ReviewRef: Hashable, Sendable, Identifiable {
+    public var origin: String
+    public var folder: String
+    public init(origin: String, folder: String) { self.origin = origin; self.folder = folder }
+    public var id: String { "\(origin)|\(folder)" }
 }
 
 public struct ReviewGroup: Identifiable, Sendable, Hashable {
@@ -186,7 +201,7 @@ public enum Review {
         let status = string(map["status"]).flatMap(ReviewStatus.init(rawValue:)) ?? .pending
         let comments: [ReviewComment] = (map["comments"]?.sequence.map(Array.init) ?? []).compactMap { entry in
             guard let c = entry.mapping, let text = string(c["text"]) else { return nil }
-            return ReviewComment(by: string(c["by"]) ?? "unknown", at: string(c["at"]) ?? "", text: text)
+            return ReviewComment(by: string(c["by"]) ?? "unknown", at: string(c["at"]) ?? "", text: text, image: string(c["image"]))
         }
         return ReviewItem(
             id: string(map["id"]) ?? "item-\(index + 1)",
@@ -237,21 +252,101 @@ public enum Review {
     }
 
     /// Append a comment to one item. Existing comments are never rewritten.
+    /// `image` is a marked-up copy of the item, already written next to the request.
     public static func appendComment(
-        _ text: String, itemID: String, by: String, body: String, at: Date = Date()
+        _ text: String, itemID: String, by: String, body: String, image: String? = nil, at: Date = Date()
     ) throws -> String {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ReviewError.emptyComment }
-        let comment = Node.mapping(Node.Mapping([
+        var pairs = [
             (scalar("by"), scalar(by)),
             (scalar("at"), scalar(timestamp(at))),
             (scalar("text"), scalar(trimmed)),
-        ]))
+        ]
+        if let image, !image.isEmpty { pairs.append((scalar("image"), scalar(image))) }
+        let comment = Node.mapping(Node.Mapping(pairs))
         return try mutateItem(text, itemID: itemID) { item in
             var list = item["comments"]?.sequence.map(Array.init) ?? []
             list.append(comment)
             item["comments"] = Node.sequence(Node.Sequence(list))
         }
+    }
+
+    // MARK: Agent writes
+
+    /// Record that the agent acted on an item's decision: `handled_at`, and where an
+    /// approved file went (`shipped_to`). Nothing else changes.
+    public static func markHandled(_ text: String, itemID: String, shippedTo: String?, at: Date = Date()) throws -> String {
+        let stamp = timestamp(at)
+        return try mutateItem(text, itemID: itemID) { item in
+            item["handled_at"] = scalar(stamp)
+            if let shippedTo, !shippedTo.isEmpty { item["shipped_to"] = scalar(shippedTo) }
+        }
+    }
+
+    /// An item an agent submits for review.
+    public struct NewItem: Sendable, Equatable {
+        public var id: String
+        public var file: String
+        public var preview: String?
+        public var kind: String?
+        public var group: String?
+        public var pickOne: Bool
+        public var note: String?
+        public var revises: String?
+        public init(id: String, file: String, preview: String? = nil, kind: String? = nil, group: String? = nil,
+                    pickOne: Bool = false, note: String? = nil, revises: String? = nil) {
+            self.id = id; self.file = file; self.preview = preview; self.kind = kind
+            self.group = group; self.pickOne = pickOne; self.note = note; self.revises = revises
+        }
+    }
+
+    private static func node(_ item: NewItem) -> Node {
+        var pairs: [(Node, Node)] = [(scalar("id"), scalar(item.id)), (scalar("file"), scalar(item.file))]
+        func add(_ key: String, _ value: String?) { if let value, !value.isEmpty { pairs.append((scalar(key), scalar(value))) } }
+        add("preview", item.preview)
+        add("kind", item.kind)
+        add("group", item.group)
+        if item.pickOne { add("pick", "one") }
+        add("note", item.note)
+        add("revises", item.revises)
+        pairs.append((scalar("status"), scalar(ReviewStatus.pending.rawValue)))
+        pairs.append((scalar("comments"), Node.sequence(Node.Sequence([]))))
+        return .mapping(Node.Mapping(pairs))
+    }
+
+    /// A new request's `review.md`.
+    public static func render(
+        id: String, project: String?, card: String?, title: String, question: String?,
+        requestedBy: String, at: Date = Date(), notes: String?, items: [NewItem]
+    ) throws -> String {
+        var pairs: [(Node, Node)] = [(scalar("config"), scalar("review")), (scalar("id"), scalar(id))]
+        func add(_ key: String, _ value: String?) { if let value, !value.isEmpty { pairs.append((scalar(key), scalar(value))) } }
+        add("project", project)
+        add("card", card)
+        add("title", title)
+        add("question", question)
+        add("requested_by", requestedBy)
+        add("requested_at", timestamp(at))
+        pairs.append((scalar("items"), Node.sequence(Node.Sequence(items.map(node)))))
+        let yaml = try Yams.serialize(node: .mapping(Node.Mapping(pairs)), width: -1, allowUnicode: true)
+        let trimmed = yaml.hasSuffix("\n") ? String(yaml.dropLast()) : yaml
+        let body = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "---\n\(trimmed)\n---\n" + (body.isEmpty ? "" : "\n\(body)\n")
+    }
+
+    /// Add items to an existing request (a new round). Existing items are left as they are.
+    public static func appendItems(_ text: String, _ new: [NewItem]) throws -> String {
+        let (yamlText, body) = BoardMarkdown.splitFrontmatter(text)
+        guard let yamlText, let root = try Yams.compose(yaml: yamlText), var map = root.mapping else {
+            throw ReviewError.malformed
+        }
+        var items = map["items"]?.sequence.map(Array.init) ?? []
+        items += new.map(node)
+        map["items"] = .sequence(Node.Sequence(items))
+        let yaml = try Yams.serialize(node: .mapping(map), width: -1, allowUnicode: true)
+        let trimmed = yaml.hasSuffix("\n") ? String(yaml.dropLast()) : yaml
+        return "---\n\(trimmed)\n---\n\(body)"
     }
 
     private static func mutateItem(_ text: String, itemID: String, _ change: (inout Node.Mapping) -> Void) throws -> String {
@@ -287,6 +382,19 @@ public enum Review {
     /// project folder; `{folder}` = the project folder's name). `nil` when unset or escaping.
     public static func resolveReviewPath(_ reviewPath: String?, projectFolder: String) -> String? {
         guard let raw = reviewPath?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
+        return resolve(raw, projectFolder: projectFolder)
+    }
+
+    /// Where a board keeps its reviews when it does not say: `review/` inside the board.
+    public static let defaultReviewPath = "review"
+
+    /// The folders to look for a board's review requests in: the configured one when it
+    /// can be reached in this source, else the board's own `review/` folder.
+    public static func reviewFolder(_ reviewPath: String?, projectFolder: String) -> String? {
+        resolveReviewPath(reviewPath, projectFolder: projectFolder) ?? resolve(defaultReviewPath, projectFolder: projectFolder)
+    }
+
+    private static func resolve(_ raw: String, projectFolder: String) -> String? {
         let name = projectFolder.split(separator: "/").last.map(String.init) ?? ""
         guard let resolved = joinRelative(projectFolder, raw.replacingOccurrences(of: "{folder}", with: name)),
               !resolved.isEmpty else { return nil }
