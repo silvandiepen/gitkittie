@@ -34,4 +34,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/website/dist --project-name=gitkittie-web
+          # --branch=main: a manual run from another branch still goes to production,
+          # not to a preview URL.
+          command: pages deploy apps/website/dist --project-name=gitkittie-web --branch=main
