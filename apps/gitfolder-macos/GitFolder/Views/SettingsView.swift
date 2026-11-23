@@ -44,7 +44,10 @@ struct SettingsView: View {
                 settingsPane
             }
         }
-        .background(.regularMaterial)
+        .background(Theme.window)
+        .background(SolidWindow())
+        .tint(Theme.accent)
+        .preferredColorScheme(.dark)
         .frame(
             minWidth: 860,
             minHeight: SettingsWindowMetrics.preferredContentHeight,
@@ -103,10 +106,10 @@ struct SettingsView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
-                        .foregroundStyle(selectedSection == section ? Color.accentColor : Color.primary)
+                        .foregroundStyle(selectedSection == section ? Theme.accent : Color.primary)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(selectedSection == section ? Color.accentColor.opacity(0.14) : Color.clear)
+                                .fill(selectedSection == section ? Theme.accent.opacity(0.14) : Color.clear)
                         )
                     }
                     .buttonStyle(.plain)
@@ -125,7 +128,7 @@ struct SettingsView: View {
             }
         }
         .padding(.horizontal, isSidebarExpanded ? 16 : 10)
-        .background(.ultraThinMaterial)
+        .background(Theme.sidebar)
     }
 
     @ViewBuilder
@@ -435,7 +438,7 @@ private struct FolderSettingsRow: View {
             HStack(alignment: .center, spacing: 18) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(Color.secondary.opacity(0.14))
+                        .fill(Theme.card)
                         .frame(width: 62, height: 62)
 
                     Image(systemName: "folder")
@@ -446,7 +449,7 @@ private struct FolderSettingsRow: View {
                     Image(systemName: statusSymbol)
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(statusColor(for: currentFolder.lastStatus))
-                        .background(Circle().fill(.background))
+                        .background(Circle().fill(Theme.panel))
                         .offset(x: 6, y: 6)
                 }
 
@@ -541,11 +544,11 @@ private struct FolderSettingsRow: View {
             }
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.secondary.opacity(0.06))
+                    .fill(Theme.card)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+                    .stroke(Theme.stroke, lineWidth: 1)
             )
             .padding(.horizontal, 18)
 
@@ -600,7 +603,7 @@ private struct FolderSettingsRow: View {
         .overlay(alignment: .top) {
             if isFocused {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.accentColor.opacity(0.55), lineWidth: 1)
+                    .stroke(Theme.accent.opacity(0.55), lineWidth: 1)
             }
         }
         .contextMenu {
@@ -858,6 +861,9 @@ private struct AddFolderSheet: View {
         }
         .padding()
         .frame(width: 680)
+        .background(Theme.window)
+        .tint(Theme.accent)
+        .preferredColorScheme(.dark)
     }
 
     private func addAndSync() {
@@ -977,11 +983,11 @@ private struct SettingsCard<Content: View>: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.secondary.opacity(0.06))
+                .fill(Theme.panel)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
+                .stroke(Theme.stroke, lineWidth: 1)
         )
     }
 }
@@ -1126,4 +1132,22 @@ private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
     }
+}
+
+/// Gives the settings window the app's own opaque background, in place of the system's
+/// translucent one that takes a tint from the desktop picture, and keeps the window and
+/// its sheets in the dark appearance the design is drawn in. The menu bar menu stays the
+/// system's.
+private struct SolidWindow: NSViewRepresentable {
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            window.backgroundColor = NSColor(Theme.window)
+            window.isOpaque = true
+            window.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ nsView: Probe, context: Context) {}
 }

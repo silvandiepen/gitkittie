@@ -22,7 +22,7 @@ struct RepoThumbnail: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.12))
+            RoundedRectangle(cornerRadius: 10).fill(Theme.card)
             if let image {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
@@ -31,6 +31,7 @@ struct RepoThumbnail: View {
         }
         .frame(width: side, height: side)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.stroke))
         .task(id: key) { await load() }
     }
 
@@ -86,7 +87,8 @@ struct TileCell: View {
 
     private func iconTile(_ symbol: String, _ style: AnyShapeStyle) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.10))
+            RoundedRectangle(cornerRadius: 10).fill(Theme.card)
+            RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.stroke)
             Image(systemName: symbol).font(.system(size: side * 0.4)).foregroundStyle(style)
         }
         .frame(width: side, height: side)

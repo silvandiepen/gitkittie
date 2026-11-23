@@ -7,6 +7,8 @@ struct RootView: View {
     var body: some View {
         if model.isRestoring {
             ProgressView("Loading…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.window.ignoresSafeArea())
         } else if model.activeRepo != nil {
             FileBrowserRoot()
         } else if model.isConnected || model.isDemo {

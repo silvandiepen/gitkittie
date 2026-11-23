@@ -28,6 +28,8 @@ targets:
     platform: iOS
     sources:
       - path: GitFolder
+      # The colours every GitKittie app shares.
+      - path: ../../swift/GitKittieUI
     dependencies:
       - package: git-pont
         product: GitPontCore

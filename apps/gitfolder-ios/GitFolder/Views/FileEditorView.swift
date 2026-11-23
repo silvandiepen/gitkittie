@@ -37,12 +37,15 @@ struct FileEditorView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .padding(.horizontal, 4)
+                    .scrollContentBackground(.hidden)
             } else if isMarkdown {
                 MarkdownWebView(markdown: text)
             } else { // SVG preview
                 SVGWebView(svg: text)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.window.ignoresSafeArea())
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

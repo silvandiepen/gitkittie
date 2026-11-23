@@ -39,6 +39,7 @@ private struct FolderLevel: View {
                 } label: {
                     Label(path.isEmpty ? "Move to Repository Root" : "Move Here", systemImage: "arrow.down.to.line")
                 }
+                .listRowBackground(Theme.panel)
             }
             Section("Folders") {
                 ForEach(folders) { folder in
@@ -49,11 +50,14 @@ private struct FolderLevel: View {
                         Label(folder.name, systemImage: "folder.fill")
                     }
                 }
+                .listRowBackground(Theme.panel)
                 if folders.isEmpty && !loading {
                     Text("No subfolders").foregroundStyle(.secondary)
+                        .listRowBackground(Theme.panel)
                 }
             }
         }
+        .themedList()
         .overlay { if loading { ProgressView() } }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
