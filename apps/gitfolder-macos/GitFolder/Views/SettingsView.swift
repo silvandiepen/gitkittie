@@ -553,7 +553,7 @@ private struct FolderSettingsRow: View {
             .padding(.horizontal, 18)
 
             if let error = latestError {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(error.message)
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -561,6 +561,19 @@ private struct FolderSettingsRow: View {
                         Text(recoverySuggestion)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                    }
+                    if let paths = error.affectedPaths, !paths.isEmpty {
+                        ForEach(paths.prefix(5), id: \.self) { path in
+                            Text(path)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Button("Exclude from Git and Sync", systemImage: "eye.slash") {
+                            appModel.excludeAndSync(paths: paths, folderID: draft.id)
+                        }
+                        .disabled(appModel.isSyncing)
                     }
                 }
                 .padding(.horizontal, 18)
@@ -588,6 +601,13 @@ private struct FolderSettingsRow: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .frame(minWidth: 140)
+                .disabled(appModel.isSyncing || draft.repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button("Repair & Sync", systemImage: "wrench.and.screwdriver") {
+                    appModel.updateFolder(tokenAuthDraft())
+                    appModel.repairAndSync(folderID: draft.id)
+                }
+                .help("Abort an interrupted Git operation, restore the configured branch, then sync")
                 .disabled(appModel.isSyncing || draft.repoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 Spacer()

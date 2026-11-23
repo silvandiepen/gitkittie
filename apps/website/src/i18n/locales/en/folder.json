@@ -1,12 +1,12 @@
 {
   "meta": {
     "title": "GitKittie Folder — Automatic version history for your folders",
-    "description": "GitKittie Folder watches selected folders on your Mac and creates quiet snapshot commits when files change. On iPhone and iPad it opens your repos as plain folders. Works with GitHub, GitLab and any other git host. Local-first, no account."
+    "description": "GitKittie Folder keeps selected folders in sync with your own Git repositories, creates snapshot history, repairs interrupted Git operations, and blocks files that exceed GitHub's size limit. Local-first, no account."
   },
   "hero": {
     "eyebrow": "Mac menu bar utility · iPhone & iPad app",
     "title": "Automatic version history for *your folders.*",
-    "subtitle": "On the Mac, GitKittie Folder watches selected folders and creates quiet snapshot commits when files change. On iPhone and iPad, it opens the same repositories as plain folders you can browse and edit. No cloud service. No account.",
+    "subtitle": "On the Mac, GitKittie Folder creates quiet snapshot commits and keeps each folder current with its remote branch. If Git is interrupted, Repair & Sync restores the configured branch. No cloud service. No account.",
     "download": "Download on the Mac App Store",
     "docs": "Read the docs",
     "downloadIos": "Also on iPhone & iPad"
@@ -84,7 +84,7 @@
       {
         "icon": "clock",
         "title": "Automatic intervals",
-        "desc": "Set sync intervals per folder — 5, 15, 30, or 60 minutes. GitKittie Folder works quietly in the background."
+        "desc": "Set sync intervals per folder — 5, 15, 30, or 60 minutes. Every run checks both local and remote changes before it reports that the folder is current."
       },
       {
         "icon": "lock",
@@ -93,13 +93,13 @@
       },
       {
         "icon": "terminal",
-        "title": "Uses your Git setup",
-        "desc": "Leverages the Git and SSH configuration you already have. No bundled Git, no separate keys unless you want them."
+        "title": "Repair without Terminal",
+        "desc": "GitKittie Folder detects interrupted rebases, merges and detached branches. Repair & Sync restores the configured branch and retries safely."
       },
       {
         "icon": "menu",
-        "title": "Menu bar app",
-        "desc": "Lives in the macOS menu bar. Check sync status, pause syncing, or trigger a manual sync — all from the menu."
+        "title": "Large-file protection",
+        "desc": "Files at or above GitHub's 100 MB limit are stopped before staging. Review the paths and exclude them through .gitignore without deleting the local files."
       }
     ]
   },
