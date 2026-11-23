@@ -157,53 +157,118 @@ private struct WorkspaceSplit: View {
         .padding(.leading, 30)
         .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
         .tag(key + Self.partMark + part)
+        .contextMenu { if let (repo, board) = board(for: key) { boardMenu(repo, board) } }
         .accessibilityIdentifier("sidebarPart-\(part)")
     }
 
-    /// Sidebar selection is a "repoID|folder" key mirroring the open board, or the
-    /// Reviews entry.
-    private var selection: Binding<String?> {
-        Binding(
-            get: {
-                if model.isShowingAllTasks { return Self.allKey }
-                guard let board = selectionKey else { return model.isShowingReviews ? Self.reviewsKey : nil }
-                if model.isShowingReviews {
-                    return model.reviewsFocusBoard == board && hasParts(board) ? board + Self.partMark + "reviews" : Self.reviewsKey
-                }
-                if model.isShowingDocs { return board + Self.partMark + "docs" }
-                guard hasParts(board) else { return board }
-                if let product = model.filterProduct { return board + Self.partMark + "product:" + product }
-                return board + Self.partMark + "tasks"
-            },
-            set: { key in
-                if key == Self.allKey { model.isShowingReviews = false; model.isShowingDocs = false; model.isShowingAllTasks = true; return }
-                model.isShowingAllTasks = false
-                if key == Self.reviewsKey { model.reviewsFocusBoard = nil; model.isShowingDocs = false; model.isShowingReviews = true; return }
-                // A part of the open board: the board stays, what is shown changes.
-                if let key, let mark = key.range(of: Self.partMark) {
-                    let board = String(key[..<mark.lowerBound])
-                    let part = String(key[mark.upperBound...])
-                    switch part {
-                    case "reviews": model.isShowingDocs = false; model.reviewsFocusBoard = board; model.isShowingReviews = true
-                    case "docs": model.isShowingReviews = false; model.isShowingDocs = true
-                    default:
-                        // All tasks, or the tasks of one product.
-                        model.isShowingReviews = false
-                        model.isShowingDocs = false
-                        model.filterProduct = part.hasPrefix("product:") ? String(part.dropFirst("product:".count)) : nil
-                    }
-                    return
-                }
-                guard let key, let sep = key.range(of: "|") else { return }
+    /// A board's right-click menu, on its row and on the rows of its parts below it.
+    @ViewBuilder private func boardMenu(_ repo: AddedRepo, _ board: SelectedBoard) -> some View {
+        Button("New Docs Page…", systemImage: "doc.badge.plus") {
+            Task {
+                model.isShowingReviews = false
+                if selectionKey != "\(repo.id)|\(board.folder)" { await model.openBoard(repo, folder: board.folder) }
+                model.isShowingDocs = true
+            }
+        }
+        Button("Open", systemImage: "square.stack.3d.up") {
+            model.isShowingReviews = false
+            Task { await model.openBoard(repo, folder: board.folder) }
+        }
+        Button("Reload", systemImage: "arrow.clockwise") {
+            model.isShowingReviews = false
+            Task { await model.openBoard(repo, folder: board.folder) }
+        }
+        Button("Board Settings…", systemImage: "gearshape") {
+            // The settings are the open board's: open it, then its settings.
+            Task {
                 model.isShowingReviews = false
                 model.isShowingDocs = false
-                let repoID = String(key[..<sep.lowerBound])
-                let folder = String(key[sep.upperBound...])
-                if let repo = model.addedRepos.first(where: { $0.id == repoID }) {
-                    Task { await model.openBoard(repo, folder: folder) }
-                }
+                if selectionKey != "\(repo.id)|\(board.folder)" { await model.openBoard(repo, folder: board.folder) }
+                model.wantsProjectSettings = true
+            }
+        }
+        Divider()
+        Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
+        if model.supportsFileStorage(repo) {
+            Button("File Storage…", systemImage: "externaldrive") { storageRepo = repo }
+        }
+        Divider()
+        Button("Remove from Sidebar", systemImage: "minus.circle", role: .destructive) {
+            if model.activeRepo?.id == repo.id, model.activeBoardFolder == board.folder { model.closeRepo() }
+            model.removeBoard(board, from: repo)
+        }
+                
+    }
+
+    /// The board a sidebar key ("repoID|folder", or a part of it) belongs to.
+    private func board(for key: String) -> (AddedRepo, SelectedBoard)? {
+        let boardKey = key.range(of: Self.partMark).map { String(key[..<$0.lowerBound]) } ?? key
+        guard let sep = boardKey.range(of: "|"),
+              let repo = model.addedRepos.first(where: { $0.id == String(boardKey[..<sep.lowerBound]) }),
+              let board = repo.boards.first(where: { $0.folder == String(boardKey[sep.upperBound...]) }) else { return nil }
+        return (repo, board)
+    }
+
+    /// Sidebar selection: the open board ("repoID|folder") together with the part of it that
+    /// is shown (its Tasks, Docs, Reviews or a product) — both rows stay selected — or All
+    /// Tasks, or Reviews across boards.
+    private var selectedKeys: Set<String> {
+        if model.isShowingAllTasks { return [Self.allKey] }
+        guard let board = selectionKey else { return model.isShowingReviews ? [Self.reviewsKey] : [] }
+        if model.isShowingReviews {
+            return model.reviewsFocusBoard == board && hasParts(board) ? [board, board + Self.partMark + "reviews"] : [Self.reviewsKey]
+        }
+        if model.isShowingDocs { return [board, board + Self.partMark + "docs"] }
+        guard hasParts(board) else { return [board] }
+        if let product = model.filterProduct { return [board, board + Self.partMark + "product:" + product] }
+        return [board, board + Self.partMark + "tasks"]
+    }
+
+    private var selection: Binding<Set<String>> {
+        Binding(
+            get: { selectedKeys },
+            set: { keys in
+                // The row that was clicked is the one that came in; clicking the open board,
+                // which is already in, leaves only it — that means "back to its tasks".
+                let current = selectedKeys
+                guard let key = keys.subtracting(current).first ?? (keys.count == 1 ? keys.first : nil) else { return }
+                select(key)
             }
         )
+    }
+
+    private func select(_ key: String) {
+        if key == Self.allKey { model.isShowingReviews = false; model.isShowingDocs = false; model.isShowingAllTasks = true; return }
+        model.isShowingAllTasks = false
+        if key == Self.reviewsKey { model.reviewsFocusBoard = nil; model.isShowingDocs = false; model.isShowingReviews = true; return }
+        // A part of the open board: the board stays, what is shown changes.
+        if let mark = key.range(of: Self.partMark) {
+            let board = String(key[..<mark.lowerBound])
+            let part = String(key[mark.upperBound...])
+            switch part {
+            case "reviews": model.isShowingDocs = false; model.reviewsFocusBoard = board; model.isShowingReviews = true
+            case "docs": model.isShowingReviews = false; model.isShowingDocs = true
+            default:
+                // All tasks, or the tasks of one product.
+                model.isShowingReviews = false
+                model.isShowingDocs = false
+                model.filterProduct = part.hasPrefix("product:") ? String(part.dropFirst("product:".count)) : nil
+            }
+            return
+        }
+        model.isShowingReviews = false
+        model.isShowingDocs = false
+        // The open board itself: back to all of its tasks, without loading it again.
+        if key == selectionKey {
+            model.filterProduct = nil
+            return
+        }
+        guard let sep = key.range(of: "|") else { return }
+        let repoID = String(key[..<sep.lowerBound])
+        let folder = String(key[sep.upperBound...])
+        if let repo = model.addedRepos.first(where: { $0.id == repoID }) {
+            Task { await model.openBoard(repo, folder: folder) }
+        }
     }
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
@@ -351,42 +416,7 @@ private struct WorkspaceSplit: View {
                                 }
                                 .padding(.leading, 14).padding(.vertical, 2)
                                 .tag("\(repo.id)|\(board.folder)")
-                                .contextMenu {
-                                    Button("New Docs Page…", systemImage: "doc.badge.plus") {
-                                        Task {
-                                            model.isShowingReviews = false
-                                            if selectionKey != "\(repo.id)|\(board.folder)" { await model.openBoard(repo, folder: board.folder) }
-                                            model.isShowingDocs = true
-                                        }
-                                    }
-                                    Button("Open", systemImage: "square.stack.3d.up") {
-                                        model.isShowingReviews = false
-                                        Task { await model.openBoard(repo, folder: board.folder) }
-                                    }
-                                    Button("Reload", systemImage: "arrow.clockwise") {
-                                        model.isShowingReviews = false
-                                        Task { await model.openBoard(repo, folder: board.folder) }
-                                    }
-                                    Button("Board Settings…", systemImage: "gearshape") {
-                                        // The settings are the open board's: open it, then its settings.
-                                        Task {
-                                            model.isShowingReviews = false
-                                            model.isShowingDocs = false
-                                            if selectionKey != "\(repo.id)|\(board.folder)" { await model.openBoard(repo, folder: board.folder) }
-                                            model.wantsProjectSettings = true
-                                        }
-                                    }
-                                    Divider()
-                                    Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
-                                    if model.supportsFileStorage(repo) {
-                                        Button("File Storage…", systemImage: "externaldrive") { storageRepo = repo }
-                                    }
-                                    Divider()
-                                    Button("Remove from Sidebar", systemImage: "minus.circle", role: .destructive) {
-                                        if model.activeRepo?.id == repo.id, model.activeBoardFolder == board.folder { model.closeRepo() }
-                                        model.removeBoard(board, from: repo)
-                                    }
-                                }
+                                .contextMenu { boardMenu(repo, board) }
                                 let key = "\(repo.id)|\(board.folder)"
                                 if hasParts(key) {
                                     partRow("Tasks", "rectangle.split.3x1", key: key, part: "tasks")
