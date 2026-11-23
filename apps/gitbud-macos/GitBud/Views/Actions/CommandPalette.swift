@@ -24,7 +24,7 @@ struct CommandPalette: View {
             }
             .padding(16)
 
-            Divider().overlay(.white.opacity(0.08))
+            Divider().overlay(GitBudTheme.stroke)
 
             if let scope {
                 Text(scope)

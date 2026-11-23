@@ -32,8 +32,10 @@ public struct GitBudSettingsStore {
     }
 
     public func loadMagicSettings() -> GitBudMagicSettings {
-        let providerRaw = defaults.string(forKey: Keys.magicProvider) ?? AIPontProvider.openAICompatible.rawValue
-        let provider = AIPontProvider(rawValue: providerRaw) ?? .openAICompatible
+        // Nothing chosen yet: Apple's on-device model when this Mac has it — no key, nothing
+        // leaves the Mac. A saved choice always wins.
+        let fallback: AIPontProvider = OnDeviceAI.isAvailable ? .onDevice : .openAICompatible
+        let provider = defaults.string(forKey: Keys.magicProvider).flatMap(AIPontProvider.init(rawValue:)) ?? fallback
         let model = defaults.string(forKey: Keys.magicModel) ?? "gpt-4o-mini"
         let endpoint = defaults.string(forKey: Keys.magicEndpoint) ?? "https://api.openai.com/v1/chat/completions"
         let apiKey = (try? magicKeychain.load()) ?? ""

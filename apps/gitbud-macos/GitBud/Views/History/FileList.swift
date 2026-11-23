@@ -42,7 +42,7 @@ struct FileList: View {
                 .padding(.horizontal, 10)
             }
 
-            Divider().overlay(.white.opacity(0.08))
+            Divider().overlay(GitBudTheme.stroke)
 
             DisclosureGroup(isExpanded: $isShowingHistory) {
                 LazyVStack(alignment: .leading, spacing: 5) {

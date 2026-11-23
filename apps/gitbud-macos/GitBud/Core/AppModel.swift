@@ -164,7 +164,7 @@ public final class AppModel {
     public var statusMessage = "Open a local repository or connect a GitPont remote to begin."
     public var errorMessage: String?
 
-    @ObservationIgnored private let gitHistory = ShellGitHistoryService()
+    @ObservationIgnored let gitHistory = ShellGitHistoryService()
     @ObservationIgnored private let gitEngine = ShellGitEngine()
     @ObservationIgnored private let magicService: AIPontMagicService
     @ObservationIgnored private let settingsStore: GitBudSettingsStore
@@ -1343,11 +1343,21 @@ public final class AppModel {
 
     /// A plain click: this commit becomes both the focus and the whole selection.
     public func selectCommit(_ commit: GitCommitNode) {
+        setFocus(commit)
+        Task { try? await loadSelectedCommitDetails() }
+    }
+
+    /// Selects the commit and returns once its files and diff are loaded.
+    public func focusCommit(_ commit: GitCommitNode) async {
+        setFocus(commit)
+        try? await loadSelectedCommitDetails()
+    }
+
+    private func setFocus(_ commit: GitCommitNode) {
         focusedCommitID = commit.id
         selectedCommitIDs = [commit.id]
         selectedFilePath = nil
         rewritePreview = nil
-        Task { try? await loadSelectedCommitDetails() }
     }
 
     public func searchHistory() {

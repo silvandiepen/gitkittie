@@ -44,7 +44,8 @@ struct DiffView: View {
                             }
                         }
                         .padding(10)
-                        .background(.black.opacity(0.26), in: RoundedRectangle(cornerRadius: 8))
+                        .background(GitBudTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay { RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(GitBudTheme.stroke) }
                     }
                 } else {
                     EmptyPanel(title: "No diff selected", message: "Select a changed file to inspect its patch.")
@@ -52,7 +53,7 @@ struct DiffView: View {
             }
             .padding(14)
         }
-        .background(.black.opacity(0.10))
+        .background(GitBudTheme.background)
     }
 
     private func lineColor(_ line: String) -> Color {
@@ -110,8 +111,8 @@ struct ConflictPanel: View {
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 90)
                     .padding(6)
-                    .background(.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 8))
-                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.08)) }
+                    .background(GitBudTheme.panel, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(GitBudTheme.stroke) }
                 }
             }
             HStack(spacing: 8) {

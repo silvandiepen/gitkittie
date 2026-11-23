@@ -37,7 +37,7 @@ struct PullRequestsView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Pull Requests")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.title3.weight(.semibold))
                     Text(model.selectedProviderRepository?.fullName ?? "")
                         .font(.caption)
                         .foregroundStyle(GitBudTheme.secondaryText)
@@ -58,7 +58,7 @@ struct PullRequestsView: View {
             }
             .padding(16)
 
-            Divider().overlay(.white.opacity(0.08))
+            Divider().overlay(GitBudTheme.stroke)
 
             ScrollView {
                 LazyVStack(spacing: 4) {
@@ -77,7 +77,7 @@ struct PullRequestsView: View {
                 .padding(12)
             }
 
-            Divider().overlay(.white.opacity(0.08))
+            Divider().overlay(GitBudTheme.stroke)
 
             Button {
                 model.createDraftPullRequest()
@@ -115,7 +115,7 @@ struct PullRequestsView: View {
                         .font(.caption2.weight(.bold))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
-                        .background(.white.opacity(0.10), in: Capsule())
+                        .background(Color.primary.opacity(0.10), in: Capsule())
                 }
             }
             .foregroundStyle(GitBudTheme.secondaryText)

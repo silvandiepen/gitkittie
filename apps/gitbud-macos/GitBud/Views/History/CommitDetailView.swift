@@ -7,23 +7,24 @@ import SwiftUI
 struct CommitDetailView: View {
     @Environment(AppModel.self) private var model
     @State private var pending: GitBudAction?
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let commit = model.focusedCommit {
                 header(commit)
-                Divider().overlay(.white.opacity(0.08))
+                Divider().overlay(GitBudTheme.stroke)
 
                 if model.selectedCommitIDs.count > 1 {
                     plannedOrder
-                    Divider().overlay(.white.opacity(0.08))
+                    Divider().overlay(GitBudTheme.stroke)
                 }
 
                 HSplitView {
                     FileList()
-                        .frame(minWidth: 200, idealWidth: 240)
+                        .frame(minWidth: 160, idealWidth: 220)
                     DiffView()
-                        .frame(minWidth: 280)
+                        .frame(minWidth: 220)
                 }
             } else {
                 EmptyPanel(
@@ -71,6 +72,13 @@ struct CommitDetailView: View {
         let primary = actions.filter { ["commit.rewriteMessage", "commit.squash", "commit.revert"].contains($0.id) }
 
         return HStack(spacing: 6) {
+            Button {
+                openWindow(id: CommitWindow.windowID, value: commit.id)
+            } label: {
+                Image(systemName: "macwindow")
+            }
+            .help("Open in its own window, with side-by-side and full-file views (or double-click the commit)")
+
             ForEach(primary) { action in
                 Button {
                     if action.needsSheet { pending = action } else { action.perform("") }

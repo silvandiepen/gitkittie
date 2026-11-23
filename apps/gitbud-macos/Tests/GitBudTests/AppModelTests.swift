@@ -372,6 +372,8 @@ final class AppModelTests: XCTestCase {
 
         let model = AppModel(magicService: magic)
         await model.openRepository(repo)
+        // These exercise the BYOK path; the default provider depends on the Mac.
+        model.magicProvider = .openAICompatible
         model.magicAPIKey = "test-key"
         model.magicModel = "gpt-test"
         model.magicEndpoint = "https://example.com/v1/chat/completions"
@@ -402,6 +404,8 @@ final class AppModelTests: XCTestCase {
             )
         )
         await model.openRepository(repo)
+        // These exercise the BYOK path; the default provider depends on the Mac.
+        model.magicProvider = .openAICompatible
         model.magicAPIKey = " "
         model.magicModel = "gpt-test"
         model.magicEndpoint = "https://example.com/v1/chat/completions"
@@ -430,6 +434,8 @@ final class AppModelTests: XCTestCase {
 
         let model = AppModel(magicService: magic)
         await model.openRepository(repo)
+        // These exercise the BYOK path; the default provider depends on the Mac.
+        model.magicProvider = .openAICompatible
         model.magicAPIKey = "test-key"
         model.magicModel = "gpt-test"
         model.magicEndpoint = "https://example.com/v1/chat/completions"
@@ -458,6 +464,8 @@ final class AppModelTests: XCTestCase {
 
         let model = AppModel(magicService: magic)
         await model.openRepository(repo)
+        // These exercise the BYOK path; the default provider depends on the Mac.
+        model.magicProvider = .openAICompatible
         model.magicAPIKey = "test-key"
         model.magicModel = "gpt-test"
         model.magicEndpoint = "https://example.com/v1/chat/completions"

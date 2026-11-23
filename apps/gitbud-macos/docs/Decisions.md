@@ -220,3 +220,39 @@ be unit-tested without a UI — including the cases that are awkward to reproduc
 hand: octopus merges, orphan roots, and parents that fall outside the fetched window.
 
 **Status.** Accepted and implemented.
+
+### 14. The window is built like GitKittie Tasks, from the family's shared colours
+
+**Decision.** GitKittie Bud draws with `swift/GitKittieUI/Theme.swift` (the source folder Tasks and
+Folder also compile in) instead of its own grey palette; the window is a `NavigationSplitView` with a
+Tasks-style sidebar, and Fetch / Pull / Push live in the window toolbar. The main window is a single
+`Window` scene rather than a `WindowGroup`.
+
+**Context.** Sil, 2026-11-23: bring Bud in line with Tasks, sidebars and header first. Bud had a
+custom header bar, white-on-black opacities that vanish in light mode, and a row style that marked
+the selection with an outline.
+
+**Rationale.** One theme source keeps the family consistent without copies drifting. A single
+`Window` scene is always in the Window menu and `openWindow(id:)` brings it forward; with a
+`WindowGroup` and File ▸ New replaced by Open Repository, a closed main window could not come back,
+and the commit windows that macOS restores at launch had nothing to open a repository in.
+
+**Status.** Accepted and implemented (GITKITTIE-078).
+
+### 15. Picking and undoing lines merges more readily than git, never more loosely
+
+**Decision.** Applying or undoing chosen lines of a commit is a per-file three-way merge (the file
+as the commit had it, that file with the chosen lines applied, the working copy). `git merge-file`
+goes first; when it reports a conflict, `GitLineMerge` decides, and it only refuses when both sides
+changed the same lines or inserted at the same spot. Nothing is written unless every file merges.
+
+**Context.** Undoing an analytics line from an older commit failed because a later commit had
+edited the footer on the line above it. `git revert` refuses the same case: git's merge treats
+changes that only touch as overlapping.
+
+**Rationale.** "Complicated git made easy": the commonest pick/undo is of a line next to code that
+moved on since. Treating touching-but-separate edits as compatible is what a person would decide by
+hand; treating truly overlapping edits as a conflict is kept, and the result is uncommitted changes
+to review, never a commit.
+
+**Status.** Accepted and implemented (GITKITTIE-078).

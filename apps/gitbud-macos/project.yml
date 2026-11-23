@@ -41,6 +41,8 @@ targets:
       - path: GitBud
         excludes:
           - Core
+      # The colours every GitKittie app shares.
+      - path: ../../swift/GitKittieUI
     dependencies:
       - target: GitBudCore
       - package: GitKittieKit

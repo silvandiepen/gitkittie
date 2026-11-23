@@ -107,16 +107,30 @@ struct MagicTab: View {
                         Text(provider.displayName).tag(provider)
                     }
                 }
-                TextField("Model", text: $model.magicModel)
-                TextField("Endpoint", text: $model.magicEndpoint)
-                SecureField("API key", text: $model.magicAPIKey)
+                if model.magicProvider != .onDevice {
+                    TextField("Model", text: $model.magicModel)
+                    TextField("Endpoint", text: $model.magicEndpoint)
+                    SecureField("API key", text: $model.magicAPIKey)
+                }
                 Button("Save Magic Settings") { model.saveMagicSettings() }
             }
 
             Section {
-                Text("Your key goes straight from this Mac to the provider you choose. GitKittie Bud has no server and stores the key in the Keychain.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if model.magicProvider == .onDevice {
+                    if let reason = model.onDeviceMagicUnavailableReason {
+                        Label(reason, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    } else {
+                        Label("Ready. Messages and split suggestions are drafted on this Mac; no key, and your diff never leaves it.", systemImage: "checkmark.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text("Your key goes straight from this Mac to the provider you choose. GitKittie Bud has no server and stores the key in the Keychain.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
