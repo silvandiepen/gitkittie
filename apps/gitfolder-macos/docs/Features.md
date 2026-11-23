@@ -91,6 +91,11 @@ modeled, documented, or claimed but not yet built**. Status reflects the code in
 - **GitHub** — connect / disconnect / reconnect, account status.
 - **Git Identity** — author name and email used for snapshot commits.
 - **Folders** — the per-folder editor list.
+- **Storage** — per-folder R2/S3 endpoint, bucket, public domain, credentials,
+  offload threshold/extensions, and pinned-download patterns. Portable settings
+  are written to `.gitfolder.yml`; secrets stay in Keychain. Eligible assets can
+  be uploaded immediately using AWS Signature V4, streaming SHA-256 verification,
+  content-addressed object keys, and multipart upload for very large files.
 - **Open at login** via `SMAppService`, with a one-time first-run prompt asking
   whether to enable it (`LoginItemService`, `requestLaunchAtLoginIfNeeded`).
 
@@ -101,13 +106,14 @@ modeled, documented, or claimed but not yet built**. Status reflects the code in
   with `schemaVersion` and **backup-on-invalid** (a corrupt/incompatible file is
   copied to `config.invalid.<timestamp>.json` before reset) (`ConfigStore`).
 - No GitFolder account, no backend, no analytics/telemetry — folder contents flow
-  only to the user's own GitHub repository.
+  only to the user's configured Git remote and optional S3-compatible bucket.
 
-### SSH (engine only)
+### SSH
 
 - The sync engine supports SSH remotes with a security-scoped SSH-key bookmark
-  and a hardened `GIT_SSH_COMMAND`. **This has no UI** and is not reachable in the
-  shipping build — see *Planned* below.
+  and a hardened `GIT_SSH_COMMAND`. GitFolder automatically detects `ssh://` and
+  scp-style (`git@host:owner/repo.git`) URLs, persists the correct authentication
+  mode, and loads branches without requiring a GitHub token.
 
 ## Planned / not yet built
 
@@ -121,7 +127,8 @@ These are modeled in code/`docs/`, claimed in copy, or tracked as tasks, but are
 | **Interactive conflict resolution** | Interrupted operations are detected/repaired and failed merges are aborted safely; a file-by-file conflict resolver remains planned | GITKIT-019 |
 | **Change debounce / filesystem watching** | Docs describe a 30s quiet period and "watching"; engine only **polls** every 5–60 min, so it can snapshot half-written files | GITFOLDER-014 |
 | **Local logs / Logs window** | `LogEntry` modeled and `logRetentionDays` stored, but **no log store or view** exists | GITFOLDER-022 |
-| **SSH auth UI** | Engine + config support SSH; no UI, and `chooseSSHPrivateKey`/`clearSSHPrivateKey` are dead code. `tokenAuthDraft()` silently rewrites stored `authMode` to token | GITFOLDER-019 |
+| **SSH key picker UI** | SSH URL detection and system SSH-agent access ship; selecting a dedicated security-scoped private key remains planned | GITFOLDER-019 |
+| **R2/S3 tiered storage engine** | Configuration, Keychain credentials, signed upload/download, multipart upload, checksum verification, and a Git-versioned object manifest ship. Safe local eviction and Finder File Provider placeholders remain planned | #10 |
 | **Config migration** | Policy documented; not implemented — a differing `schemaVersion` backs up then resets to empty, dropping the folder list | GITFOLDER-017 |
 | **Data reset / delete controls** | No "reset GitFolder"; removing a folder leaves the GitFolder-created `.git` history behind locally and on GitHub | GITFOLDER-022 |
 | **Least-privilege OAuth scope** | Device flow requests broad classic `repo` scope, contradicting the "fine-grained token" framing | GITFOLDER-009 |
