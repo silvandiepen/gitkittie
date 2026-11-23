@@ -1,4 +1,4 @@
-# GitBud — Phase 1
+# GitKittie Bud — Phase 1
 
 Phase 1 proves the product shape before deep destructive editing ships.
 
@@ -30,4 +30,4 @@ Phase 1 proves the product shape before deep destructive editing ships.
 - Selecting a commit shows changed files and diffs.
 - Selecting a file shows commits that changed it.
 - Selecting a commit range creates a non-mutating rewrite preview.
-- No GitBud account or backend configuration exists anywhere in the app.
+- No GitKittie Bud account or backend configuration exists anywhere in the app.

@@ -18,13 +18,13 @@ interface SupportContent {
   eyebrow: string
   title: string
   intro: string
-  gitfolder: {
+  folder: {
     heading: string
     setup: { title: string; steps: StepItem[] }
     common: { title: string; items: StepItem[] }
   }
-  gitkanban: { heading: string; title: string; body: string; action: string }
-  gitbud: { heading: string; title: string; body: string; action: string }
+  tasks: { heading: string; title: string; body: string; action: string }
+  bud: { heading: string; title: string; body: string; action: string }
   stillStuck: { title: string; body: string; action: string }
 }
 
@@ -50,14 +50,14 @@ function marker(i: number): string {
       </header>
 
       <!-- GitKittie Folder -->
-      <section class="support__app" data-app="gitfolder">
+      <section class="support__app" data-app="folder">
         <div class="mkt__container support__app-inner">
-          <h2 class="support__app-heading">{{ t.gitfolder.heading }}</h2>
+          <h2 class="support__app-heading">{{ t.folder.heading }}</h2>
 
           <div class="support__group">
-            <h3 class="mkt__heading">{{ t.gitfolder.setup.title }}</h3>
+            <h3 class="mkt__heading">{{ t.folder.setup.title }}</h3>
             <ol class="mkt__rows" role="list">
-              <li v-for="(step, i) in t.gitfolder.setup.steps" :key="step.title" class="mkt__row">
+              <li v-for="(step, i) in t.folder.setup.steps" :key="step.title" class="mkt__row">
                 <span class="mkt__marker">{{ marker(i) }}</span>
                 <div class="mkt__row-body">
                   <h4 class="support__item-title">{{ step.title }}</h4>
@@ -68,9 +68,9 @@ function marker(i: number): string {
           </div>
 
           <div class="support__group">
-            <h3 class="mkt__heading">{{ t.gitfolder.common.title }}</h3>
+            <h3 class="mkt__heading">{{ t.folder.common.title }}</h3>
             <div class="mkt__rows">
-              <div v-for="item in t.gitfolder.common.items" :key="item.title" class="mkt__row">
+              <div v-for="item in t.folder.common.items" :key="item.title" class="mkt__row">
                 <h4 class="support__item-title">{{ item.title }}</h4>
                 <div class="mkt__row-body">
                   <Markdown class="support__prose" tag="div" :content="item.desc" />
@@ -81,29 +81,29 @@ function marker(i: number): string {
         </div>
       </section>
 
-      <!-- GitKittie Kanban -->
-      <section class="support__app" data-app="gitkanban">
+      <!-- GitKittie Tasks (namespace: tasks) -->
+      <section class="support__app" data-app="tasks">
         <div class="mkt__container support__app-inner">
-          <h2 class="support__app-heading">{{ t.gitkanban.heading }}</h2>
+          <h2 class="support__app-heading">{{ t.tasks.heading }}</h2>
           <div class="support__group">
-            <h3 class="mkt__heading">{{ t.gitkanban.title }}</h3>
-            <Markdown class="support__prose" tag="div" :content="t.gitkanban.body" />
+            <h3 class="mkt__heading">{{ t.tasks.title }}</h3>
+            <Markdown class="support__prose" tag="div" :content="t.tasks.body" />
             <div class="mkt__actions support__actions">
-              <ArlezSupport :label="t.gitkanban.action" />
+              <ArlezSupport :label="t.tasks.action" />
             </div>
           </div>
         </div>
       </section>
 
       <!-- GitKittie Bud -->
-      <section class="support__app" data-app="gitbud">
+      <section class="support__app" data-app="bud">
         <div class="mkt__container support__app-inner">
-          <h2 class="support__app-heading">{{ t.gitbud.heading }}</h2>
+          <h2 class="support__app-heading">{{ t.bud.heading }}</h2>
           <div class="support__group">
-            <h3 class="mkt__heading">{{ t.gitbud.title }}</h3>
-            <Markdown class="support__prose" tag="div" :content="t.gitbud.body" />
+            <h3 class="mkt__heading">{{ t.bud.title }}</h3>
+            <Markdown class="support__prose" tag="div" :content="t.bud.body" />
             <div class="mkt__actions support__actions">
-              <ArlezSupport :label="t.gitbud.action" />
+              <ArlezSupport :label="t.bud.action" />
             </div>
           </div>
         </div>

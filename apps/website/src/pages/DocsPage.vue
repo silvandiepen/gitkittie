@@ -302,29 +302,33 @@ function marker(i: number): string {
     flex-direction: column;
   }
 
-  // A ruled index rather than a stack of pills — the accent marks the current
-  // section on its edge instead of filling a background behind it.
+  // The current section is marked the way the app's sidebar marks the selected
+  // board: a tinted fill and nothing else — never a line on its edge.
   @include e(nav-link) {
     display: flex;
     align-items: baseline;
     gap: var(--space-s);
     width: 100%;
-    padding: var(--space-s) 0 var(--space-s) var(--space-s);
-    border-top: var(--border-width) solid var(--color-border);
-    border-left: 2px solid transparent;
+    padding: var(--space-s);
+    border-radius: var(--border-radius-l);
     text-align: left;
     font-size: var(--font-size-s);
     color: color-mix(in srgb, var(--color-foreground) 70%, transparent);
     background: transparent;
     cursor: pointer;
-    transition: color var(--transition-fast), border-color var(--transition-fast);
+    transition: color var(--transition-fast), background-color var(--transition-fast);
 
-    &:hover { color: var(--color-foreground); }
+    &:hover {
+      color: var(--color-foreground);
+      background: color-mix(in srgb, var(--color-foreground) 5%, transparent);
+    }
 
     @include m(active) {
       color: var(--color-foreground);
-      border-left-color: var(--color-accent);
+      background: var(--color-accent-tint);
       font-weight: var(--font-weight-semibold);
+
+      &:hover { background: var(--color-accent-tint); }
     }
   }
 
@@ -432,17 +436,16 @@ function marker(i: number): string {
   }
 
   // ── Callout ────────────────────────────────────────────────────────────
-  // Flat, square, and marked by a coloured edge rather than a rounded tinted
-  // card — it has to read as an interruption, not as another content box.
+  // A tinted panel, the way the app shows a notice: the tint carries the
+  // meaning (accent for a note, warning for a warning), with no edge line.
   @include e(callout) {
     display: flex;
     gap: var(--space);
     padding: var(--space) var(--space-l);
-    border-left: 3px solid var(--color-accent);
+    border-radius: var(--radius-panel);
     background: var(--color-accent-tint);
 
     @include m(warning) {
-      border-left-color: var(--color-warning);
       background: var(--color-warning-tint);
     }
   }

@@ -36,7 +36,9 @@ struct AddRepositoryView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .listRowBackground(Theme.panel)
                 }
+                .themedList()
                 .searchable(text: $search, prompt: "Filter repositories")
                 .refreshable { await model.loadRepos() }
                 .overlay {
@@ -47,6 +49,8 @@ struct AddRepositoryView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.window.ignoresSafeArea())
         .navigationTitle("Add Repository")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -14,7 +14,8 @@ public func resolveEffectiveConfig(_ root: BoardConfig, _ project: ProjectConfig
         priorities: mergeById(root.priorities, project?.priorities, id: \Priority.id),
         types: mergeStrings(root.types, project?.types),
         tags: mergeStrings(root.tags, project?.tags),
-        fieldSource: project?.fieldSource ?? root.fieldSource
+        fieldSource: project?.fieldSource ?? root.fieldSource,
+        reviewPath: project?.reviewPath ?? root.reviewPath
     )
 }
 

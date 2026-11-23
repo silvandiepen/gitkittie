@@ -7,18 +7,18 @@ export const siteOrigin = 'https://gitkittie.hakobs.com'
  * GitKittie Folder — one App Store record covering macOS and iOS. The bare link lets
  * the App Store pick the right platform for the visitor; `?mt=12` forces the Mac listing.
  */
-export const gitfolderAppStoreUrl = 'https://apps.apple.com/app/id6784713824'
-export const gitfolderMacAppStoreUrl = `${gitfolderAppStoreUrl}?mt=12`
+export const folderAppStoreUrl = 'https://apps.apple.com/app/id6784713824'
+export const folderMacAppStoreUrl = `${folderAppStoreUrl}?mt=12`
 
 /** Kept for older imports; points at the GitKittie Folder Mac listing as it always did. */
-export const appStoreUrl = gitfolderMacAppStoreUrl
+export const appStoreUrl = folderMacAppStoreUrl
 
 /**
- * GitKittie Kanban — like Folder, one App Store record covering macOS and iOS
+ * GitKittie Tasks (formerly GitKittie Kanban) — like Folder, one App Store record covering macOS and iOS
  * since the Mac build shipped at 1.0. Same `?mt=12` trick for the Mac listing.
  */
-export const gitkanbanAppStoreUrl = 'https://apps.apple.com/app/id6792793088'
-export const gitkanbanMacAppStoreUrl = `${gitkanbanAppStoreUrl}?mt=12`
+export const tasksAppStoreUrl = 'https://apps.apple.com/app/id6792793088'
+export const tasksMacAppStoreUrl = `${tasksAppStoreUrl}?mt=12`
 
 /**
  * Arlez project for this site — `GitKittie Website · Web` in the GitKittie

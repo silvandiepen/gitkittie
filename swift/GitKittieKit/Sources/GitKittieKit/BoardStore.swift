@@ -17,7 +17,8 @@ public enum BoardStore {
             priorities: priorities(from: map["priorities"]),
             types: strings(from: map["types"]),
             tags: strings(from: map["tags"]),
-            fieldSource: fieldSource(from: map["fieldSource"])
+            fieldSource: fieldSource(from: map["fieldSource"]),
+            reviewPath: map["review_path"] as? String
         )
     }
 
@@ -33,7 +34,10 @@ public enum BoardStore {
             priorities: map["priorities"].map { priorities(from: $0) },
             types: map["types"].map { strings(from: $0) },
             tags: map["tags"].map { strings(from: $0) },
-            fieldSource: fieldSource(from: map["fieldSource"])
+            fieldSource: fieldSource(from: map["fieldSource"]),
+            reviewPath: map["review_path"] as? String,
+            icon: (map["icon"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            color: (map["color"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 
@@ -117,7 +121,7 @@ public enum BoardStore {
     /// Render a YAML scalar, quoting when the value could be misparsed: empty
     /// strings, or any value containing spaces, colons, dots or `#`, or one that
     /// begins with a digit. Backslashes and quotes are escaped inside the quotes.
-    static func yamlScalar(_ value: String) -> String {
+    public static func yamlScalar(_ value: String) -> String {
         let needsQuote = value.isEmpty
             || value.contains(where: { $0 == " " || $0 == ":" || $0 == "." || $0 == "#" || $0 == "\"" || $0 == "'" })
             || (value.first?.isNumber ?? false)
@@ -141,19 +145,67 @@ public enum BoardStore {
         default:
             fields = frontmatterFields(frontmatter, fileName: fileName)
         }
-        return Card(fields: fields, body: body, fileName: fileName)
+        var titled = fields
+        if titled.title.trimmingCharacters(in: .whitespaces).isEmpty {
+            // No usable title field: the card's heading, else its file name. Never blank.
+            titled.title = headingTitle(body)
+                ?? fileName.map { ($0 as NSString).deletingPathExtension.replacingOccurrences(of: "-", with: " ") }
+                ?? ""
+        }
+        return Card(fields: titled, body: body, fileName: fileName)
+    }
+
+    /// Top-level `key: value` lines read one by one, for frontmatter that is not valid
+    /// YAML. One unquoted colon in a value (`title: Check: a follow-up`) makes the whole
+    /// block unparseable, and a card must not lose its title, id and status over that.
+    public static func lenientFields(_ yaml: String) -> [String: Any] {
+        var map: [String: Any] = [:]
+        for line in yaml.components(separatedBy: "\n") {
+            guard let first = line.first, !first.isWhitespace, first != "#", first != "-",
+                  let colon = line.firstIndex(of: ":") else { continue }
+            let key = line[..<colon].trimmingCharacters(in: .whitespaces)
+            var value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            guard !key.isEmpty, !key.contains(" "), map[key] == nil else { continue }
+            if value.count >= 2, let quote = value.first, quote == "\"" || quote == "'", value.last == quote {
+                value = String(value.dropFirst().dropLast())
+            }
+            // Lists, nested maps and block scalars are not plain strings: leave them out.
+            if value.isEmpty || value == "null" || value == "~" || value.hasPrefix("[") || value.hasPrefix("{")
+                || value == "|" || value == ">" { continue }
+            map[key] = value
+        }
+        return map
+    }
+
+    /// The first `# Heading` of a card body, as a title for a card that has none.
+    static func headingTitle(_ body: String) -> String? {
+        for line in body.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("# ") {
+                let title = trimmed.dropFirst(2).trimmingCharacters(in: .whitespaces)
+                if !title.isEmpty { return title }
+            }
+        }
+        return nil
     }
 
     private static func frontmatterFields(_ yaml: String?, fileName: String?) -> CardFields {
-        let map = (yaml.flatMap { try? dictionary(from: $0) }) ?? [:]
+        let map: [String: Any]
+        if let yaml {
+            if let parsed = try? dictionary(from: yaml) { map = parsed } else { map = lenientFields(yaml) }
+        } else {
+            map = [:]
+        }
         func str(_ key: String) -> String? {
             // A YAML null (empty `key:`) parses to NSNull — treat it as absent rather
             // than stringifying it to "<null>".
             guard let value = map[key], !(value is NSNull) else { return nil }
             if let string = value as? String { return string }
+            // YAML timestamps (`updated_at: 2026-11-08T10:00:00Z`) load as Date.
+            if let date = value as? Date { return Review.timestamp(date) }
             return String(describing: value)
         }
-        return CardFields(
+        var fields = CardFields(
             id: str("id") ?? "",
             title: str("title") ?? "",
             project: str("project") ?? "",
@@ -162,8 +214,22 @@ public enum BoardStore {
             type: nonEmpty(str("type")),
             epic: nonEmpty(str("epic")),
             assignee: nonEmpty(str("assignee")),
-            order: nonEmpty(str("order"))
+            order: nonEmpty(str("order")),
+            updatedAt: nonEmpty(str("updated_at")),
+            readAt: nonEmpty(str("read_at")),
+            readBy: nonEmpty(str("read_by")),
+            product: nonEmpty(str("product"))
         )
+        // Labels: a list (`tags: [ios, bug]` or one per line), or a single value.
+        if let list = map["tags"] as? [Any] {
+            fields.tags = list.compactMap { $0 is NSNull ? nil : String(describing: $0) }.filter { !$0.isEmpty }
+        } else if let one = nonEmpty(str("tags")) {
+            fields.tags = one.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        // A due date is a day: `due: 2026-11-24` (YAML may hand it over as a full timestamp).
+        fields.due = nonEmpty(str("due")).map { String($0.prefix(10)) }
+        fields.createdAt = nonEmpty(str("created_at"))
+        return fields
     }
 
     private static func bodySectionFields(body: String, section: String?, map: [String: String], fileName: String?) -> CardFields {
@@ -230,8 +296,9 @@ public enum BoardStore {
 
     private static func compare(_ a: Card, _ b: Card, config: EffectiveConfig) -> Int {
         if let oa = a.fields.order, let ob = b.fields.order, oa != ob {
-            if let ia = Int(oa), let ib = Int(ob), ia != ib { return ia < ib ? -1 : 1 }
-            if Int(oa) == nil || Int(ob) == nil { return oa < ob ? -1 : 1 }
+            // Numbers, not text: a task dropped between 1 and 2 gets 1.5.
+            if let ia = Double(oa), let ib = Double(ob), ia != ib { return ia < ib ? -1 : 1 }
+            if Double(oa) == nil || Double(ob) == nil { return oa < ob ? -1 : 1 }
         }
         let pa = priorityRank(a.fields.priority, config)
         let pb = priorityRank(b.fields.priority, config)
@@ -243,6 +310,44 @@ public enum BoardStore {
         guard let priority else { return config.priorities.count }
         let index = config.priorities.firstIndex { $0.id == priority }
         return index ?? config.priorities.count
+    }
+
+    // MARK: Products
+
+    /// The products a board's README lists (`products:`), in order.
+    public static func products(inReadme text: String) -> [BoardProduct] {
+        guard let frontmatter = BoardMarkdown.splitFrontmatter(text).frontmatter,
+              let map = try? dictionary(from: frontmatter), let list = map["products"] as? [Any] else { return [] }
+        var seen = Set<String>()
+        return list.compactMap { entry -> BoardProduct? in
+            let product: BoardProduct
+            if let name = entry as? String {
+                product = BoardProduct(id: BoardProduct.id(for: name), name: name)
+            } else if let fields = entry as? [String: Any] {
+                func text(_ key: String) -> String? { (fields[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
+                guard let name = text("name") ?? text("id") else { return nil }
+                product = BoardProduct(id: text("id") ?? BoardProduct.id(for: name), name: name,
+                                       prefix: BoardProduct.cleanPrefix(text("prefix")), icon: text("icon"), color: text("color"))
+            } else { return nil }
+            return !product.id.isEmpty && seen.insert(product.id).inserted ? product : nil
+        }
+    }
+
+    /// The `products:` lines of a README, as a frontmatter of their own (for patching one in).
+    public static func renderProducts(_ products: [BoardProduct]) -> String {
+        var lines = ["---"]
+        if !products.isEmpty {
+            lines.append("products:")
+            for product in products {
+                lines.append("  - id: \(yamlScalar(product.id))")
+                lines.append("    name: \(yamlScalar(product.name))")
+                if let prefix = product.prefix { lines.append("    prefix: \(yamlScalar(prefix))") }
+                if let icon = product.icon { lines.append("    icon: \(yamlScalar(icon))") }
+                if let color = product.color { lines.append("    color: \(yamlScalar(color))") }
+            }
+        }
+        lines.append("---")
+        return lines.joined(separator: "\n") + "\n"
     }
 
     // MARK: YAML helpers

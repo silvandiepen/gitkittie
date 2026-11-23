@@ -1,4 +1,4 @@
-# GitBud (macOS) — Agent Instructions
+# GitKittie Bud (macOS) — Agent Instructions
 
 Read the root `../../AGENTS.md` first; this file adds GitBud-macOS-specific
 rules. Global hard rules still apply: do not commit/push/deploy without an
@@ -7,7 +7,7 @@ trailers, and do not work around failing checks.
 
 ## What this app is
 
-GitBud for macOS is a native SwiftUI git client focused on making history
+GitKittie Bud for macOS is a native SwiftUI git client focused on making history
 editing simple: visual branch flow, commit graph, file history, interactive
 rebase, commit splitting, squashing/merging, reordering, message rewriting, and
 safe purge workflows.
@@ -25,7 +25,7 @@ Phase 1 is macOS-first and supports:
 - **Testable app core:** the XcodeGen `GitBudCore` framework target compiles
   `AppModel` and settings for non-hosted unit tests.
 - **Shared Swift:** `../../swift/GitKittieKit` owns git graph, diff, rewrite, safety,
-  and purge primitives. GitBud UI must not launch git directly.
+  and purge primitives. GitKittie Bud UI must not launch git directly.
 - **App docs:** `apps/gitbud-macos/docs/{Features,Decisions,Architecture}.md`.
 - **GitPont:** provider auth, remote repo listing, branch metadata, HTTPS git
   credential context, and PR/MR workflows.
@@ -42,7 +42,7 @@ Phase 1 is macOS-first and supports:
 - Use argv-based process launching only; never build shell strings with user
   repo paths, branches, refs, or commit messages.
 - Store persisted provider tokens and AI keys only in Keychain.
-- Do not add GitBud accounts, a hosted GitBud backend, or GitBud-owned sync
+- Do not add GitKittie Bud accounts, a hosted GitKittie Bud backend, or GitKittie Bud-owned sync
   infrastructure.
 - Rewrites must be protected by default: require a clean tree, create a safety
   branch/ref, preview rewritten commits, and require explicit confirmation for
@@ -52,6 +52,6 @@ Phase 1 is macOS-first and supports:
 
 ## Platform rule
 
-iOS and iPadOS GitBud are remote-only through GitPont. Do not design shared
-GitBud workflows that require iOS/iPad to shell out to git, access an SSH agent,
+iOS and iPadOS GitKittie Bud are remote-only through GitPont. Do not design shared
+GitKittie Bud workflows that require iOS/iPad to shell out to git, access an SSH agent,
 or maintain a full local clone.

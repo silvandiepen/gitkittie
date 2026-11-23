@@ -4,7 +4,7 @@
   "platform": "macos",
   "scheme": "GitKanban",
   "project": "apps/gitkanban-macos/GitKanban.xcodeproj",
-  "productName": "GitKanban",
+  "productName": "Tasks",
   "bundleId": "app.hakobs.gitkanban",
   "screenshots": {
     "outputDir": "artifacts/screenshots/gitkanban-macos",

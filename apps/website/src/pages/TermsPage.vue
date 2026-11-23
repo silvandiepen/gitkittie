@@ -12,7 +12,7 @@ import { usePageMarkdown } from '@/i18n'
 usePageMeta({
   title: 'Terms & Conditions — GitKittie',
   description:
-    'The terms of use for the GitKittie apps, GitKittie Folder, GitKittie Kanban and GitKittie Bud — provided as-is, using your own git repositories and accounts.',
+    'The terms of use for the GitKittie apps, GitKittie Folder, GitKittie Tasks and GitKittie Bud — provided as-is, using your own git repositories and accounts.',
 })
 
 const body = usePageMarkdown('terms')

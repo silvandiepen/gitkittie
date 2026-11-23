@@ -1,4 +1,4 @@
-# GitBud — Risks and Open Questions
+# GitKittie Bud — Risks and Open Questions
 
 ## Risks
 
@@ -23,9 +23,9 @@
 
 ## Open questions
 
-- Which providers should GitPont support for GitBud v1 beyond the providers already available in
+- Which providers should GitPont support for GitKittie Bud v1 beyond the providers already available in
   the dependency?
-- Should protected branches be configured locally by GitBud, read from provider metadata, or both?
+- Should protected branches be configured locally by GitKittie Bud, read from provider metadata, or both?
 - Which modern history filtering tool should GitKittie wrap for purge on macOS?
 - Should app-managed remote checkouts be shared with other GitKittie apps or isolated per product?
 - What is the minimum Magic prompt context that produces useful messages without sending excessive

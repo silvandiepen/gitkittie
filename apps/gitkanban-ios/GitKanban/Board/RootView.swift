@@ -15,12 +15,16 @@ struct RootView: View {
                     SplashView()
                 } else if model.activeRepo != nil || model.isDemo {
                     BoardScreen()
-                } else if !model.isConnected {
+                } else if !model.hasHome {
                     ConnectView()
                 } else {
                     HomeView()
                 }
             }
+        }
+        // Changes are sent in the background; this is where you see that they are.
+        .overlay(alignment: .bottomTrailing) {
+            SyncIndicator().padding(.trailing, 16).padding(.bottom, 12)
         }
     }
 }
@@ -31,15 +35,7 @@ private struct SplashView: View {
         VStack(spacing: 20) {
             Spacer()
 
-            Image("GitKanbanLines")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 72, height: 72)
-                .foregroundStyle(.primary.opacity(0.7))
-
-            Text("GitKittie Kanban")
-                .font(.title2.weight(.medium))
-                .foregroundStyle(.primary.opacity(0.8))
+            TasksWordmark()
 
             ProgressView()
                 .controlSize(.regular)
@@ -49,7 +45,7 @@ private struct SplashView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(uiColor: .systemBackground))
+        .background(Theme.window)
     }
 }
 
@@ -69,10 +65,7 @@ private struct ConnectView: View {
         Form {
             Section {
                 VStack(spacing: 6) {
-                    Image("GitKanbanLines")
-                        .resizable().scaledToFit().frame(width: 84, height: 76)
-                        .foregroundStyle(.tint)
-                    Text("GitKittie Kanban").font(.title.bold())
+                    TasksWordmark(markSize: 76, animated: false)
                     Text("Your kanban board is a git repo.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
@@ -104,6 +97,14 @@ private struct ConnectView: View {
                     Text("No account?")
                 } footer: {
                     Text("A sample board with every feature working — add, edit, move and delete cards, offline. No account, no sign-in.")
+                }
+
+                Section {
+                    FolderServerPicker()
+                } header: {
+                    Text("Folder on your Mac")
+                } footer: {
+                    Text("Macs running the Tasks folder server show up here when you're on the same network. Once added, they keep working away from home over Tailscale. No git account needed.")
                 }
 
                 Section("Provider") {
@@ -188,7 +189,7 @@ private struct ConnectView: View {
     private func deviceCodeSection(_ device: GitOAuthDeviceSession) -> some View {
         Section("Sign in with GitHub") {
             VStack(spacing: 12) {
-                Text("Copied. Open GitHub, paste this code, and confirm to authorise GitKittie Kanban.")
+                Text("Copied. Open GitHub, paste this code, and confirm to authorise Tasks.")
                     .font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -230,14 +231,231 @@ private struct ConnectView: View {
 private struct HomeView: View {
     @Environment(AppModel.self) private var model
     @State private var showAdd = false
+    @State private var showAddServer = false
+    @State private var showConnect = false
+    @State private var showAISettings = false
+    @State private var showNotificationSettings = false
     @State private var browseRepo: AddedRepo?
+    @State private var storageRepo: AddedRepo?
+    @State private var showReviews = false
+    @Environment(\.scenePhase) private var scenePhase
 
-    /// "N tasks · <folder>" for a board row (task count loads lazily).
+    /// "N tasks · 2 In Progress · 5 In Review" for a board row (loads lazily from listings).
     private func boardSubtitle(_ repo: AddedRepo, _ board: SelectedBoard) -> String {
-        var parts: [String] = []
-        if let n = model.boardCount(repo, board.folder) { parts.append("\(n) task\(n == 1 ? "" : "s")") }
-        if !board.folder.isEmpty { parts.append(board.folder) }
-        return parts.isEmpty ? "Loading…" : parts.joined(separator: " · ")
+        guard let summary = model.boardSummary(repo, board.folder) else {
+            return board.folder.isEmpty ? "Loading…" : board.folder
+        }
+        var parts = ["\(summary.total) task\(summary.total == 1 ? "" : "s")"]
+        parts += summary.active.prefix(3).map { "\($0.count) \($0.name)" }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Cards that are new or moved lane since the board was last opened.
+    private func changedCount(_ repo: AddedRepo, _ board: SelectedBoard) -> Int {
+        model.boardSummary(repo, board.folder)?.changed ?? 0
+    }
+
+    @State private var showAllTasks = false
+    @State private var searchAllTasks = false
+    /// Repositories folded shut on the home screen, by id.
+    @AppStorage("homeFoldedRepos") private var foldedRepos = ""
+
+    /// What can be done with a repository: choose its boards, or take it off the phone.
+    @ViewBuilder private func repoMenu(_ repo: AddedRepo) -> some View {
+        Button("Add or Remove Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
+        if model.supportsFileStorage(repo) {
+            Button("File Storage…", systemImage: "externaldrive") { storageRepo = repo }
+        }
+        Button(repo.kind.isFolder ? "Remove Folder" : "Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
+    }
+
+    private func isFolded(_ repo: AddedRepo) -> Bool { foldedRepos.split(separator: "\n").contains(Substring(repo.id)) }
+    private func toggleFolded(_ repo: AddedRepo) {
+        var ids = foldedRepos.split(separator: "\n").map(String.init)
+        if let index = ids.firstIndex(of: repo.id) { ids.remove(at: index) } else { ids.append(repo.id) }
+        withAnimation(.snappy(duration: 0.25)) { foldedRepos = ids.joined(separator: "\n") }
+    }
+
+    /// A row of the card at the top: icon, name, count.
+    private func topRow(_ title: String, _ symbol: String, tint: Color, count: Int, subtitle: String? = nil) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: symbol).font(.title3).foregroundStyle(tint).frame(width: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.body.weight(.medium)).foregroundStyle(.primary)
+                if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+            }
+            Spacer(minLength: 8)
+            if count > 0 { CountBadge(count: count) }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 13)
+        .contentShape(Rectangle())
+    }
+
+    private var addMenu: some View {
+        Group {
+            if model.isConnected {
+                Button("Add Repository…", systemImage: "book.closed") { showAdd = true }
+            }
+            Button("Add Folder Server…", systemImage: "server.rack") { showAddServer = true }
+        }
+    }
+
+    private func boardRow(_ repo: AddedRepo, _ board: SelectedBoard) -> some View {
+        Button {
+            Task { await model.openBoard(repo, folder: board.folder) }
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: board.icon ?? BoardAppearance.defaultIcon)
+                    .font(.title3).foregroundStyle(Color(boardColor: board.color)).frame(width: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(board.name).font(.body).foregroundStyle(.primary)
+                    Text(boardSubtitle(repo, board)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                if changedCount(repo, board) > 0 {
+                    CountBadge(count: changedCount(repo, board), color: Color(boardColor: board.color))
+                        .accessibilityLabel("\(changedCount(repo, board)) new or moved since you last opened it")
+                }
+            }
+            .padding(.leading, 30).padding(.trailing, 16).padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .task { await model.loadBoardCount(repo, board.folder) }
+        .contextMenu {
+            Button("Remove", systemImage: "minus.circle", role: .destructive) { model.removeBoard(board, from: repo) }
+        }
+    }
+
+    private var home: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 10) {
+                    TasksMark(animated: false).frame(width: 30, height: 30).foregroundStyle(.primary)
+                    Text("Tasks").font(.title2.weight(.bold))
+                    Spacer()
+                    Menu {
+                        addMenu
+                        Divider()
+                        Button("AI Settings…", systemImage: "sparkles") { showAISettings = true }
+                        Button("Notifications…", systemImage: "bell") { showNotificationSettings = true }
+                        Divider()
+                        if let login = model.connection?.login {
+                            Text("Signed in as \(login)")
+                            Button("Sign Out", role: .destructive) { model.signOut() }
+                        } else {
+                            Button("Connect a Git Provider…", systemImage: "person.badge.key") { showConnect = true }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis").font(.body.weight(.semibold))
+                            .frame(width: 36, height: 36).background(.quaternary, in: Circle())
+                    }
+                    .accessibilityLabel("More")
+                    .accessibilityIdentifier("homeMenu")
+                }
+                .padding(.horizontal, 4)
+
+                VStack(spacing: 0) {
+                    Button { searchAllTasks = false; showAllTasks = true } label: {
+                        topRow("All Tasks", "tray.full", tint: .accentColor, count: model.allTasksCount)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("homeAllTasksRow")
+                    if model.hasReviews {
+                        let waiting = model.pendingReviewTotal
+                        Divider().padding(.leading, 58)
+                        Button { showReviews = true } label: {
+                            topRow("Reviews", waiting > 0 ? "checkmark.seal.fill" : "checkmark.seal", tint: .orange, count: waiting,
+                                   subtitle: waiting > 0 ? nil : "Nothing is waiting for you")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("homeReviewsRow")
+                    }
+                }
+                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 16))
+
+                // A board that appeared in a repository you already have: add it, or not.
+                ForEach(model.boardSuggestions) { suggestion in
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("New board: \(suggestion.name)", systemImage: "sparkles.rectangle.stack").font(.headline)
+                        Text("\(suggestion.repoName) has a board that is not on this phone yet. Add it?")
+                            .font(.callout).foregroundStyle(.secondary)
+                        HStack {
+                            Button("Add") { model.addSuggestedBoard(suggestion) }.buttonStyle(.borderedProminent)
+                            Button("Not Now") { model.dismissBoardSuggestion(suggestion) }.buttonStyle(.bordered)
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 16))
+                    .accessibilityIdentifier("boardSuggestion")
+                }
+
+                ForEach(model.addedRepos) { repo in
+                    VStack(alignment: .leading, spacing: 0) {
+                        Button { toggleFolded(repo) } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: repo.symbolName).foregroundStyle(.secondary).frame(width: 28)
+                                Text(repo.displayName).font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                                Spacer()
+                                Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                                    .rotationEffect(.degrees(isFolded(repo) ? -90 : 0))
+                            }
+                            .padding(.leading, 16).padding(.trailing, 52).padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(repo.displayName), \(isFolded(repo) ? "folded" : "open")")
+                        .contextMenu { repoMenu(repo) }
+                        // The same choices in sight: adding a board should not need a long press.
+                        .overlay(alignment: .trailing) {
+                            Menu { repoMenu(repo) } label: {
+                                Image(systemName: "ellipsis").font(.body.weight(.semibold)).foregroundStyle(.secondary)
+                                    .frame(width: 44, height: 40).contentShape(Rectangle())
+                            }
+                            .padding(.trailing, 6)
+                            .accessibilityLabel("\(repo.displayName) options")
+                            .accessibilityIdentifier("repoOptions")
+                        }
+                        if !isFolded(repo) {
+                            if repo.boards.isEmpty {
+                                Button { browseRepo = repo } label: {
+                                    Label("Browse boards…", systemImage: "square.grid.2x2")
+                                        .padding(.leading, 30).padding(.vertical, 10)
+                                }
+                            }
+                            ForEach(repo.boards) { board in boardRow(repo, board) }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 96)
+        }
+        .background(Theme.window)
+        // Home, add, search: the three things a thumb reaches for.
+        .safeAreaInset(edge: .bottom) {
+            HStack {
+                Image(systemName: "house.fill").font(.title3).frame(width: 56, height: 44)
+                    .accessibilityLabel("Home").accessibilityAddTraits(.isSelected)
+                Spacer()
+                Menu { addMenu } label: {
+                    Image(systemName: "plus").font(.title2.weight(.semibold)).foregroundStyle(.white)
+                        .frame(width: 54, height: 54).background(Color.accentColor, in: Circle())
+                }
+                .accessibilityLabel("Add")
+                .accessibilityIdentifier("homeAdd")
+                Spacer()
+                Button { searchAllTasks = true; showAllTasks = true } label: {
+                    Image(systemName: "magnifyingglass").font(.title3).frame(width: 56, height: 44)
+                }
+                .accessibilityLabel("Search tasks")
+                .accessibilityIdentifier("homeSearch")
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 22).padding(.vertical, 6)
+            .background(.regularMaterial, in: Capsule())
+            .padding(.horizontal, 20).padding(.bottom, 4)
+        }
     }
 
     var body: some View {
@@ -246,57 +464,15 @@ private struct HomeView: View {
                 ContentUnavailableView {
                     Label("No Boards", systemImage: "square.stack.3d.up")
                 } description: {
-                    Text("Add a repository, then browse it to pick which boards to show.")
+                    Text("Add a repository or a folder server, then browse it to pick which boards to show.")
                 } actions: {
-                    Button("Add Repository") { showAdd = true }.buttonStyle(.borderedProminent)
+                    if model.isConnected {
+                        Button("Add Repository") { showAdd = true }.buttonStyle(.borderedProminent)
+                    }
+                    Button("Add Folder Server") { showAddServer = true }
                 }
             } else {
-                List {
-                    ForEach(model.addedRepos) { repo in
-                        Section {
-                            if repo.boards.isEmpty {
-                                Button { browseRepo = repo } label: {
-                                    Label("Browse boards…", systemImage: "square.grid.2x2")
-                                }
-                            } else {
-                                ForEach(repo.boards) { board in
-                                    Button {
-                                        Task { await model.openBoard(repo, folder: board.folder) }
-                                    } label: {
-                                        HStack(spacing: 12) {
-                                            Image(systemName: "square.stack.3d.up.fill")
-                                                .font(.title3).foregroundStyle(.tint).frame(width: 26)
-                                            VStack(alignment: .leading, spacing: 1) {
-                                                Text(board.name).font(.body).foregroundStyle(.primary)
-                                                Text(boardSubtitle(repo, board)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                            }
-                                            Spacer(minLength: 8)
-                                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                                        }
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .task { await model.loadBoardCount(repo, board.folder) }
-                                    .swipeActions(edge: .trailing) {
-                                        Button(role: .destructive) { model.removeBoard(board, from: repo) } label: {
-                                            Label("Remove", systemImage: "minus.circle")
-                                        }
-                                    }
-                                }
-                            }
-                        } header: {
-                            HStack(spacing: 6) {
-                                Image(systemName: repo.isPrivate ? "lock.fill" : "book.closed").font(.caption2)
-                                Text(repo.fullName).textCase(nil)
-                                Spacer()
-                                Menu {
-                                    Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
-                                    Button("Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
-                                } label: { Image(systemName: "ellipsis.circle") }
-                            }
-                        }
-                    }
-                }
+                home
             }
         }
         .overlay {
@@ -306,19 +482,78 @@ private struct HomeView: View {
             }
         }
         .navigationTitle("Boards")
+        .toolbar(model.addedRepos.isEmpty ? .visible : .hidden, for: .navigationBar)
+        .sheet(isPresented: $showAllTasks) {
+            NavigationStack { AllTasksView(startSearching: searchAllTasks) }.environment(model)
+        }
+        .refreshable {
+            await model.refreshBoardSummaries()
+            await model.refreshBoardSuggestions()
+            await model.loadReviewInbox()
+        }
+        // Reviews on every board: on launch, whenever the app comes forward, and when a
+        // board is added or removed.
+        .task(id: "\(scenePhase == .active)\n\(model.reviewInboxKey)") { if scenePhase == .active { await model.loadReviewInbox() } }
+        .sheet(isPresented: $showReviews) { NavigationStack { ReviewInboxView() }.environment(model) }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showAdd = true } label: { Image(systemName: "plus") }
+                Menu {
+                    if model.isConnected {
+                        Button("Add Repository…", systemImage: "book.closed") { showAdd = true }
+                    }
+                    Button("Add Folder Server…", systemImage: "server.rack") { showAddServer = true }
+                } label: { Image(systemName: "plus") }
             }
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
-                    if let login = model.connection?.login { Text("Signed in as \(login)") }
-                    Button("Sign Out", role: .destructive) { model.signOut() }
+                    Button("AI Settings…", systemImage: "sparkles") { showAISettings = true }
+                    Button("Notifications…", systemImage: "bell") { showNotificationSettings = true }
+                    if let login = model.connection?.login {
+                        Text("Signed in as \(login)")
+                        Button("Sign Out", role: .destructive) { model.signOut() }
+                    } else {
+                        Button("Connect a Git Provider…", systemImage: "person.badge.key") { showConnect = true }
+                    }
                 } label: { Image(systemName: "person.crop.circle") }
             }
         }
+        .sheet(isPresented: $showAISettings) { AISettingsSheet().environment(model) }
+        .sheet(isPresented: $showNotificationSettings) { NotificationSettingsSheet().environment(model) }
+        // A tapped notification about reviews opens them.
+        .onChange(of: model.wantsReviews, initial: true) { _, wants in
+            if wants { model.wantsReviews = false; showReviews = true }
+        }
         .sheet(isPresented: $showAdd) { NavigationStack { AddRepoView() }.environment(model) }
+        .sheet(isPresented: $showAddServer) {
+            NavigationStack {
+                Form {
+                    Section {
+                        FolderServerPicker { added in
+                            showAddServer = false
+                            browseRepo = added
+                        }
+                    } header: {
+                        Text("On this network")
+                    } footer: {
+                        Text("Once added, a server keeps working away from home over Tailscale.")
+                    }
+                    if let error = model.errorMessage {
+                        Section { Text(error).font(.callout).foregroundStyle(.red) }
+                    }
+                }
+                .navigationTitle("Add Folder Server")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Cancel") { showAddServer = false } } }
+            }
+            .environment(model)
+        }
+        .sheet(isPresented: $showConnect) {
+            NavigationStack { ConnectView() }
+                .environment(model)
+                .onChange(of: model.isConnected) { _, connected in if connected { showConnect = false } }
+        }
         .sheet(item: $browseRepo) { repo in NavigationStack { BoardPickerView(repo: repo) }.environment(model) }
+        .sheet(item: $storageRepo) { repo in NavigationStack { StorageSettingsSheet(repo: repo) }.environment(model) }
     }
 }
 
@@ -499,6 +734,43 @@ private struct FolderLevel: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { commit() }
             }
+        }
+    }
+}
+
+/// Address field + connect button for a GitKanban folder server.
+struct AddFolderServerRow: View {
+    @Environment(AppModel.self) private var model
+    var onAdded: (AddedRepo) -> Void = { _ in }
+    @State private var address = ""
+    @State private var isChecking = false
+
+    var body: some View {
+        TextField("my-mac.tailnet.ts.net", text: $address)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .keyboardType(.URL)
+            .submitLabel(.go)
+            .onSubmit(connect)
+            .accessibilityIdentifier("folderServerAddress")
+        Button(action: connect) {
+            HStack {
+                Image(systemName: "server.rack")
+                Text("Connect to Folder Server")
+                Spacer()
+                if isChecking { ProgressView() }
+            }
+        }
+        .disabled(isChecking || address.trimmingCharacters(in: .whitespaces).isEmpty)
+        .accessibilityIdentifier("connectFolderServer")
+    }
+
+    private func connect() {
+        guard !isChecking else { return }
+        isChecking = true
+        Task {
+            defer { isChecking = false }
+            if let added = await model.addFolderServer(address) { onAdded(added) }
         }
     }
 }

@@ -31,7 +31,7 @@ struct ContentView: View {
             CommandPalette()
         }
         .alert(
-            "GitBud",
+            "GitKittie Bud",
             isPresented: Binding(
                 get: { model.errorMessage != nil },
                 set: { if !$0 { model.errorMessage = nil } }

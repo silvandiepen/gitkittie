@@ -34,6 +34,7 @@ public enum CardText {
     public static func update(
         _ original: String,
         set updates: [String: String?],
+        lists: [String: [String]] = [:],
         body newBody: String? = nil
     ) -> String {
         let (frontmatter, oldBody) = BoardMarkdown.splitFrontmatter(original)
@@ -41,6 +42,7 @@ public enum CardText {
         for (key, value) in updates {
             lines = setKey(lines, key, value.flatMap { $0.isEmpty ? nil : $0 })
         }
+        for (key, values) in lists { lines = setList(lines, key, values) }
         let frontmatter2 = lines
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             .joined(separator: "\n")
@@ -57,6 +59,21 @@ public enum CardText {
         } else if let index {
             result.remove(at: index)
         }
+        return result
+    }
+
+    /// Write a list as `key: [a, b]`. A list that was written one item per line is
+    /// replaced whole, with the lines under its key.
+    private static func setList(_ lines: [String], _ key: String, _ values: [String]) -> [String] {
+        var result = lines
+        let line = "\(key): [\(values.map(BoardStore.yamlScalar).joined(separator: ", "))]"
+        guard let index = result.firstIndex(where: { isTopLevelKeyLine($0, key) }) else {
+            result.append(line)
+            return result
+        }
+        var end = index + 1
+        while end < result.count, let first = result[end].first, first.isWhitespace || first == "-" { end += 1 }
+        result.replaceSubrange(index..<end, with: [line])
         return result
     }
 

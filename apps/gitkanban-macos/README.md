@@ -1,6 +1,8 @@
-# GitKanban (macOS)
+# Tasks (macOS)
 
-The macOS GitKanban app — a kanban board backed by a git repo of markdown files.
+The macOS **Tasks** app (formerly GitKittie Kanban) — a kanban board backed by a git repo of
+markdown files. The product is `Tasks.app`; the target, scheme, module and bundle id
+(`app.hakobs.gitkanban`) keep the GitKanban name.
 
 **Status: working read/write board.** The app builds and runs today as a full GitHub-backed
 kanban client: it connects to GitHub with device-flow OAuth, clones a repo it owns into its own
@@ -36,6 +38,24 @@ npm run gitkanban:run
   folder and frontmatter stay in agreement (the canonical Tasks-board contract). Every action
   commits and pushes.
 
+### Added in the Tasks update (2026-11)
+
+Detail and status per item: [`docs/Features.md`](./docs/Features.md) → "Added in the Tasks update".
+
+- **Boards load over the provider API or from a folder** (no clone), and on GitHub a lane's cards
+  come in one request.
+- **Sidebar:** board icons and colours, update counts, right-click menus, **Board Settings…**
+  (name, icon, colour saved in the board's README), a board picker that lists the folders next to
+  your boards, and "Add Board from…" in the + menu.
+- **Task side panel without an edit mode:** editable title, Markdown description styled as you type,
+  field chips as menus, a green check to save, swipe right to close, and "Open File".
+- **Live updates** through the webhook relay ([`apps/gitkanban-relay`](../gitkanban-relay/)) for
+  GitHub and GitLab.
+- **Agent Access:** a local MCP server (plus a bridge that opens the app when it is closed) so
+  agents list, create, claim and update cards, and create boards, without a copy of the
+  repository. The board's rules are passed to the agent and its vocabulary is enforced.
+- **Loading screen** with the animated Tasks mark.
+
 ## How it fits together
 
 - **Board logic** comes from [`@gitkittie/gitkanban-core`](../../packages/gitkanban-core/) (TS,
@@ -45,7 +65,7 @@ npm run gitkanban:run
   `BoardInheritance`, `RemoteBoardStore`, `KeychainService`, `GitHubOAuthService`,
   `GitHubReposService`, `CardText`.
 - **Board format** is the canonical contract in
-  `/Users/silvandiepen/Projects/Tasks/README.md` (folder-per-lane; card frontmatter + root/project
+  `/Users/silvandiepen/Repositories/tasks/README.md` (folder-per-lane; card frontmatter + root/project
   config with inheritance).
 - **Phase 1 scope** (macOS, shell-out git, GitHub) is in
   `/Users/silvandiepen/Projects/GitKittie/GitKanban/plan/phase-1.md`.

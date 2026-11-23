@@ -172,3 +172,25 @@ final class RemoteBoardStoreTests: XCTestCase {
         XCTAssertEqual(count, 2)
     }
 }
+
+final class CardTitleTests: XCTestCase {
+    func testACardWithInvalidYAMLKeepsItsFields() {
+        // The unquoted colon in the title makes the frontmatter invalid YAML.
+        let text = "---\nid: PETS-7\ntitle: Check: a follow-up question\nproject: Pets\nstatus: todo\npriority: P2\ntags: [a, b]\nupdated_at: 2026-11-08T10:00:00Z\n---\n\n# Check\n"
+        let card = BoardStore.parseCard(text: text, fileName: "PETS-7-check.md", fieldSource: nil)
+        XCTAssertEqual(card.fields.title, "Check: a follow-up question")
+        XCTAssertEqual(card.fields.id, "PETS-7")
+        XCTAssertEqual(card.fields.status, "todo")
+        XCTAssertEqual(card.fields.priority, "P2")
+        XCTAssertEqual(card.fields.updatedAt, "2026-11-08T10:00:00Z")
+    }
+
+    func testACardWithoutATitleUsesItsHeadingThenItsFileName() {
+        let heading = BoardStore.parseCard(text: "---\nid: A-1\n---\n\nIntro\n\n# Feed the cat\n", fileName: "A-1.md", fieldSource: nil)
+        XCTAssertEqual(heading.fields.title, "Feed the cat")
+        let named = BoardStore.parseCard(text: "Just some notes.\n", fileName: "walk-the-dog.md", fieldSource: nil)
+        XCTAssertEqual(named.fields.title, "walk the dog")
+        let quoted = BoardStore.parseCard(text: "---\ntitle: \"Kept: as written\"\n---\n", fileName: "x.md", fieldSource: nil)
+        XCTAssertEqual(quoted.fields.title, "Kept: as written")
+    }
+}

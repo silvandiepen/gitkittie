@@ -90,6 +90,8 @@ public struct BoardConfig: Equatable, Sendable {
     public var types: [String]
     public var tags: [String]
     public var fieldSource: FieldSource?
+    /// `review_path`: where review requests live, relative to each project folder (see `Review`).
+    public var reviewPath: String?
 
     public init(
         lanes: [Lane] = [],
@@ -98,7 +100,8 @@ public struct BoardConfig: Equatable, Sendable {
         priorities: [Priority] = [],
         types: [String] = [],
         tags: [String] = [],
-        fieldSource: FieldSource? = nil
+        fieldSource: FieldSource? = nil,
+        reviewPath: String? = nil
     ) {
         self.lanes = lanes
         self.users = users
@@ -107,6 +110,7 @@ public struct BoardConfig: Equatable, Sendable {
         self.types = types
         self.tags = tags
         self.fieldSource = fieldSource
+        self.reviewPath = reviewPath
     }
 }
 
@@ -120,6 +124,12 @@ public struct ProjectConfig: Equatable, Sendable {
     public var types: [String]?
     public var tags: [String]?
     public var fieldSource: FieldSource?
+    /// `review_path`: where review requests live, relative to each project folder (see `Review`).
+    public var reviewPath: String?
+    /// `icon`: the board's SF Symbol name, and `color`: one of `BoardAppearance.colors`.
+    /// How the board looks in every app that lists it; kept in the board's own README.
+    public var icon: String?
+    public var color: String?
 
     public init(
         project: String? = nil,
@@ -129,8 +139,13 @@ public struct ProjectConfig: Equatable, Sendable {
         priorities: [Priority]? = nil,
         types: [String]? = nil,
         tags: [String]? = nil,
-        fieldSource: FieldSource? = nil
+        fieldSource: FieldSource? = nil,
+        reviewPath: String? = nil,
+        icon: String? = nil,
+        color: String? = nil
     ) {
+        self.icon = icon
+        self.color = color
         self.project = project
         self.lanes = lanes
         self.users = users
@@ -139,6 +154,7 @@ public struct ProjectConfig: Equatable, Sendable {
         self.types = types
         self.tags = tags
         self.fieldSource = fieldSource
+        self.reviewPath = reviewPath
     }
 }
 
@@ -152,6 +168,8 @@ public struct EffectiveConfig: Equatable, Sendable {
     public var types: [String]
     public var tags: [String]
     public var fieldSource: FieldSource?
+    /// `review_path`: where review requests live, relative to each project folder (see `Review`).
+    public var reviewPath: String?
 
     public init(
         project: String? = nil,
@@ -161,7 +179,8 @@ public struct EffectiveConfig: Equatable, Sendable {
         priorities: [Priority] = [],
         types: [String] = [],
         tags: [String] = [],
-        fieldSource: FieldSource? = nil
+        fieldSource: FieldSource? = nil,
+        reviewPath: String? = nil
     ) {
         self.project = project
         self.lanes = lanes
@@ -171,6 +190,37 @@ public struct EffectiveConfig: Equatable, Sendable {
         self.types = types
         self.tags = tags
         self.fieldSource = fieldSource
+        self.reviewPath = reviewPath
+    }
+}
+
+/// A product a board works on: a board can cover several (GitKittie has Folder, Tasks and
+/// Bud). Tasks name the product they are for, the board can be filtered on it, and a
+/// product may number its tasks with its own prefix.
+public struct BoardProduct: Codable, Equatable, Sendable, Identifiable, Hashable {
+    public var id: String
+    public var name: String
+    /// When set, a new task for this product gets `<PREFIX>-<number>` as its id.
+    public var prefix: String?
+    public var icon: String?
+    public var color: String?
+
+    public init(id: String, name: String, prefix: String? = nil, icon: String? = nil, color: String? = nil) {
+        self.id = id; self.name = name; self.prefix = prefix; self.icon = icon; self.color = color
+    }
+
+    /// `GitKittie Tasks` → `gitkittie-tasks`.
+    public static func id(for name: String) -> String {
+        let slug = name.lowercased().map { $0.isLetter || $0.isNumber ? $0 : "-" }
+            .reduce(into: "") { text, character in if !(character == "-" && text.hasSuffix("-")) { text.append(character) } }
+        return slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+
+    /// A prefix as ids need it: capitals and digits, starting with a letter. Nil when nothing is left.
+    public static func cleanPrefix(_ raw: String?) -> String? {
+        let kept = (raw ?? "").uppercased().filter { $0.isLetter || $0.isNumber }
+        guard let first = kept.first, first.isLetter else { return nil }
+        return String(kept.prefix(12))
     }
 }
 
@@ -183,14 +233,33 @@ public struct CardFields: Equatable, Sendable {
     public var priority: String?
     public var type: String?
     public var epic: String?
+    /// The product of the board this card belongs to (`product:`), by its id.
+    public var product: String?
     public var assignee: String?
     public var order: String?
+    /// `updated_at`, ISO-8601 as written.
+    public var updatedAt: String?
+    /// `read_at` / `read_by`: when the reviewer last read the card (see `BoardProgress`).
+    public var readAt: String?
+    public var readBy: String?
+    /// `tags`: the task's labels.
+    public var tags: [String] = []
+    /// `due`: the day the task is due, as `yyyy-MM-dd`.
+    public var due: String?
+    /// `created_at`, ISO-8601 as written.
+    public var createdAt: String?
 
     public init(
         id: String = "", title: String = "", project: String = "", status: String = "",
         priority: String? = nil, type: String? = nil, epic: String? = nil,
-        assignee: String? = nil, order: String? = nil
+        assignee: String? = nil, order: String? = nil,
+        updatedAt: String? = nil, readAt: String? = nil, readBy: String? = nil,
+        product: String? = nil
     ) {
+        self.product = product
+        self.updatedAt = updatedAt
+        self.readAt = readAt
+        self.readBy = readBy
         self.id = id
         self.title = title
         self.project = project
@@ -231,4 +300,22 @@ public struct Column: Equatable, Sendable, Identifiable {
         self.lane = lane
         self.cards = cards
     }
+}
+
+/// The icons and colours a board can be given (`icon:` / `color:` in its README).
+public enum BoardAppearance {
+    public static let defaultIcon = "square.stack.3d.up.fill"
+    /// Colour names as written in the README; the apps map them to system colours.
+    public static let colors = ["blue", "indigo", "purple", "pink", "red", "orange", "yellow", "green", "mint", "teal", "brown", "gray"]
+    /// SF Symbols offered in the picker. Any other symbol name in a README still shows.
+    public static let icons = [
+        "square.stack.3d.up.fill", "checklist", "list.bullet.rectangle.fill", "tray.full.fill", "folder.fill", "doc.text.fill",
+        "hammer.fill", "wrench.and.screwdriver.fill", "terminal.fill", "chevron.left.forwardslash.chevron.right", "cpu.fill", "ladybug.fill",
+        "iphone", "macbook", "globe", "cloud.fill", "server.rack", "shippingbox.fill",
+        "paintbrush.fill", "paintpalette.fill", "photo.fill", "camera.fill", "film.fill", "music.note",
+        "gamecontroller.fill", "book.fill", "graduationcap.fill", "pencil.and.outline", "megaphone.fill", "envelope.fill",
+        "cart.fill", "creditcard.fill", "chart.bar.fill", "banknote.fill", "briefcase.fill", "building.2.fill",
+        "house.fill", "leaf.fill", "heart.fill", "star.fill", "bolt.fill", "flame.fill",
+        "pawprint.fill", "fork.knife", "airplane", "car.fill", "map.fill", "sparkles",
+    ]
 }

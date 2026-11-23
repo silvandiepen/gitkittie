@@ -77,8 +77,8 @@ onBeforeUnmount(() => {
   display: inline-flex;
 
   arlez-support {
-    --arlez-accent: var(--color-foreground);
-    --arlez-button-text: var(--color-background);
+    --arlez-accent: var(--color-accent-dark);
+    --arlez-button-text: var(--color-accent-contrast);
     --arlez-text: currentColor;
     --arlez-radius: var(--radius-pill);
   }

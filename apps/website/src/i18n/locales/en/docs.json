@@ -1,12 +1,12 @@
 {
   "meta": {
     "title": "Docs — GitKittie",
-    "description": "Documentation for GitKittie Folder, GitKittie Kanban and GitKittie Bud: install, setup, board format, history rewriting, troubleshooting and FAQ."
+    "description": "Documentation for GitKittie Folder, GitKittie Tasks and GitKittie Bud: install, setup, board format, agents, history rewriting, troubleshooting and FAQ."
   },
   "sidebarNote": "Documentation covers all three apps. Anything missing? Send a message.",
   "products": [
     {
-      "id": "gitfolder",
+      "id": "folder",
       "label": "Folder",
       "name": "GitKittie Folder",
       "sections": [
@@ -205,25 +205,25 @@
       ]
     },
     {
-      "id": "gitkanban",
-      "label": "Kanban",
-      "name": "GitKittie Kanban",
+      "id": "tasks",
+      "label": "Tasks",
+      "name": "GitKittie Tasks",
       "sections": [
         {
-          "id": "kanban-start",
+          "id": "tasks-start",
           "label": "Getting Started",
           "title": "Getting Started",
           "blocks": [
             {
               "type": "prose",
-              "md": "GitKittie Kanban runs on Mac, iPhone and iPad, from one App Store record and one purchase. All three are the same app against the same board."
+              "md": "GitKittie Tasks runs on Mac, iPhone and iPad, from one App Store record and one purchase. All three work on the same board. On the home screen and in the Dock the app is called Tasks."
             },
             {
               "type": "steps",
               "items": [
                 {
                   "title": "Install it",
-                  "md": "[Get GitKittie Kanban from the Mac App Store](https://apps.apple.com/app/id6792793088?mt=12), or [from the App Store for iPhone and iPad](https://apps.apple.com/app/id6792793088)."
+                  "md": "[Get GitKittie Tasks from the Mac App Store](https://apps.apple.com/app/id6792793088?mt=12), or [from the App Store for iPhone and iPad](https://apps.apple.com/app/id6792793088)."
                 },
                 {
                   "title": "Try it without an account",
@@ -235,14 +235,14 @@
                 },
                 {
                   "title": "Pick a repository and board",
-                  "md": "Search your repositories, choose one, and open a board. If the repository holds several projects, switch between them from the board screen."
+                  "md": "Search your repositories, choose one, and pick the folders that are boards. A repository that holds several projects lists them all; tick the ones you want. On the Mac, the + button adds more boards from a repository you already have."
                 }
               ]
             }
           ]
         },
         {
-          "id": "kanban-format",
+          "id": "tasks-format",
           "label": "Board Format",
           "title": "The board format",
           "blocks": [
@@ -256,7 +256,8 @@
                 "**A lane is a folder.** A card's `status` and the folder it sits in must agree.",
                 "**One card is one file** — YAML frontmatter for the fields, markdown below for the description.",
                 "**Config inherits**, root to project: lanes replace, vocabularies merge.",
-                "**Unknown keys survive.** Anything the app does not recognise is preserved on round-trip rather than dropped."
+                "**Unknown keys survive.** Anything the app does not recognise is preserved on round-trip rather than dropped.",
+                "**A broken header is not a lost card.** If a card's frontmatter is not valid YAML (an unquoted colon in a title is the usual cause), the app still reads its fields line by line. A card with no title shows its first heading, then its file name."
               ]
             },
             {
@@ -264,12 +265,12 @@
               "variant": "info",
               "icon": "💡",
               "title": "Anything can write to it",
-              "md": "Because a board is only files and folders, scripts and agents can populate it headlessly — no API, no integration. The board logic is an open TypeScript core shared with the app."
+              "md": "Because a board is only files and folders, scripts and agents can populate it headlessly. Agents on your Mac can also work on it through the app, without a copy of the repository — see Agents."
             }
           ]
         },
         {
-          "id": "kanban-cards",
+          "id": "tasks-cards",
           "label": "Cards",
           "title": "Working with cards",
           "blocks": [
@@ -278,19 +279,31 @@
               "items": [
                 {
                   "term": "Create",
-                  "md": "A new markdown file with frontmatter and a slug id, committed to the lane folder."
+                  "md": "A new markdown file with frontmatter, committed to the lane folder. On a board whose cards are numbered, the new card gets the board's prefix and the next free number (`ARVIK-502`), and the file name starts with it; on other boards the id comes from the title. On iPhone and iPad you can add images while creating a task."
                 },
                 {
                   "term": "Edit",
-                  "md": "Fields and body. The description renders as markdown in the card detail."
+                  "md": "On iPhone and iPad, open the card and edit its fields and body; the description renders as markdown. On the Mac the card opens in a side panel where the title and description are always editable: the description is Markdown styled as you type, and a green check appears when there is something to save (⌘↩ works too). Closing the panel saves what you typed."
+                },
+                {
+                  "term": "Change fields",
+                  "md": "On the Mac, the lane, priority, type, epic and assignee chips in the side panel are menus. Pick a value and it is saved at once."
                 },
                 {
                   "term": "Move lanes",
                   "md": "Drag a card onto another lane on the Mac; pick a lane from the card on iPhone and iPad. Either way it rewrites `status`, writes the file to the new path, and deletes the old one."
                 },
                 {
+                  "term": "Move to another project",
+                  "md": "On iPhone and iPad, a card's menu has Move to Project. The card lands in the lane with the same name, or the first lane if there is none. You are asked whether it should get the next id of the new project; the file name follows the id."
+                },
+                {
                   "term": "Reorder",
                   "md": "Drag within a lane. Only the cards whose `order` actually changed are committed."
+                },
+                {
+                  "term": "Open the file",
+                  "md": "On the Mac, a card's menu opens its `.md` file in your Markdown app. For a board in a folder that is the real file; for a board in a repository it is a downloaded copy, and changes to the copy do not go back."
                 },
                 {
                   "term": "Delete",
@@ -302,13 +315,355 @@
               "type": "callout",
               "variant": "warning",
               "icon": "⚠️",
-              "title": "Writes are immediate and last-writer-wins",
-              "md": "Every change is its own commit, sent straight away. There is no conflict detection yet — if two people edit the same card at once, the later write wins. Offline editing and conflict surfacing are planned, not built."
+              "title": "The last write wins",
+              "md": "Every change is its own commit. There is no conflict detection yet — if two people edit the same card at once, the later write wins."
             }
           ]
         },
         {
-          "id": "kanban-faq",
+          "id": "tasks-capture",
+          "label": "Screenshots",
+          "title": "From a screenshot to a task",
+          "blocks": [
+            {
+              "type": "prose",
+              "md": "On iPhone and iPad, Tasks is in the share sheet. Share a screenshot or a photo and it becomes a task on one of your boards, with the image attached."
+            },
+            {
+              "type": "steps",
+              "items": [
+                {
+                  "title": "Share the image",
+                  "md": "In Photos or the screenshot preview, tap Share and choose **Tasks**. It is also in the list of actions as **Add to Tasks**."
+                },
+                {
+                  "title": "Pick the project",
+                  "md": "The project you used last is suggested. Choose whether this is a new task or goes onto an existing one."
+                },
+                {
+                  "title": "Mark what is wrong",
+                  "md": "Tap the image, drag a box around the part you mean, and add a comment. Quick suggestions are offered, including the text found inside the box."
+                },
+                {
+                  "title": "Check the draft",
+                  "md": "The title, description, type and priority are drafted from the image and your comments. Change anything, or tap **Enhance** to redraft from what you added."
+                },
+                {
+                  "title": "Add it",
+                  "md": "The sheet closes at once and the task is sent in the background. The model, iOS version, screen size, appearance and text size of your device are added to the task unless you turn that off."
+                }
+              ]
+            },
+            {
+              "type": "prose",
+              "md": "The same steps are available inside the app: add an image while creating a task and you can mark it up and let it draft the title and description."
+            },
+            {
+              "type": "specs",
+              "items": [
+                {
+                  "term": "On device",
+                  "md": "With Apple Intelligence on a supported iPhone or iPad, drafting runs on the device. The on-device model reads text, not pictures: it works from the text and labels recognised in the image and from your comments."
+                },
+                {
+                  "term": "Your own provider",
+                  "md": "Add an API key for OpenAI, Anthropic or Google Gemini under AI Settings in the account menu. The image and your comments are then sent to that provider with your key, and usage is billed to your account there."
+                },
+                {
+                  "term": "No model",
+                  "md": "Without either, nothing is sent anywhere and nothing is drafted. You write the title and description yourself; the image and your markup are still attached."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "tasks-sync",
+          "label": "Sync & Updates",
+          "title": "Sending, offline and updates",
+          "blocks": [
+            {
+              "type": "specs",
+              "items": [
+                {
+                  "term": "Background sending",
+                  "md": "On iPhone and iPad a change is saved on the device first and sent to your repository in the background. A dot in the corner of the screen shows that something is being sent; tap it to see each change. It disappears when everything is up to date."
+                },
+                {
+                  "term": "Offline",
+                  "md": "Without a connection you can still create and edit tasks on iPhone and iPad. They wait on the device and are sent when the connection is back. A change your host refuses stays in the list, where you can retry or discard it."
+                },
+                {
+                  "term": "Seen and unseen",
+                  "md": "Cards show when they were last updated, and a mark when they changed since you last opened them. What you have seen is kept on the device, not written to the repository."
+                },
+                {
+                  "term": "Sorting",
+                  "md": "On iPhone and iPad, sort a board by Board Order, Unseen First, Last Updated or Priority."
+                },
+                {
+                  "term": "Board overview",
+                  "md": "The list of boards shows how many cards are new or moved since you last opened each one — on the home screen on iPhone and iPad, and as a count in the sidebar on the Mac."
+                }
+              ]
+            },
+            {
+              "type": "prose",
+              "md": "**Live updates** make an open board refresh when someone pushes, instead of when you reload it."
+            },
+            {
+              "type": "steps",
+              "items": [
+                {
+                  "title": "Turn it on once per repository",
+                  "md": "Open a board, then the ⋯ menu → **Live Updates…** → **Turn On**. Your account needs admin access to the repository on GitHub, or the Maintainer role on GitLab."
+                },
+                {
+                  "title": "What that does",
+                  "md": "The app adds a push webhook to the repository and commits a small file, `.gitkanban/relay.json`, so every device that opens the repository subscribes by itself."
+                },
+                {
+                  "title": "Turn it off",
+                  "md": "The same sheet removes the webhook and the file again."
+                }
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "info",
+              "icon": "💡",
+              "title": "What the relay sees",
+              "md": "Your git host tells a small GitKittie relay that a push happened, and the relay tells the open apps which files changed. It sees the repository's name and the paths of changed files. It never receives file contents or your access token. Live updates reach apps that are open; a closed app updates when you open it."
+            },
+            {
+              "type": "prose",
+              "md": "**Notifications.** Open the account menu (the person icon) → **Notifications…** to choose what Tasks tells you about. The settings are per device."
+            },
+            {
+              "type": "specs",
+              "items": [
+                {
+                  "term": "Reviews to do",
+                  "md": "A review request that newly has items waiting for your answer. On by default. Tapping the notification opens Reviews."
+                },
+                {
+                  "term": "New and moved tasks",
+                  "md": "Changes on a board since you last opened it. Off by default."
+                },
+                {
+                  "term": "Count on the app icon",
+                  "md": "The number of items waiting for your review. On by default."
+                }
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "info",
+              "icon": "💡",
+              "title": "When a notification arrives",
+              "md": "Nothing is pushed to your devices by a server. Tasks looks for news itself: every few minutes while it is open, and on iPhone and iPad also when the system gives it time in the background. A notification can therefore arrive some time after the change."
+            }
+          ]
+        },
+        {
+          "id": "tasks-boards",
+          "label": "Boards",
+          "title": "Boards on the Mac",
+          "blocks": [
+            {
+              "type": "specs",
+              "items": [
+                {
+                  "term": "Add boards",
+                  "md": "The + button adds a repository, opens a folder, or adds more boards from a repository you already have. The board picker lists the folders next to your existing boards, with the ones you have not added yet first."
+                },
+                {
+                  "term": "Board Settings",
+                  "md": "Right-click a board in the sidebar → **Board Settings…** to change its name, icon and color. They are saved as `project`, `icon` and `color` in the board's `README.md`, so other devices pick them up. Lanes, priorities, members, types and epics are one button further, under More Settings."
+                },
+                {
+                  "term": "Right-click",
+                  "md": "A board's menu has Open, Reload, Board Settings, Browse Boards and Remove from Sidebar. Removing a board from the sidebar does not touch the repository."
+                },
+                {
+                  "term": "A folder without a board",
+                  "md": "If you add a folder that has no cards in any lane, the app says so, and offers the board of the same name next to your other boards when there is one."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "tasks-reviews",
+          "label": "Reviews",
+          "title": "Reviews",
+          "blocks": [
+            {
+              "type": "prose",
+              "md": "When an agent makes something you have to judge (images, 3D models, audio, animations, video), it asks for a review instead of deciding for you. A review request is a folder in the board with the files and one `review.md`, so your answers are commits in your repository like everything else."
+            },
+            {
+              "type": "specs",
+              "items": [
+                {
+                  "term": "Where you find them",
+                  "md": "On iPhone and iPad the home screen has a **Reviews** section with the number of items waiting, per board. On the Mac, **Reviews** is in the sidebar, and an open board shows a button in its header with the number waiting for that board."
+                },
+                {
+                  "term": "Answering",
+                  "md": "Each item gets **Approve**, **Changes** or **Reject**, and you can add a comment to any of them. When the agent asks you to pick one of several options, **Pick This** marks that one as picked and turns the others down."
+                },
+                {
+                  "term": "One per screen",
+                  "md": "On iPhone and iPad a request opens as slides, one item per screen, starting at the first one you have not answered. If you close it with items unanswered, Tasks asks whether to continue with those or close anyway. **Review All** walks through every open request in turn."
+                },
+                {
+                  "term": "Drawing on an image",
+                  "md": "On iPhone and iPad, tap an image to see it full screen and swipe it down to close. The pencil button next to the comment field lets you draw on it; the marked copy is saved with your comment so the agent sees exactly what you mean."
+                },
+                {
+                  "term": "Other files",
+                  "md": "3D models (USDZ) open in Quick Look, audio and video play in the app, and sprite sheets play as an animation."
+                },
+                {
+                  "term": "After your answer",
+                  "md": "The agent reads your decisions and comments, acts on them, and marks each item as handled. A request with nothing left to answer or handle is removed from the board; git history keeps it."
+                }
+              ]
+            },
+            {
+              "type": "prose",
+              "md": "**The format.** Requests live in a `review` folder inside the board, next to the lane folders. Another folder name can be set with `review_path` in the board's or the repository's `README.md`."
+            },
+            {
+              "type": "list",
+              "items": [
+                "`<board>/review/<request>/review.md` holds the request: a title, the question, and a list of `items`.",
+                "Each item names a `file` in the same folder, a `kind` (`image`, `model`, `audio`, `animation`, `video`, `other`) and a `status`: `pending`, `approved`, `rejected` or `changes-requested`.",
+                "Items with the same `group` are options for one thing; `pick: one` on the group means you choose one of them.",
+                "A redo is a new item with `revises` set to the item it replaces, so the comments stay together.",
+                "The agent writes the request and the items. Tasks writes `status`, `decided_by` and `decided_at`. Comments are only ever added."
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "info",
+              "icon": "💡",
+              "title": "Anything can ask for a review",
+              "md": "A request is plain files. An agent makes one with `create_review` (see Agents), and a script or a person can make one by committing the folder."
+            }
+          ]
+        },
+        {
+          "id": "tasks-agents",
+          "label": "Agents",
+          "title": "Agents",
+          "blocks": [
+            {
+              "type": "prose",
+              "md": "On the Mac, Tasks can serve your boards to coding agents such as Claude Code and Codex. The agent asks the app for what it needs and the app writes each change to your repository, so the agent needs no copy of the board on disk and runs no git for it."
+            },
+            {
+              "type": "steps",
+              "items": [
+                {
+                  "title": "Turn it on",
+                  "md": "In Tasks, open the account menu (the person icon) → **Agent Access…** and switch on **Let agents connect**."
+                },
+                {
+                  "title": "Connect the agent",
+                  "md": "Copy the command the sheet shows and run it once in a terminal. That registers Tasks as an MCP server named `tasks` in Claude Code. For other agents, use the same command as a stdio MCP server, or the address and header the sheet shows."
+                },
+                {
+                  "title": "Use it",
+                  "md": "Ask the agent to work with your board: list what is in progress, file a card, claim one, update it. If Tasks is closed, the agent opens it in the background by itself; the first call then takes a few seconds longer."
+                }
+              ]
+            },
+            {
+              "type": "specs",
+              "items": [
+                {
+                  "term": "list_boards",
+                  "md": "Every board the agent can use: the ones in your sidebar and the other boards in the same repositories. A board joins the sidebar the first time an agent uses it."
+                },
+                {
+                  "term": "create_board",
+                  "md": "A new, empty board for a project. It inherits the repository's lanes."
+                },
+                {
+                  "term": "get_board",
+                  "md": "A board's lanes and status values, priorities, types, epics, users and card id prefix."
+                },
+                {
+                  "term": "get_board_rules",
+                  "md": "Everything written down about how to work on the board — see below."
+                },
+                {
+                  "term": "list_cards, get_card",
+                  "md": "Cards with their main fields, filtered by lane, text or assignee; and one card's full text and attachments."
+                },
+                {
+                  "term": "create_card",
+                  "md": "A new card from the board's template, with the next free id."
+                },
+                {
+                  "term": "claim_card",
+                  "md": "Records the agent as the owner with a lease and moves the card to In Progress. Refused when someone else holds an unexpired claim."
+                },
+                {
+                  "term": "update_card",
+                  "md": "Sets fields, replaces the body, moves the card to another lane, and adds an entry to its activity log."
+                },
+                {
+                  "term": "attach_file",
+                  "md": "Attaches a file, such as a screenshot, to a card."
+                },
+                {
+                  "term": "create_review",
+                  "md": "Asks you to judge files: writes them and the request into the board. Also adds a redo to an existing request."
+                },
+                {
+                  "term": "list_reviews",
+                  "md": "Your decisions and comments. By default only the items you decided that the agent has not acted on yet."
+                },
+                {
+                  "term": "wait_for_reviews",
+                  "md": "Waits until you have decided something and returns it, or returns nothing after at most four minutes so the agent can ask again. This is how an agent listens for your answers while it works."
+                },
+                {
+                  "term": "handle_review_item",
+                  "md": "Records that the agent acted on a decision, and where an approved file went. When nothing is left to answer or handle, the request is removed."
+                },
+                {
+                  "term": "close_review",
+                  "md": "Removes a finished request. Refused while items are still waiting, unless forced."
+                }
+              ]
+            },
+            {
+              "type": "prose",
+              "md": "**Rules.** A board's rules live in the repository, and Tasks passes them to the agent with `get_board_rules`:"
+            },
+            {
+              "type": "list",
+              "items": [
+                "**For the whole repository:** the root `README.md`, the card template `TASK_TEMPLATE.md`, and `AGENTS.md` or `RULES.md` if you add them.",
+                "**For one board:** the board's own `README.md`, and `AGENTS.md` or `RULES.md` in its folder. Where the two levels differ, the board's own rules win.",
+                "**Enforced by the app:** a card's `priority`, `type`, `epic`, `assignee` and `status` must be values the board has. Anything else is refused with the list of allowed values. Rules written as prose are handed to the agent to follow."
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "info",
+              "icon": "💡",
+              "title": "This Mac only",
+              "md": "Agent Access listens on your Mac only and every request needs a token that Tasks keeps in a file only your user can read. Nothing is reachable from another machine. **New Token** in the sheet replaces it."
+            }
+          ]
+        },
+        {
+          "id": "tasks-faq",
           "label": "FAQ",
           "title": "FAQ",
           "blocks": [
@@ -317,19 +672,39 @@
               "items": [
                 {
                   "q": "Does it need a local clone?",
-                  "md": "No, on any platform. The app talks to your host's REST API over HTTPS — it reads directories and files, and commits changes back. Nothing is cloned to the device, the Mac included."
+                  "md": "No, on any platform. The app talks to your host's REST API over HTTPS — it reads directories and files, and commits changes back. Nothing is cloned to the device, the Mac included. It can also open a folder on your Mac directly."
                 },
                 {
                   "q": "Which hosts work?",
-                  "md": "GitHub, GitLab.com, and self-hosted GitLab, using a personal access token you supply."
+                  "md": "GitHub, GitLab.com, and self-hosted GitLab. Sign in to GitHub, or use a personal access token you supply. Live updates work on all three."
+                },
+                {
+                  "q": "Is it called Kanban or Tasks?",
+                  "md": "Tasks. The app was called GitKittie Kanban before; it is the same app and the same App Store record, and your boards and settings carry over."
                 },
                 {
                   "q": "Is there a Mac app?",
-                  "md": "Yes — it shipped at 1.0 and is on the Mac App Store. It is the same App Store record as the iPhone and iPad app, so one purchase covers all three, and they share the same board contract: a board authored on one platform renders on the others."
+                  "md": "Yes — it is on the Mac App Store. It is the same App Store record as the iPhone and iPad app, so one purchase covers all three, and they share the same board contract: a board authored on one platform renders on the others."
                 },
                 {
                   "q": "Is there realtime collaboration?",
-                  "md": "No, and it is not planned. There is no hosted service and no account — you bring your own host and token."
+                  "md": "There are no shared cursors and no hosted workspace. With live updates turned on for a repository, a change someone pushes appears on your open board within a couple of seconds. You still bring your own host and token."
+                },
+                {
+                  "q": "Can an agent use my board without cloning the repository?",
+                  "md": "Yes, on the Mac. Turn on Agent Access and the agent works on the board through Tasks. See Agents."
+                },
+                {
+                  "q": "How does an agent find out that I answered a review?",
+                  "md": "It asks Tasks. `list_reviews` returns what you decided, and `wait_for_reviews` holds on until there is something new. There is no webhook to set up. See Reviews and Agents."
+                },
+                {
+                  "q": "Why did a notification arrive late?",
+                  "md": "Tasks finds news by looking for it, not by being pushed to. On iPhone and iPad it looks while open and when the system gives it background time. See Sync & Updates."
+                },
+                {
+                  "q": "Why does a card show its file name as its title?",
+                  "md": "The card has no `title` in its frontmatter and no heading in its body. Give it a title and it shows that instead."
                 }
               ]
             }
@@ -338,7 +713,7 @@
       ]
     },
     {
-      "id": "gitbud",
+      "id": "bud",
       "label": "Bud",
       "name": "GitKittie Bud",
       "sections": [

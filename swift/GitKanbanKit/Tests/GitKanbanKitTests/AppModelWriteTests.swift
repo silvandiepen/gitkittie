@@ -98,6 +98,41 @@ final class AppModelWriteTests: XCTestCase {
         XCTAssertEqual(cards(model, "to-do").map { $0.fields.id }, reversed)
     }
 
+    func testPlaceInAnotherLaneBetweenTasks() async {
+        let model = await loaded()
+        let card = cards(model, "to-do").first!
+        let done = cards(model, "done").map { $0.fields.id }
+        XCTAssertGreaterThanOrEqual(done.count, 2)
+        await model.placeCard(card, in: lane(model, "done"), before: done[1])
+        var expected = done
+        expected.insert(card.fields.id, at: 1)
+        XCTAssertEqual(cards(model, "done").map { $0.fields.id }, expected)
+        // And it is what was saved, not only what is shown.
+        await model.selectProject(model.selectedProject!)
+        XCTAssertEqual(cards(model, "done").map { $0.fields.id }, expected)
+        XCTAssertFalse(cards(model, "to-do").contains { $0.fields.id == card.fields.id })
+    }
+
+    func testPlaceWithinLane() async {
+        let model = await loaded()
+        let ids = cards(model, "to-do").map { $0.fields.id }
+        let last = cards(model, "to-do").last!
+        await model.placeCard(last, in: lane(model, "to-do"), before: ids[0])
+        let expected = [last.fields.id] + ids.dropLast()
+        XCTAssertEqual(cards(model, "to-do").map { $0.fields.id }, expected)
+        await model.selectProject(model.selectedProject!)
+        XCTAssertEqual(cards(model, "to-do").map { $0.fields.id }, expected)
+    }
+
+    func testOrdersWriteOneValueInANumberedLane() {
+        XCTAssertEqual(AppModel.orders(placing: 1, in: ["1", nil, "2"]), [1: "1.5"])
+        XCTAssertEqual(AppModel.orders(placing: 0, in: [nil, "1", "2"]), [0: "0"])
+        XCTAssertEqual(AppModel.orders(placing: 2, in: ["1", "2.5", nil]), [2: "3"])
+        // Not numbered yet: every task gets its position.
+        XCTAssertEqual(AppModel.orders(placing: 1, in: [nil, nil, nil]), [0: "1", 1: "2", 2: "3"])
+        XCTAssertEqual(AppModel.orders(placing: 0, in: ["9"]), [0: "1"])
+    }
+
     func testFilters() async {
         let model = await loaded()
         model.filterAssignee = "sil"

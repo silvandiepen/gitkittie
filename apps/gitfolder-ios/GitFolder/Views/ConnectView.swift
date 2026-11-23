@@ -41,10 +41,12 @@ struct ConnectView: View {
                 Section {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red).font(.callout)
+                        .listRowBackground(Theme.panel)
                 }
             }
 
         }
+        .themedList()
         .navigationTitle("Connect")
         // Copy the code as soon as it arrives so it is ready to paste, but do not open
         // GitHub yet — the page asks for the code immediately, and opening it first puts
@@ -84,6 +86,7 @@ struct ConnectView: View {
             }
             .buttonStyle(.borderedProminent)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .listRowBackground(Theme.panel)
         } header: {
             Text("No account?")
         } footer: {
@@ -99,11 +102,13 @@ struct ConnectView: View {
                 ForEach(ProviderChoice.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.menu)
+            .listRowBackground(Theme.panel)
             if choice.needsServerURL {
                 TextField("GitLab server URL (e.g. git.acme.com)", text: $serverURL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
+                    .listRowBackground(Theme.panel)
             }
         }
     }
@@ -123,6 +128,7 @@ struct ConnectView: View {
                 }
             }
             .disabled(model.isConnecting)
+            .listRowBackground(Theme.panel)
         } footer: {
             Text("Authorise on github.com without leaving the app — no token to create.")
         }
@@ -141,7 +147,7 @@ struct ConnectView: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
-                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 10))
 
                 HStack {
                     Button {
@@ -165,6 +171,7 @@ struct ConnectView: View {
                 .padding(.top, 4)
             }
             .padding(.vertical, 4)
+            .listRowBackground(Theme.panel)
         }
     }
 
@@ -175,6 +182,7 @@ struct ConnectView: View {
             SecureField("Personal access token", text: $token)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .listRowBackground(Theme.panel)
             Button {
                 Task { await model.connect(choice: choice, serverURL: serverURL, token: token) }
             } label: {
@@ -185,6 +193,7 @@ struct ConnectView: View {
                 }
             }
             .disabled(token.trimmingCharacters(in: .whitespaces).isEmpty || model.isConnecting)
+            .listRowBackground(Theme.panel)
         } header: {
             Text(choice == .github ? "Or use a token" : "Personal access token")
         } footer: {

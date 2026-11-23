@@ -4,6 +4,21 @@ import XCTest
 @testable import GitFolder
 
 final class ConfigStoreTests: XCTestCase {
+    @MainActor
+    func testCloudflareAuthorizationRequestsConfiguredPermissions() throws {
+        let url = try CloudflareStorageConnectionService.authorizationURL(
+            clientID: "client-id",
+            redirectURI: "http://127.0.0.1:53682/oauth/cloudflare",
+            state: "state",
+            challenge: "challenge"
+        )
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let scope = try XCTUnwrap(components.queryItems?.first { $0.name == "scope" }?.value)
+
+        XCTAssertEqual(Set(scope.split(separator: " ").map(String.init)), Set(CloudflareStorageConnectionService.requestedScopes))
+        XCTAssertEqual(CloudflareStorageConnectionService.requestedScopes.count, 3)
+    }
+
     func testDefaultConfigKeepsPurchaseMetadataOutOfAppState() {
         let config = GitFolderConfig.empty
 
@@ -125,6 +140,55 @@ final class ConfigStoreTests: XCTestCase {
 
         let remoteHead = try runGit(["--git-dir", remote.path, "rev-parse", "main"], in: root)
         XCTAssertFalse(remoteHead.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    /// A light checkout that leaves `attachments/` out: a card edit syncs, and so does a
+    /// new attachment made locally in a left-out folder (plain `git add -A` refuses it).
+    func testSyncWorksInASparseCheckoutIncludingNewFilesInLeftOutFolders() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let remote = root.appending(path: "remote.git", directoryHint: .isDirectory)
+        let seed = root.appending(path: "seed", directoryHint: .isDirectory)
+        let light = root.appending(path: "light", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: seed.appending(path: "Pets/attachments/PETS-1"), withIntermediateDirectories: true)
+        let identity = ["-c", "user.name=GitFolder Test", "-c", "user.email=gitfolder@example.com"]
+
+        _ = try runGit(["init", "--bare"], in: remote)
+        _ = try runGit(["init", "-b", "main"], in: seed)
+        try "card".write(to: seed.appending(path: "Pets/PETS-1.md"), atomically: true, encoding: .utf8)
+        try "image".write(to: seed.appending(path: "Pets/attachments/PETS-1/shot.png"), atomically: true, encoding: .utf8)
+        _ = try runGit(["add", "-A"], in: seed)
+        _ = try runGit(identity + ["commit", "-m", "seed"], in: seed)
+        _ = try runGit(["push", remote.path, "main"], in: seed)
+
+        _ = try runGit(["clone", "--no-checkout", remote.path, light.path], in: root)
+        _ = try runGit(["sparse-checkout", "init", "--no-cone"], in: light)
+        try "/*\n!attachments/\n".write(to: light.appending(path: ".git/info/sparse-checkout"), atomically: true, encoding: .utf8)
+        _ = try runGit(["checkout", "main"], in: light)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: light.appending(path: "Pets/attachments/PETS-1/shot.png").path))
+
+        try "card, edited".write(to: light.appending(path: "Pets/PETS-1.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: light.appending(path: "Pets/attachments/PETS-2"), withIntermediateDirectories: true)
+        try "new image".write(to: light.appending(path: "Pets/attachments/PETS-2/new.png"), atomically: true, encoding: .utf8)
+
+        let folder = SyncedFolder.create(
+            name: "light", localPath: light.path, bookmarkData: nil, repoUrl: remote.path,
+            authMode: .ssh, branch: "main", syncIntervalMinutes: 15)
+        let engine = GitSyncEngine(now: { Date(timeIntervalSince1970: 1_700_000_000) })
+        let options = GitSyncOptions(
+            gitAuthorName: "GitFolder Test", gitAuthorEmail: "gitfolder@example.com",
+            githubToken: nil, sshPrivateKeyPath: nil, sshPrivateKeyBookmarkData: nil)
+        let outcome = try await engine.sync(folder, options: options)
+
+        XCTAssertTrue(outcome.pushed)
+        XCTAssertEqual(outcome.folder.lastStatus, .synced)
+        let pushed = try runGit(["--git-dir", remote.path, "ls-tree", "-r", "--name-only", "main"], in: root).standardOutput
+        XCTAssertTrue(pushed.contains("Pets/attachments/PETS-2/new.png"), pushed)
+        // What was left out of the checkout is still in the repository, untouched.
+        XCTAssertTrue(pushed.contains("Pets/attachments/PETS-1/shot.png"), pushed)
+        let card = try runGit(["--git-dir", remote.path, "show", "main:Pets/PETS-1.md"], in: root).standardOutput
+        XCTAssertEqual(card, "card, edited")
     }
 
     func testSyncPullsRemoteChangesWhenWorkingTreeIsClean() async throws {
@@ -362,6 +426,81 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertEqual(result.exitCode, 0, result.standardError)
         return result
     }
+}
+
+final class S3StorageServiceTests: XCTestCase {
+    override func tearDown() {
+        S3TestURLProtocol.handler = nil
+        super.tearDown()
+    }
+
+    func testConnectionUsesPathStyleBucketAndAWSV4Signature() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [S3TestURLProtocol.self]
+        let service = S3StorageService(
+            session: URLSession(configuration: configuration),
+            now: { Date(timeIntervalSince1970: 1_700_000_000) }
+        )
+        var settings = BucketStorageSettings.defaults
+        settings.enabled = true
+        settings.endpoint = "https://example.r2.cloudflarestorage.com"
+        settings.bucket = "project assets"
+        settings.region = "auto"
+
+        S3TestURLProtocol.handler = { request in
+            XCTAssertEqual(request.httpMethod, "HEAD")
+            XCTAssertEqual(request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedPath }, "/project%20assets")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "x-amz-date"), "20231114T221320Z")
+            XCTAssertTrue(request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("AWS4-HMAC-SHA256 Credential=access/20231114/auto/s3/aws4_request") == true)
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data())
+        }
+
+        try await service.testConnection(
+            bucket: settings.s3,
+            credentials: S3Credentials(accessKeyID: "access", secretAccessKey: "secret")
+        )
+    }
+
+    func testStreamingSHA256MatchesKnownDigest() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appending(path: "hello.txt")
+        try Data("hello".utf8).write(to: file)
+
+        XCTAssertEqual(
+            try S3StorageService.sha256(of: file),
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
+    }
+
+    func testStorageSettingsDecodeOlderConfigWithoutRegionOrProvider() throws {
+        let data = Data(#"{"enabled":true,"endpoint":"https://example.com","bucket":"assets","publicBaseURL":"https://cdn.example.com","minimumFileSizeMB":25,"offloadExtensions":["mov"],"keepDownloadedPatterns":["**/*.md"]}"#.utf8)
+        let settings = try JSONDecoder().decode(BucketStorageSettings.self, from: data)
+        XCTAssertEqual(settings.region, "auto")
+        XCTAssertEqual(settings.provider, .manual)
+    }
+}
+
+private final class S3TestURLProtocol: URLProtocol {
+    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        do {
+            guard let handler = Self.handler else { throw S3StorageError.invalidResponse }
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
 }
 
 private final class FakeGitRunner: GitRunning, @unchecked Sendable {

@@ -1,0 +1,1129 @@
+/* BEGIN vendored nizel-style — managed by `npm run nizel-style:sync`. Do not edit by hand. */
+:where(.nizel-content, [data-nizel-content], .nizel-prose) {
+  --nizel-foreground: var(--foreground, #1f2328);
+  --nizel-background: var(--background, transparent);
+  --nizel-primary: var(--primary, #2563eb);
+  --nizel-secondary: var(--secondary, #7c3aed);
+  --nizel-accent: var(--accent, var(--nizel-primary));
+  --nizel-success: var(--success, #1a7f37);
+  --nizel-warning: var(--warning, #9a6700);
+  --nizel-error: var(--error, #b42318);
+  --nizel-info: var(--info, #0969da);
+  --nizel-muted: var(--muted, color-mix(in srgb, var(--nizel-foreground) 68%, transparent));
+  --nizel-border: var(--border, color-mix(in srgb, var(--nizel-foreground) 14%, transparent));
+  --nizel-surface: var(--surface, color-mix(in srgb, var(--nizel-foreground) 4%, transparent));
+  --nizel-surface-raised: var(--surface-raised, color-mix(in srgb, var(--nizel-foreground) 7%, transparent));
+  --nizel-code-foreground: var(--code-foreground, var(--nizel-foreground));
+  --nizel-code-background: var(--code-background, color-mix(in srgb, var(--nizel-foreground) 7%, transparent));
+  --nizel-selection-background: var(--selection-background, color-mix(in srgb, var(--nizel-primary) 22%, transparent));
+  --nizel-selection-foreground: var(--selection-foreground, var(--nizel-foreground));
+  --nizel-font-body: var(--font-body, -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif);
+  --nizel-font-heading: var(--font-heading, var(--nizel-font-body));
+  --nizel-font-code: var(--font-code, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  --nizel-size: var(--font-size, 1em);
+  --nizel-leading: var(--line-height, 1.66);
+  --nizel-flow: 1.35em;
+  --nizel-font-size: var(--nizel-size);
+  --nizel-line-height: var(--nizel-leading);
+  --nizel-flow-space: var(--nizel-flow);
+  --nizel-section-space: calc(var(--nizel-flow) * 2.2);
+  --nizel-content-width: var(--content-width, 72ch);
+  --nizel-wide-width: var(--wide-width, 100%);
+  --nizel-space-xxs: 0.25em;
+  --nizel-space-xs: 0.5em;
+  --nizel-space-s: 0.75em;
+  --nizel-space: 1em;
+  --nizel-space-l: 1.35em;
+  --nizel-space-xl: 2em;
+  --nizel-space-xxl: 3em;
+  --nizel-radius-sm: 0.3125em;
+  --nizel-radius-md: 0.5em;
+  --nizel-radius-lg: 0.75em;
+  --nizel-image-radius: var(--nizel-radius-sm);
+  --nizel-alert-radius: var(--nizel-radius-md);
+  color: var(--nizel-foreground);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose):where(.nizel-compact, [data-nizel-preset=compact]) {
+  --nizel-size: 0.875em;
+  --nizel-leading: 1.58;
+  --nizel-flow: 1em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose):where(.nizel-docs, [data-nizel-preset=docs]) {
+  --nizel-size: 0.9375em;
+  --nizel-leading: 1.72;
+  --nizel-flow: 1.45em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose):where(.nizel-reading, [data-nizel-preset=reading]) {
+  --nizel-size: 1.125em;
+  --nizel-leading: 1.86;
+  --nizel-flow: 1.8em;
+  --nizel-font-heading: var(--font-reading-heading, var(--font-serif, Georgia, "Times New Roman", serif));
+  --nizel-font-body: var(--font-reading-body, var(--font-serif, Georgia, "Times New Roman", serif));
+  --nizel-content-width: 68ch;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose):where(.nizel-large, [data-nizel-preset=large]) {
+  --nizel-size: 1.0625em;
+  --nizel-leading: 1.9;
+  --nizel-flow: 1.75em;
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(.nizel-content, [data-nizel-content], .nizel-prose) {
+    --nizel-foreground: var(--foreground, #f0f3f6);
+    --nizel-background: var(--background, transparent);
+    --nizel-primary: var(--primary, #79c0ff);
+    --nizel-secondary: var(--secondary, #d2a8ff);
+    --nizel-success: var(--success, #7ee787);
+    --nizel-warning: var(--warning, #d29922);
+    --nizel-error: var(--error, #ff7b72);
+    --nizel-info: var(--info, #79c0ff);
+  }
+}
+:where(.nizel-content, [data-nizel-content], .nizel-prose):where([data-nizel-theme=light], .nizel-theme-light),
+:where([data-nizel-theme=light], .nizel-theme-light) :where(.nizel-content, [data-nizel-content], .nizel-prose) {
+  --nizel-foreground: var(--foreground, #1f2328);
+  --nizel-background: var(--background, #ffffff);
+  --nizel-primary: var(--primary, #2563eb);
+  --nizel-secondary: var(--secondary, #7c3aed);
+  --nizel-success: var(--success, #1a7f37);
+  --nizel-warning: var(--warning, #9a6700);
+  --nizel-error: var(--error, #b42318);
+  --nizel-info: var(--info, #0969da);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose):where([data-nizel-theme=dark], .nizel-theme-dark),
+:where([data-nizel-theme=dark], .nizel-theme-dark) :where(.nizel-content, [data-nizel-content], .nizel-prose) {
+  --nizel-foreground: var(--foreground, #f0f3f6);
+  --nizel-background: var(--background, #0d1117);
+  --nizel-primary: var(--primary, #79c0ff);
+  --nizel-secondary: var(--secondary, #d2a8ff);
+  --nizel-success: var(--success, #7ee787);
+  --nizel-warning: var(--warning, #d29922);
+  --nizel-error: var(--error, #ff7b72);
+  --nizel-info: var(--info, #79c0ff);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) {
+  color: var(--nizel-foreground);
+  font-family: var(--nizel-font-body);
+  font-size: var(--nizel-font-size);
+  line-height: var(--nizel-line-height);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) *,
+:where(.nizel-content, [data-nizel-content], .nizel-prose) *::before,
+:where(.nizel-content, [data-nizel-content], .nizel-prose) *::after {
+  box-sizing: border-box;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose)::selection {
+  color: var(--nizel-selection-foreground);
+  background: var(--nizel-selection-background);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(h1, h2, h3, h4, h5, h6, p, blockquote, figure, pre, ul, ol, dl, table, details, form, hr, img) {
+  margin: 0;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) > * + * {
+  margin-top: var(--nizel-flow-space, var(--nizel-space-l));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(h1, h2, h3, h4, h5, h6, p, blockquote, figure, pre, ul, ol, dl, table, details, form, hr, img) + :where(h1, h2, h3, h4, h5, h6, p, blockquote, figure, pre, ul, ol, dl, table, details, form, hr, img) {
+  margin-top: var(--nizel-space-l);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(p, blockquote, figure, pre, ul, ol, dl, table, details, form, hr, img) + :where(h2, h3, h4) {
+  margin-top: var(--nizel-space-xxl);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) > * + :where(h2, h3, h4) {
+  margin-top: var(--nizel-section-space, var(--nizel-space-xxl));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(h1, h2, h3, h4, h5, h6) {
+  color: var(--nizel-heading, var(--nizel-foreground));
+  font-family: var(--nizel-font-heading);
+  font-weight: 680;
+  line-height: 1.14;
+  overflow-wrap: anywhere;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) h1 {
+  font-size: 2.15em;
+  line-height: 1.04;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) h2 {
+  font-size: 1.58em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) h3 {
+  font-size: 1.28em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) h4 {
+  font-size: 1.125em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) h5 {
+  font-size: 1em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) h6 {
+  color: var(--nizel-muted);
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) p {
+  max-width: var(--nizel-copy-width, var(--nizel-content-width));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(h1, h2) + p {
+  font-size: var(--nizel-lead-font-size, 1.1em);
+  line-height: var(--nizel-lead-line-height, 1.5);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) a {
+  color: var(--nizel-link, var(--nizel-primary));
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 36%, transparent);
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) a:hover {
+  color: var(--nizel-link-hover, var(--nizel-secondary));
+  text-decoration-thickness: 0.12em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(strong, b) {
+  font-weight: 700;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(em, i) {
+  font-style: italic;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(ul, ol) {
+  padding-left: calc(var(--nizel-space-l) + var(--nizel-space-xxs));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) ul {
+  list-style: none;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) ul > li {
+  position: relative;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) ul > li::before {
+  content: "";
+  position: absolute;
+  top: var(--nizel-space-s);
+  left: calc(var(--nizel-space) * -1);
+  width: var(--nizel-space-xs);
+  height: var(--nizel-space-xs);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--nizel-foreground) 44%, transparent);
+  transform: translateY(-50%);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) li + li {
+  margin-top: var(--nizel-space-xxs);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) dl {
+  display: grid;
+  gap: var(--nizel-space-xs) var(--nizel-space);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) dt {
+  font-weight: 700;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) dd {
+  margin: 0;
+  color: var(--nizel-muted);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) blockquote {
+  color: var(--nizel-muted);
+  padding-left: var(--nizel-space);
+  border-left: 3px solid color-mix(in srgb, var(--nizel-foreground) 26%, transparent);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) hr {
+  height: 1px;
+  margin: var(--nizel-space-xxl) 0;
+  border: 0;
+  background: var(--nizel-border);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(code, kbd, samp, pre) {
+  font-family: var(--nizel-font-code);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :not(pre) > code {
+  color: var(--nizel-code-foreground);
+  padding: calc(var(--nizel-space-xs) / 2) var(--nizel-space-xs);
+  border-radius: var(--nizel-radius-sm);
+  background: var(--nizel-code-background);
+  font-size: 0.8em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) pre {
+  overflow: auto;
+  padding: var(--nizel-space) var(--nizel-space-l);
+  border: 0;
+  border-radius: var(--nizel-code-block-radius, var(--nizel-radius-md));
+  background: var(--nizel-code-block-background, var(--nizel-code-background));
+  color: var(--nizel-code-foreground);
+  font-size: 0.9em;
+  line-height: 1.7;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) pre code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) img,
+:where(.nizel-content, [data-nizel-content], .nizel-prose) video,
+:where(.nizel-content, [data-nizel-content], .nizel-prose) canvas,
+:where(.nizel-content, [data-nizel-content], .nizel-prose) svg {
+  max-width: 100%;
+  height: auto;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) img {
+  display: block;
+  border-radius: var(--nizel-image-radius);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) figure {
+  max-width: var(--nizel-wide-width);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) figcaption {
+  margin-top: var(--nizel-space-xs);
+  color: var(--nizel-muted);
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(th, td) {
+  padding: var(--nizel-space-s) var(--nizel-space-s);
+  border: 0;
+  border-bottom: 1px solid var(--nizel-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) th {
+  color: var(--nizel-muted);
+  font-weight: 700;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :focus-visible {
+  outline: 2px solid var(--nizel-focus, var(--nizel-primary));
+  outline-offset: var(--nizel-space-xxs);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) abbr[title] {
+  cursor: help;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 48%, transparent);
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .alert {
+  --nizel-alert-color: var(--nizel-info);
+  display: grid;
+  gap: var(--nizel-space-xs);
+  padding: var(--nizel-space);
+  border: 1px solid color-mix(in srgb, var(--nizel-alert-color) 32%, transparent);
+  border-left-width: 4px;
+  border-radius: var(--nizel-alert-radius);
+  background: color-mix(in srgb, var(--nizel-alert-color) 9%, transparent);
+  color: var(--nizel-foreground);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .alert--note {
+  --nizel-alert-color: var(--nizel-info);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .alert--tip {
+  --nizel-alert-color: var(--nizel-success);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .alert--important {
+  --nizel-alert-color: var(--nizel-secondary);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .alert--warning {
+  --nizel-alert-color: var(--nizel-warning);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .alert--caution {
+  --nizel-alert-color: var(--nizel-error);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .alert__title {
+  margin: 0;
+  color: var(--nizel-alert-color);
+  font-family: var(--nizel-font-heading);
+  font-weight: 720;
+  line-height: 1.3;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .alert__content > :first-child {
+  margin-top: 0;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .alert__content > :last-child {
+  margin-bottom: 0;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .citation {
+  color: var(--nizel-secondary);
+  font-size: 0.88em;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .citation:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .citations {
+  padding-top: var(--nizel-space-l);
+  border-top: 1px solid var(--nizel-border);
+  color: var(--nizel-muted);
+  font-size: 0.92em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .citations ol {
+  margin: 0;
+  padding-left: var(--nizel-space-l);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-code-copy {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--nizel-radius-lg);
+  background: var(--nizel-code-block-background, var(--nizel-code-background));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-code-copy > figcaption {
+  margin: 0;
+  padding: var(--nizel-space-s) calc(var(--nizel-space-xxl) + var(--nizel-space-xl)) var(--nizel-space-s) var(--nizel-space);
+  border-bottom: 1px solid var(--nizel-border);
+  color: var(--nizel-muted);
+  font-family: var(--nizel-font-code);
+  font-size: 0.78em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-code-copy pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-code-copy__button {
+  appearance: none;
+  position: absolute;
+  aspect-ratio: 1/1;
+  top: var(--nizel-space-xs);
+  right: var(--nizel-space-xs);
+  width: calc(var(--nizel-space) + var(--nizel-space-s));
+  min-height: calc(var(--nizel-space) + var(--nizel-space-s));
+  padding: 0 var(--nizel-space-xs);
+  border: 0;
+  border-radius: var(--nizel-radius-sm);
+  background: var(--nizel-surface-raised);
+  color: var(--nizel-foreground);
+  font: 600 0.78em/1 var(--nizel-font-body);
+  cursor: pointer;
+  overflow: hidden;
+  text-indent: 100%;
+  white-space: nowrap;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-code-copy__button::before,
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-code-copy__button::after {
+  content: "";
+  display: block;
+  width: 0.66em;
+  height: 0.8em;
+  border: 1px solid currentColor;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-code-copy__button::after {
+  margin: -0.2em;
+  border-bottom: 0;
+  border-right: 0;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-code-copy__button:hover {
+  color: var(--nizel-primary);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) dl:not(.frontmatter) {
+  padding: var(--nizel-space);
+  border: 1px solid var(--nizel-border);
+  border-radius: var(--nizel-radius-lg);
+  background: var(--nizel-surface);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) dl:not(.frontmatter) dt + dd {
+  margin-top: calc(var(--nizel-space-xxs) * -1);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) details.details {
+  padding: 0;
+  border: 1px solid var(--nizel-border);
+  border-radius: var(--nizel-radius-lg);
+  background: var(--nizel-surface);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) details.details > summary {
+  cursor: pointer;
+  padding: var(--nizel-space-s) var(--nizel-space);
+  color: var(--nizel-foreground);
+  font-family: var(--nizel-font-heading);
+  font-weight: 680;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) details.details > summary:hover {
+  color: var(--nizel-primary);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) details.details[open] > summary {
+  border-bottom: 1px solid var(--nizel-border);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) details.details > :not(summary) {
+  margin: var(--nizel-space);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .mermaid {
+  overflow: auto;
+  padding: var(--nizel-space);
+  border: 1px solid var(--nizel-border);
+  border-radius: var(--nizel-radius-lg);
+  background: var(--nizel-surface);
+  color: var(--nizel-foreground);
+  text-align: center;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .mermaid svg {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .mermaid :where(.edgePaths path, .flowchart-link, .messageLine0, .messageLine1, .relationshipLine) {
+  stroke: var(--nizel-diagram-line, var(--nizel-primary)) !important;
+  stroke-width: 2px !important;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .mermaid :where(marker path, marker polygon) {
+  fill: var(--nizel-diagram-line, var(--nizel-primary)) !important;
+  stroke: var(--nizel-diagram-line, var(--nizel-primary)) !important;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .mermaid :where(.edgeLabel, .labelBkg) {
+  background-color: var(--nizel-surface) !important;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .mermaid :where(.edgeLabel rect, .labelBkg) {
+  fill: var(--nizel-surface) !important;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .mermaid :where(.node rect, .node circle, .node ellipse, .node polygon, .node path) {
+  fill: var(--nizel-diagram-node-background, color-mix(in srgb, var(--nizel-primary) 10%, var(--nizel-background))) !important;
+  stroke: var(--nizel-diagram-node-border, color-mix(in srgb, var(--nizel-primary) 46%, var(--nizel-border))) !important;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .mermaid :where(.nodeLabel, .label, text, tspan) {
+  fill: var(--nizel-diagram-text, var(--nizel-foreground)) !important;
+  color: var(--nizel-diagram-text, var(--nizel-foreground)) !important;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .footnote-ref {
+  display: inline-flex;
+  min-width: 1.1em;
+  height: 1.1em;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--nizel-primary) 12%, transparent);
+  color: var(--nizel-primary);
+  font-size: 0.72em;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .footnotes {
+  padding-top: var(--nizel-space-l);
+  border-top: 1px solid var(--nizel-border);
+  color: var(--nizel-muted);
+  font-size: 0.92em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .footnotes ol {
+  margin: 0;
+  padding-left: var(--nizel-space-l);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .footnotes__backref {
+  color: var(--nizel-primary);
+  text-decoration: none;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .frontmatter {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--nizel-space-xs) var(--nizel-space);
+  padding: var(--nizel-space);
+  border: 1px solid var(--nizel-border);
+  border-radius: var(--nizel-radius-lg);
+  background: var(--nizel-surface);
+  font-size: 0.92em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .frontmatter dt {
+  color: var(--nizel-muted);
+  font-weight: 700;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .frontmatter dd {
+  color: var(--nizel-foreground);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .heading-anchor {
+  display: inline-flex;
+  width: 0.9em;
+  height: 0.9em;
+  margin-left: var(--nizel-space-xxs);
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: color-mix(in srgb, currentColor 42%, transparent);
+  font-size: 0.62em;
+  line-height: 1;
+  opacity: 0;
+  text-decoration: none;
+  transform: translateY(-0.05em);
+  transition: color 160ms ease, background-color 160ms ease, opacity 160ms ease;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .heading-anchor::before {
+  content: "#";
+  font-weight: 760;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(h1, h2, h3, h4, h5, h6):hover .heading-anchor,
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .heading-anchor:focus-visible {
+  opacity: 1;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .heading-anchor:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: currentColor;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-hidden-comment {
+  user-select: text;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-hidden-comment--hide {
+  border: 0;
+  color: rgba(255, 255, 255, 0);
+  display: inline-block;
+  font-size: 1px;
+  height: 0;
+  line-height: 0;
+  margin: 0;
+  max-height: 0;
+  max-width: 0;
+  overflow: hidden;
+  padding: 0;
+  vertical-align: baseline;
+  width: 0;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-hidden-comment--small {
+  color: color-mix(in srgb, currentColor 60%, transparent);
+  display: inline;
+  font-size: 0.75em;
+  line-height: 1;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-hidden-comment--render {
+  display: inline;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-pagebreak {
+  display: flex;
+  align-items: center;
+  gap: var(--nizel-space-s);
+  margin: var(--nizel-section-space) 0;
+  break-after: page;
+  page-break-after: always;
+  color: color-mix(in srgb, var(--nizel-muted) 78%, transparent);
+  font-size: 0.75em;
+  font-weight: 650;
+  line-height: 1;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-pagebreak::before,
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-pagebreak::after {
+  content: "";
+  flex: 1 1 auto;
+  border-top: 1px dashed color-mix(in srgb, var(--nizel-border) 72%, transparent);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-pagebreak::after {
+  content: "Page break";
+  flex: 0 0 auto;
+  border-top: 0;
+}
+
+@media print {
+  :where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-pagebreak {
+    display: block;
+    height: 0;
+    margin: 0;
+    overflow: hidden;
+    border: 0;
+    color: transparent;
+  }
+  :where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-pagebreak::before,
+  :where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-pagebreak::after {
+    content: none;
+    display: none;
+  }
+}
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .math {
+  font-family: var(--nizel-font-code);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .math-inline {
+  padding: calc(var(--nizel-space-xxs) / 2) var(--nizel-space-xxs);
+  border-radius: var(--nizel-radius-sm);
+  background: color-mix(in srgb, var(--nizel-secondary) 10%, transparent);
+  color: var(--nizel-secondary);
+  font-size: 0.92em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .math-display {
+  overflow: auto;
+  padding: var(--nizel-space);
+  border: 1px solid color-mix(in srgb, var(--nizel-secondary) 24%, var(--nizel-border));
+  border-radius: var(--nizel-radius-lg);
+  background: color-mix(in srgb, var(--nizel-secondary) 7%, transparent);
+  color: var(--nizel-foreground);
+  text-align: center;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .media-figure {
+  max-width: var(--nizel-wide-width);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .media-figure img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  border-radius: var(--nizel-image-radius);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .media-figure figcaption {
+  max-width: var(--nizel-copy-width, var(--nizel-content-width));
+  color: var(--nizel-muted);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .shiki,
+:where(.nizel-content, [data-nizel-content], .nizel-prose) pre.shiki {
+  overflow: auto;
+  padding: var(--nizel-space);
+  border: 1px solid var(--nizel-border);
+  border-radius: var(--nizel-radius-lg);
+  background: var(--nizel-code-block-background, var(--nizel-code-background));
+  color: var(--nizel-code-foreground);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .shiki code {
+  display: block;
+  min-width: max-content;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(.hl-keyword, .hl-operator) {
+  color: var(--nizel-shiki-keyword, var(--nizel-error));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(.hl-string, .hl-value) {
+  color: var(--nizel-shiki-string, var(--nizel-info));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .hl-comment {
+  color: var(--nizel-shiki-comment, var(--nizel-muted));
+  font-style: italic;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(.hl-number, .hl-property, .hl-type) {
+  color: var(--nizel-shiki-number, var(--nizel-primary));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(.hl-function, .hl-builtin, .hl-attr) {
+  color: var(--nizel-shiki-function, var(--nizel-secondary));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .hl-tag {
+  color: var(--nizel-shiki-tag, var(--nizel-success));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .hl-punctuation {
+  color: var(--nizel-shiki-punctuation, var(--nizel-foreground));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) li:has(.nizel-task-list__label)::before {
+  content: none;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__label {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--nizel-task-gap, var(--nizel-space-s));
+  align-items: start;
+  max-inline-size: var(--nizel-copy-width, var(--nizel-content-width));
+  cursor: pointer;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__content {
+  min-inline-size: 0;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  place-content: center;
+  flex: 0 0 auto;
+  inline-size: var(--nizel-task-size, 1.15em);
+  block-size: var(--nizel-task-size, 1.15em);
+  margin: var(--nizel-task-offset-y, 0.16em) 0 0;
+  border: 1px solid var(--nizel-task-border, color-mix(in srgb, var(--nizel-foreground) 22%, transparent));
+  border-radius: var(--nizel-task-radius, var(--nizel-radius-sm));
+  background: var(--nizel-task-background, var(--nizel-background));
+  color: var(--nizel-task-checkmark, var(--nizel-primary));
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--nizel-primary) 0%, transparent);
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__checkbox::before {
+  content: "";
+  inline-size: var(--nizel-task-checkmark-width, 0.6em);
+  block-size: var(--nizel-task-checkmark-height, 0.35em);
+  border-left: var(--nizel-task-checkmark-stroke, 0.14em) solid currentColor;
+  border-bottom: var(--nizel-task-checkmark-stroke, 0.14em) solid currentColor;
+  transform: translateY(var(--nizel-task-checkmark-offset-y, -0.03em)) rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform 160ms ease;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__checkbox:where(:hover, :focus-visible) {
+  border-color: var(--nizel-task-hover-border, var(--nizel-primary));
+  box-shadow: 0 0 0 0.22em var(--nizel-task-ring, color-mix(in srgb, var(--nizel-primary) 18%, transparent));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__checkbox:active {
+  transform: scale(0.94);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__checkbox:checked {
+  border-color: var(--nizel-task-checked-border, var(--nizel-primary));
+  background: var(--nizel-task-checked-background, color-mix(in srgb, var(--nizel-primary) 12%, var(--nizel-background)));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__checkbox:checked::before {
+  transform: translateY(var(--nizel-task-checkmark-offset-y, -0.03em)) rotate(-45deg) scale(1);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__checkbox:disabled {
+  cursor: default;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__checkbox:disabled:where(:hover, :focus-visible) {
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__checkbox,
+  :where(.nizel-content, [data-nizel-content], .nizel-prose) .nizel-task-list__checkbox::before {
+    transition: none;
+  }
+}
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .toc {
+  padding: var(--nizel-space);
+  border: 1px solid var(--nizel-border);
+  border-radius: var(--nizel-radius-lg);
+  background: var(--nizel-surface);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .toc ol {
+  display: grid;
+  gap: var(--nizel-space-xs);
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .toc li {
+  margin: 0;
+  padding-left: 0;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .toc li[data-depth="3"] {
+  padding-left: var(--nizel-space);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .toc li[data-depth="4"] {
+  padding-left: var(--nizel-space-xl);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .toc li[data-depth="5"] {
+  padding-left: var(--nizel-space-xxl);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .toc li[data-depth="6"] {
+  padding-left: calc(var(--nizel-space-xl) + var(--nizel-space-xl));
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .toc li::before {
+  content: none;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .toc a {
+  color: var(--nizel-foreground);
+  text-decoration: none;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) .toc a:hover {
+  color: var(--nizel-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) mark {
+  padding: calc(var(--nizel-space-xxs) / 2) var(--nizel-space-xxs);
+  border-radius: var(--nizel-radius-sm);
+  background: color-mix(in srgb, var(--nizel-warning) 22%, transparent);
+  color: var(--nizel-foreground);
+}
+
+:where(.nizel-content, [data-nizel-content], .nizel-prose) :where(sub, sup) {
+  font-size: 0.72em;
+  line-height: 0;
+}
+/* END vendored nizel-style */
+
+/* Lezin preview shell */
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  font-size: 16px;
+  line-height: 1.62;
+  --lezin-content-max-width: 840px;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  color: var(--lezin-text, #1f2328);
+  background: var(--lezin-background, transparent);
+  padding: 28px 30px 44px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-lezin-root] {
+  --foreground: var(--lezin-text, #1f2328);
+  --background: var(--lezin-background, transparent);
+  --primary: var(--lezin-accent, #2563eb);
+  --secondary: var(--lezin-accent, #7c3aed);
+  --border: var(--lezin-blockquote-border, color-mix(in srgb, var(--lezin-text, currentColor) 18%, transparent));
+  --code-background: var(--lezin-code-background, color-mix(in srgb, var(--lezin-text, currentColor) 7%, transparent));
+  --nizel-heading: var(--lezin-heading, var(--lezin-text, currentColor));
+  --nizel-content-width: var(--lezin-content-max-width);
+  --nizel-copy-width: var(--lezin-content-max-width);
+  max-width: var(--lezin-content-max-width);
+  margin: 0 auto;
+  outline: none;
+}
+
+[data-lezin-root] img[data-lezin-selected-image="true"] {
+  outline: 3px solid var(--lezin-accent, #2563eb);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.lezin-floating-menu {
+  position: fixed;
+  z-index: 1000;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 164px;
+  padding: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 13px;
+  background: rgba(24, 24, 26, 0.96);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.34);
+  color: #f5f5f7;
+  backdrop-filter: blur(18px);
+}
+
+.lezin-floating-menu:has(button:nth-child(-n+3):last-child) {
+  flex-direction: row;
+  min-width: 0;
+  transform: translate(-50%, 0);
+}
+
+/* The compact icon-only bar shown under a text selection. */
+.lezin-floating-menu.lezin-selection-bar {
+  flex-direction: row;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 4px;
+  border-radius: 10px;
+  transform: translate(-50%, 0);
+}
+
+.lezin-selection-bar button {
+  padding: 6px 7px;
+  gap: 0;
+}
+
+.lezin-selection-bar button > span:not(.lezin-menu-icon) {
+  display: none;
+}
+
+.lezin-selection-bar .lezin-menu-separator {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  align-self: center;
+}
+
+.lezin-floating-menu button {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.1;
+  text-align: left;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.lezin-floating-menu button:hover {
+  background: color-mix(in srgb, var(--lezin-accent, Highlight) 28%, rgba(255, 255, 255, 0.08));
+}
+
+.lezin-menu-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 22px;
+  min-width: 22px;
+  height: 18px;
+  border-radius: 5px;
+  color: rgba(245, 245, 247, 0.8);
+  font-size: 11px;
+  font-weight: 650;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.lezin-menu-icon::before {
+  content: attr(data-icon);
+}
+
+.lezin-menu-separator {
+  height: 1px;
+  margin: 4px 3px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Thin, trackless scrollbar: transparent background, half-grey thumb. */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.75);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

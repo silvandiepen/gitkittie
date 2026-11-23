@@ -13,6 +13,6 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   build
 
-APP="build/Build/Products/Debug/GitKanban.app"
+APP="build/Build/Products/Debug/Tasks.app"
 echo "Launching $APP"
 open "$APP"

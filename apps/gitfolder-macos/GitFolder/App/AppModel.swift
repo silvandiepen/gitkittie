@@ -13,12 +13,20 @@ final class AppModel {
     var focusedFolderID: UUID?
     var hasGitHubToken = false
     var gitHubLogin: String?
+    var isRunningStorage = false
+    var storageMessage: String?
+    var cloudflareAccounts: [CloudflareAccount] = []
+    var cloudflareBuckets: [CloudflareBucket] = []
+    var selectedCloudflareAccountID: String?
 
     @ObservationIgnored private let configStore: ConfigStore
     @ObservationIgnored private let syncEngine: GitSyncEngine
     @ObservationIgnored private let keychainService: KeychainService
     @ObservationIgnored private let gitHubOAuthService: GitHubOAuthService
     @ObservationIgnored private let loginItemService: LoginItemManaging
+    @ObservationIgnored private let bucketStorageEngine: BucketStorageEngine
+    @ObservationIgnored private let cloudflareStorageConnectionService: CloudflareStorageConnectionService
+    @ObservationIgnored private var cloudflareAccessToken: String?
     @ObservationIgnored private let userDefaults: UserDefaults
     @ObservationIgnored private var scheduler: Timer?
     @ObservationIgnored private var didLoad = false
@@ -35,6 +43,8 @@ final class AppModel {
             userAgent: "GitFolder"
         ),
         loginItemService: LoginItemManaging = LoginItemService(),
+        bucketStorageEngine: BucketStorageEngine = BucketStorageEngine(),
+        cloudflareStorageConnectionService: CloudflareStorageConnectionService? = nil,
         userDefaults: UserDefaults = .standard
     ) {
         self.configStore = configStore
@@ -42,6 +52,8 @@ final class AppModel {
         self.keychainService = keychainService
         self.gitHubOAuthService = gitHubOAuthService
         self.loginItemService = loginItemService
+        self.bucketStorageEngine = bucketStorageEngine
+        self.cloudflareStorageConnectionService = cloudflareStorageConnectionService ?? CloudflareStorageConnectionService()
         self.userDefaults = userDefaults
     }
 
@@ -59,10 +71,12 @@ final class AppModel {
     func load() {
         do {
             config = try configStore.load()
+            normalizeRepositoryAuthentication()
             syncLaunchAtLoginStateFromSystem()
             hasGitHubToken = (try? keychainService.load())?.nilIfEmpty != nil
             lastMessage = "Ready"
             startScheduler()
+            syncDueFolders()
             refreshGitHubLogin()
         } catch {
             config = .empty
@@ -114,11 +128,238 @@ final class AppModel {
         guard let index = config.folders.firstIndex(where: { $0.id == folder.id }) else { return }
         var copy = folder
         copy.repoUrl = copy.repoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.authMode = authMode(forRepositoryURL: copy.repoUrl).rawValue
         copy.branch = normalizedBranch(copy.branch)
         copy.syncIntervalMinutes = normalizedInterval(copy.syncIntervalMinutes)
         copy.updatedAt = Date()
         config.folders[index] = copy
         save(message: "Updated \(copy.name)")
+    }
+
+    func authMode(forRepositoryURL repoURL: String) -> AuthMode {
+        let value = repoURL.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if value.hasPrefix("ssh://") || (value.contains("@") && value.contains(":")) {
+            return .ssh
+        }
+        return .githubToken
+    }
+
+    private func normalizeRepositoryAuthentication() {
+        var changed = false
+        for index in config.folders.indices {
+            let inferred = authMode(forRepositoryURL: config.folders[index].repoUrl).rawValue
+            if config.folders[index].authMode != inferred {
+                config.folders[index].authMode = inferred
+                changed = true
+            }
+        }
+        if changed {
+            try? configStore.save(config)
+        }
+    }
+
+    func hasStorageCredentials(folderID: UUID) -> Bool {
+        let stores = storageCredentialStores(folderID: folderID)
+        return (try? stores.accessKey.load())?.nilIfEmpty != nil
+            && (try? stores.secretKey.load())?.nilIfEmpty != nil
+    }
+
+    func saveBucketStorage(
+        folderID: UUID,
+        settings: BucketStorageSettings,
+        accessKey: String,
+        secretKey: String
+    ) {
+        guard let index = config.folders.firstIndex(where: { $0.id == folderID }) else { return }
+        do {
+            let stores = storageCredentialStores(folderID: folderID)
+            if !accessKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                try stores.accessKey.save(accessKey)
+            }
+            if !secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                try stores.secretKey.save(secretKey)
+            }
+
+            config.folders[index].storage = settings
+            config.folders[index].updatedAt = Date()
+            try configStore.save(config)
+            try writeRepositoryStorageConfig(for: config.folders[index], settings: settings)
+            lastMessage = settings.enabled ? "Bucket configuration saved" : "Bucket storage disabled"
+        } catch {
+            lastMessage = "Could not save bucket configuration: \(error.localizedDescription)"
+        }
+    }
+
+    func clearBucketCredentials(folderID: UUID) {
+        do {
+            let stores = storageCredentialStores(folderID: folderID)
+            try stores.accessKey.delete()
+            try stores.secretKey.delete()
+            lastMessage = "Bucket credentials removed"
+        } catch {
+            lastMessage = "Could not remove bucket credentials: \(error.localizedDescription)"
+        }
+    }
+
+    func testBucketConnection(folderID: UUID) {
+        guard !isRunningStorage, let folder = config.folders.first(where: { $0.id == folderID }) else { return }
+        isRunningStorage = true
+        storageMessage = "Connecting to \(folder.storage?.bucket ?? "bucket")…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let credentials = try storageCredentials(folderID: folderID)
+                try await bucketStorageEngine.testConnection(folder: folder, credentials: credentials)
+                storageMessage = "Bucket connection verified"
+                lastMessage = storageMessage ?? "Bucket connected"
+            } catch {
+                storageMessage = "Connection failed: \(error.localizedDescription)"
+                lastMessage = storageMessage ?? "Bucket connection failed"
+            }
+        }
+    }
+
+    func connectCloudflare() {
+        guard !isRunningStorage else { return }
+        let clientID = (Bundle.main.object(forInfoDictionaryKey: "CloudflareOAuthClientID") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !clientID.isEmpty, !clientID.contains("$(") else {
+            storageMessage = "Cloudflare login needs the publisher OAuth client ID. Manual connection remains available."
+            if let url = URL(string: "https://dash.cloudflare.com/?to=/:account/oauth-clients") {
+                NSWorkspace.shared.open(url)
+            }
+            return
+        }
+        isRunningStorage = true
+        storageMessage = "Opening Cloudflare…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let connection = try await cloudflareStorageConnectionService.connect(clientID: clientID)
+                cloudflareAccessToken = connection.accessToken
+                cloudflareAccounts = connection.accounts
+                selectedCloudflareAccountID = connection.accounts.first?.id
+                if let accountID = selectedCloudflareAccountID {
+                    cloudflareBuckets = try await cloudflareStorageConnectionService.buckets(accountID: accountID, token: connection.accessToken)
+                }
+                storageMessage = "Connected to Cloudflare. Choose or create an R2 bucket."
+            } catch {
+                storageMessage = "Cloudflare connection failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func selectCloudflareAccount(_ accountID: String) {
+        selectedCloudflareAccountID = accountID
+        guard let token = cloudflareAccessToken else { return }
+        isRunningStorage = true
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                cloudflareBuckets = try await cloudflareStorageConnectionService.buckets(accountID: accountID, token: token)
+            } catch {
+                storageMessage = "Could not load R2 buckets: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func useCloudflareBucket(_ bucket: CloudflareBucket, folderID: UUID) {
+        guard let token = cloudflareAccessToken, let accountID = selectedCloudflareAccountID else { return }
+        isRunningStorage = true
+        storageMessage = "Securing access to \(bucket.name)…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let credentials = try await cloudflareStorageConnectionService.provisionCredentials(
+                    bucket: bucket,
+                    accountID: accountID,
+                    token: token
+                )
+                let stores = storageCredentialStores(folderID: folderID)
+                try stores.accessKey.save(credentials.accessKeyID)
+                try stores.secretKey.save(credentials.secretAccessKey)
+                guard let index = config.folders.firstIndex(where: { $0.id == folderID }) else { return }
+                var settings = config.folders[index].storage ?? .defaults
+                settings.provider = .cloudflare
+                settings.enabled = true
+                settings.bucket = bucket.name
+                settings.region = bucket.jurisdiction == "default" || bucket.jurisdiction == nil ? "auto" : bucket.jurisdiction!
+                let jurisdiction = bucket.jurisdiction.flatMap { $0 == "default" ? nil : $0 }
+                settings.endpoint = "https://\(accountID)\(jurisdiction.map { ".\($0)" } ?? "").r2.cloudflarestorage.com"
+                config.folders[index].storage = settings
+                try configStore.save(config)
+                try writeRepositoryStorageConfig(for: config.folders[index], settings: settings)
+                storageMessage = "Connected to Cloudflare R2 bucket \(bucket.name)"
+            } catch {
+                storageMessage = "Could not connect R2 bucket: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func createCloudflareBucket(name: String, folderID: UUID) {
+        let bucketName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard bucketName.count >= 3,
+              let token = cloudflareAccessToken,
+              let accountID = selectedCloudflareAccountID else {
+            storageMessage = "Enter a bucket name with at least three characters."
+            return
+        }
+        isRunningStorage = true
+        storageMessage = "Creating \(bucketName)…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let bucket = try await cloudflareStorageConnectionService.createBucket(
+                    name: bucketName,
+                    accountID: accountID,
+                    token: token
+                )
+                cloudflareBuckets = try await cloudflareStorageConnectionService.buckets(accountID: accountID, token: token)
+                useCloudflareBucket(bucket, folderID: folderID)
+            } catch {
+                storageMessage = "Could not create R2 bucket: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func uploadBucketFiles(folderID: UUID) {
+        guard !isRunningStorage, let folder = config.folders.first(where: { $0.id == folderID }) else { return }
+        isRunningStorage = true
+        storageMessage = "Scanning \(folder.name) for eligible assets…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let credentials = try storageCredentials(folderID: folderID)
+                let outcome = try await bucketStorageEngine.uploadEligibleFiles(folder: folder, credentials: credentials)
+                let bytes = ByteCountFormatter.string(fromByteCount: outcome.uploadedBytes, countStyle: .file)
+                storageMessage = outcome.uploadedCount == 0
+                    ? "All eligible assets are already uploaded"
+                    : "Uploaded \(outcome.uploadedCount) asset\(outcome.uploadedCount == 1 ? "" : "s") (\(bytes))"
+                lastMessage = storageMessage ?? "Storage upload complete"
+                syncNow(folderID: folderID)
+            } catch {
+                storageMessage = "Upload failed: \(error.localizedDescription)"
+                lastMessage = storageMessage ?? "Storage upload failed"
+            }
+        }
+    }
+
+    func restoreBucketFile(relativePath: String, folderID: UUID) {
+        guard !isRunningStorage, let folder = config.folders.first(where: { $0.id == folderID }) else { return }
+        isRunningStorage = true
+        storageMessage = "Restoring \(relativePath)…"
+        Task {
+            defer { isRunningStorage = false }
+            do {
+                let credentials = try storageCredentials(folderID: folderID)
+                try await bucketStorageEngine.restore(relativePath: relativePath, folder: folder, credentials: credentials)
+                storageMessage = "Restored \(relativePath)"
+                lastMessage = storageMessage ?? "Restore complete"
+            } catch {
+                storageMessage = "Restore failed: \(error.localizedDescription)"
+                lastMessage = storageMessage ?? "Restore failed"
+            }
+        }
     }
 
     func removeFolder(id: UUID) {
@@ -224,6 +465,59 @@ final class AppModel {
         }
     }
 
+    private func storageCredentialStores(folderID: UUID) -> (accessKey: KeychainService, secretKey: KeychainService) {
+        let service = Bundle.main.bundleIdentifier ?? "app.hakobs.gitfolder"
+        return (
+            KeychainService(service: service, account: "bucket-access-key-\(folderID.uuidString)"),
+            KeychainService(service: service, account: "bucket-secret-key-\(folderID.uuidString)")
+        )
+    }
+
+    private func storageCredentials(folderID: UUID) throws -> S3Credentials {
+        let stores = storageCredentialStores(folderID: folderID)
+        guard let accessKey = try stores.accessKey.load()?.nilIfEmpty,
+              let secretKey = try stores.secretKey.load()?.nilIfEmpty else {
+            throw S3StorageError.missingCredentials
+        }
+        return S3Credentials(accessKeyID: accessKey, secretAccessKey: secretKey)
+    }
+
+    private func writeRepositoryStorageConfig(for folder: SyncedFolder, settings: BucketStorageSettings) throws {
+        let folderAccess = FolderAccessService()
+        try folderAccess.withSecurityScopedAccess(for: folder) { folderURL in
+            let yaml = """
+            version: 1
+            storage:
+              enabled: \(settings.enabled ? "true" : "false")
+              provider: (settings.provider.rawValue)
+              endpoint: \(yamlQuoted(settings.endpoint))
+              bucket: \(yamlQuoted(settings.bucket))
+              region: \(yamlQuoted(settings.region))
+              publicBaseURL: \(yamlQuoted(settings.publicBaseURL))
+              mode: tiered
+              offload:
+                minSizeMB: \(max(1, settings.minimumFileSizeMB))
+                extensions:\(yamlList(settings.offloadExtensions, indentation: 8))
+              keepDownloaded:\(yamlList(settings.keepDownloadedPatterns, indentation: 4))
+            """
+            try (yaml + "\n").write(
+                to: folderURL.appending(path: ".gitfolder.yml"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+    }
+
+    private func yamlQuoted(_ value: String) -> String {
+        "\"" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+
+    private func yamlList(_ values: [String], indentation: Int) -> String {
+        guard !values.isEmpty else { return " []" }
+        let spaces = String(repeating: " ", count: indentation)
+        return values.map { "\n\(spaces)- \(yamlQuoted($0))" }.joined()
+    }
+
     func pauseAllSyncing() {
         config.app.pauseAllSyncing.toggle()
         save(message: config.app.pauseAllSyncing ? "Syncing paused" : "Syncing resumed")
@@ -234,7 +528,7 @@ final class AppModel {
             try loginItemService.setEnabled(enabled)
             config.app.launchAtLogin = loginItemService.isEnabled
             userDefaults.set(true, forKey: launchAtLoginPromptKey)
-            save(message: config.app.launchAtLogin ? "GitFolder will open at login" : "GitFolder will not open at login")
+            save(message: config.app.launchAtLogin ? "GitKittie Folder will open at login" : "GitKittie Folder will not open at login")
         } catch {
             config.app.launchAtLogin = loginItemService.isEnabled
             lastMessage = "Could not update login item: \(error.localizedDescription)"
@@ -247,8 +541,8 @@ final class AppModel {
         }
 
         let alert = NSAlert()
-        alert.messageText = "Open GitFolder when you log in?"
-        alert.informativeText = "GitFolder can start automatically with macOS so folder syncing begins without opening it manually."
+        alert.messageText = "Open GitKittie Folder when you log in?"
+        alert.informativeText = "GitKittie Folder can start automatically with macOS so folder syncing begins without opening it manually."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Open at Login")
         alert.addButton(withTitle: "Not Now")
@@ -421,6 +715,7 @@ final class AppModel {
 
     private func markFolderFailed(id: UUID, error: Error) {
         guard let index = config.folders.firstIndex(where: { $0.id == id }) else { return }
+        NSLog("GitFolder sync failed [%@]: %@", String(describing: type(of: error)), String(reflecting: error))
         let userError: UserFacingError
         if let syncError = error as? GitSyncError {
             userError = syncError.userFacingError()

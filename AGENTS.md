@@ -16,6 +16,7 @@ no-server apps that treat a git repository as the source of truth.
 | GitFolder (iOS) | `apps/gitfolder-ios/` | SwiftUI (planned) | Roadmap — libgit2 spike + plan |
 | GitKanban (macOS) | `apps/gitkanban-macos/` | SwiftUI board app | In development (read-only board UI) |
 | GitKanban (iOS) | `apps/gitkanban-ios/` | SwiftUI (planned) | Roadmap — Phase 2 |
+| GitKanban server | `apps/gitkanban-server/` | Node + Hono file server (tailnet-only) | In development |
 | GitBud (macOS) | `apps/gitbud-macos/` | SwiftUI git client | In development — tested local history/rewrite UI |
 | GitBud (iOS/iPadOS) | `apps/gitbud-ios/` | SwiftUI remote git client (planned) | Docs/spec — GitPont remote-only |
 | Website | `apps/website/` | Vue 3 + Vite | Shipping |
@@ -30,6 +31,7 @@ apps/
   gitfolder-macos/    GitFolder — macOS menu-bar app (SwiftUI/AppKit, XcodeGen)
   gitfolder-ios/      GitFolder — iOS app (planned; docs/spec only)
   gitkanban-macos/    GitKanban — macOS board app (read-only board UI)
+  gitkanban-server/   GitKanban file server — one local folder over Tailscale (Node + Hono)
   gitkanban-ios/      GitKanban — iOS app (planned; docs/spec only)
   gitbud-macos/       GitBud — macOS git client (SwiftUI/AppKit, XcodeGen)
   gitbud-ios/         GitBud — iOS/iPadOS remote git client (planned; docs/spec only)
@@ -46,6 +48,26 @@ docs/                 Global GitKittie docs + GitFolder product plans
 belongs in a package — `swift/GitKittieKit` (Swift) or `packages/*` (TypeScript) — not a cross-app
 import. TypeScript is the source of truth for the board/config contracts; the Swift apps mirror
 those packages, they do not fork them.
+
+**GitPont is the only gateway to a git host (hard).** No GitKittie product talks to GitHub, GitLab,
+Forgejo/Gitea, Bitbucket or any other host by itself: no provider URLs, no REST or GraphQL calls,
+no `if provider is GitHub` branches in an app or in `swift/*`. A product says *what* it wants
+("commit these files to this branch", "read this folder") and
+[GitPont](https://github.com/silvandiepen/git-pont) (`~/Repositories/_libs/git-pont`) decides which
+calls that takes on each host. That is the point of it: when GitPont gains a host, every product
+works on that host without a change here.
+
+- **GitPont is missing something?** Add it to GitPont, for every provider it can be done on, with
+  tests there, then use it here. GitPont is our product too. Never work around a gap with a direct
+  call in a product, not even "for now" with a TODO.
+- **A capability a host cannot offer** is a GitPont capability flag
+  (`provider.capabilities.contains(.batchCommit)`); the product asks the flag and falls back, it
+  does not ask which host it is on.
+- **Known debt** (direct host calls that predate this rule and still have to move), all in
+  `swift/GitKittieKit`: `GitHubOAuthService.swift` and `GitHubReposService.swift` (GitFolder Mac and
+  Bud; GitPont already has sign-in and repository lists), `GitHubPullRequestService.swift` (Bud;
+  GitPont has no pull request reviews yet) and `GitHubSyncClient.swift` (used by nothing but its
+  own tests). Do not add to this list.
 
 ## Where the plans and tasks live
 

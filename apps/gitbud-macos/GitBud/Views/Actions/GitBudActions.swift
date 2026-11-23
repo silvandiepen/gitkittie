@@ -88,7 +88,7 @@ enum GitBudActions {
                     icon: "arrow.down.forward.and.arrow.up.backward",
                     interaction: .confirm(
                         title: "Squash \(selectionCount) commits?",
-                        message: "They become one commit. GitBud saves a safety branch first, so this can be undone.",
+                        message: "They become one commit. GitKittie Bud saves a safety branch first, so this can be undone.",
                         verb: "Squash"
                     ),
                     perform: { _ in model.squashSelectedCommits() }
@@ -201,7 +201,7 @@ enum GitBudActions {
                 isDestructive: true,
                 interaction: .confirm(
                     title: "Drop \(commit.shortID)?",
-                    message: "\"\(commit.subject)\" is removed from history. GitBud saves a safety branch first.",
+                    message: "\"\(commit.subject)\" is removed from history. GitKittie Bud saves a safety branch first.",
                     verb: "Drop"
                 ),
                 perform: { _ in

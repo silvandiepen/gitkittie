@@ -1,0 +1,105 @@
+<script setup lang="ts">
+/**
+ * @view FolderPage
+ * GitKittie Folder product page — shipped app. The Mac side leads with copy and
+ * the app icon; iPhone and iPad are shown in their App Store screenshots.
+ */
+import { Markdown } from '@sil/ui'
+import MarketingLayout from '@/components/MarketingLayout.vue'
+import ProductHero from '@/components/ProductHero.vue'
+import ClosingBand from '@/components/ClosingBand.vue'
+import FeatureGrid from '@/components/FeatureGrid.vue'
+import ShowcaseRow from '@/components/ShowcaseRow.vue'
+import type { Feature, Showcase, Step } from '@/lib/content'
+import { usePageMeta } from '@/lib/usePageMeta'
+import { folderMacAppStoreUrl, folderAppStoreUrl } from '@/links'
+import { useContent } from '@/i18n'
+
+interface FolderContent {
+  meta: { title: string; description: string }
+  hero: { eyebrow: string; title: string; subtitle: string; download: string; downloadIos: string; docs: string }
+  mobile: { eyebrow: string; title: string; subtitle: string; items: Showcase[] }
+  steps: { eyebrow: string; title: string; subtitle: string; items: Step[] }
+  features: { eyebrow: string; title: string; subtitle: string; items: Feature[] }
+  cta: { eyebrow: string; title: string; subtitle: string; download: string; downloadIos: string; docs: string }
+}
+
+const t = useContent<FolderContent>('folder')
+
+usePageMeta({ title: t.meta.title, description: t.meta.description })
+</script>
+
+<template>
+  <MarketingLayout>
+    <div class="mkt product" data-app="folder">
+      <ProductHero
+        app="folder"
+        :eyebrow="t.hero.eyebrow"
+        :title="t.hero.title"
+        :subtitle="t.hero.subtitle"
+        mark-title="GitKittie Folder"
+      >
+        <a :href="folderMacAppStoreUrl" class="mkt__btn" target="_blank" rel="noopener">{{ t.hero.download }}</a>
+        <a :href="folderAppStoreUrl" class="mkt__btn mkt__btn--ghost" target="_blank" rel="noopener">{{ t.hero.downloadIos }}</a>
+        <router-link to="/docs" class="mkt__link">{{ t.hero.docs }}</router-link>
+      </ProductHero>
+
+      <!-- iPhone and iPad, in screenshots -->
+      <section class="mkt__band mkt__band--surface">
+        <div class="mkt__container product__section product__section--showcase">
+          <div class="mkt__section-head">
+            <span class="mkt__eyebrow">{{ t.mobile.eyebrow }}</span>
+            <div class="mkt__section-head-copy">
+              <Markdown class="mkt__display-s" tag="h2" inline :content="t.mobile.title" />
+              <p class="mkt__body">{{ t.mobile.subtitle }}</p>
+            </div>
+          </div>
+          <ShowcaseRow v-for="(item, i) in t.mobile.items" :key="item.eyebrow" :item="item" :flip="i % 2 === 1" />
+        </div>
+      </section>
+
+      <!-- Setup -->
+      <section class="mkt__band mkt__band--paper">
+        <div class="mkt__container product__section">
+          <div class="mkt__section-head">
+            <span class="mkt__eyebrow">{{ t.steps.eyebrow }}</span>
+            <div class="mkt__section-head-copy">
+              <Markdown class="mkt__display-s" tag="h2" inline :content="t.steps.title" />
+              <p class="mkt__body">{{ t.steps.subtitle }}</p>
+            </div>
+          </div>
+
+          <ol class="mkt__rows" role="list">
+            <li v-for="s in t.steps.items" :key="s.n" class="mkt__row">
+              <span class="mkt__marker">{{ s.n }}</span>
+              <div class="mkt__row-body">
+                <h3 class="mkt__heading">{{ s.title }}</h3>
+                <p class="mkt__body">{{ s.desc }}</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Features -->
+      <section class="mkt__band mkt__band--surface">
+        <div class="mkt__container product__section">
+          <div class="mkt__section-head">
+            <span class="mkt__eyebrow">{{ t.features.eyebrow }}</span>
+            <div class="mkt__section-head-copy">
+              <Markdown class="mkt__display-s" tag="h2" inline :content="t.features.title" />
+              <p class="mkt__body">{{ t.features.subtitle }}</p>
+            </div>
+          </div>
+          <FeatureGrid :features="t.features.items" />
+        </div>
+      </section>
+
+      <ClosingBand :eyebrow="t.cta.eyebrow" :title="t.cta.title" :subtitle="t.cta.subtitle">
+        <a :href="folderMacAppStoreUrl" class="mkt__btn mkt__btn--inverse" target="_blank" rel="noopener">{{ t.cta.download }}</a>
+        <a :href="folderAppStoreUrl" class="mkt__btn mkt__btn--ghost" target="_blank" rel="noopener">{{ t.cta.downloadIos }}</a>
+        <router-link to="/docs" class="mkt__link">{{ t.cta.docs }}</router-link>
+      </ClosingBand>
+    </div>
+  </MarketingLayout>
+</template>

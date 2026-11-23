@@ -52,7 +52,7 @@ final class DemoRepoStore {
         ]
 
         repos["demo/website"] = [
-            "README.md": text("# Personal Website\n\nA tiny static site, edited from anywhere with GitFolder.\n"),
+            "README.md": text("# Personal Website\n\nA tiny static site, edited from anywhere with GitKittie Folder.\n"),
             "index.html": text("<!doctype html>\n<html>\n  <head>\n    <title>Hi, I'm Demo</title>\n    <link rel=\"stylesheet\" href=\"css/styles.css\" />\n  </head>\n  <body>\n    <h1>Hello!</h1>\n    <p>This site is edited straight from my phone.</p>\n  </body>\n</html>\n"),
             "css/styles.css": text("body {\n  font-family: -apple-system, sans-serif;\n  margin: 3rem auto;\n  max-width: 40rem;\n  line-height: 1.6;\n}\n"),
             "docs/ideas.md": text("# Ideas\n\n- Photo page for trips\n- Dark mode\n- RSS feed for notes\n"),

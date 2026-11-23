@@ -12,6 +12,14 @@ public protocol BoardFileSource: Sendable {
     func readText(_ path: String) async throws -> String
 }
 
+/// A source that can hand over every text file of a folder in one round trip. Over a
+/// provider API a card is otherwise one request each, and a lane can hold hundreds.
+public protocol BulkTextSource: BoardFileSource {
+    /// File name → text for the text files directly in `directory`, or `nil` when this
+    /// source cannot do it in one go here. Files missing from the result are read singly.
+    func readTexts(in directory: String) async -> [String: String]?
+}
+
 /// One entry in a `BoardFileSource` directory listing.
 public struct BoardFileEntry: Sendable, Equatable {
     public enum Kind: Sendable, Equatable { case file, directory }
@@ -127,7 +135,7 @@ public enum RemoteBoardStore {
         var uncategorised: [Card] = []
         let subEntries = (try? await source.list(project.folder)) ?? []
         for entry in subEntries where entry.kind == .directory {
-            guard !entry.name.hasPrefix("."), !laneFolders.contains(entry.name), entry.name != "attachments" else { continue }
+            guard !entry.name.hasPrefix("."), !laneFolders.contains(entry.name), entry.name != "attachments", entry.name != "docs", entry.name != Review.defaultReviewPath else { continue }
             uncategorised += try await loadCards(source: source, dir: entry.path, fieldSource: effective.fieldSource)
         }
 
@@ -161,21 +169,63 @@ public enum RemoteBoardStore {
     /// Count the cards in a board without reading their contents — just list each lane
     /// folder and count card files. Used for the boards list's "N tasks" summary.
     public static func taskCount(source: BoardFileSource, folder: String) async throws -> Int {
+        try await listing(source: source, folder: folder).total
+    }
+
+    /// Which card files sit in which lane, from directory listings alone (no card file is
+    /// read). Cheap enough to run for every board on the home screen.
+    public static func listing(source: BoardFileSource, folder: String) async throws -> BoardListing {
         let rootConfig = await resolveRootConfig(source: source, projectFolder: folder)
         let projectConfig = (try? await loadProjectConfig(source: source, dir: folder)) ?? ProjectConfig()
+        let lanes = resolveEffectiveConfig(rootConfig, projectConfig).lanes.filter { !$0.folder.isEmpty }
+        var result = try await listing(source: source, folder: folder, lanes: lanes)
+        result.name = projectConfig.project.flatMap { $0.isEmpty ? nil : $0 }
+        result.icon = projectConfig.icon
+        result.color = projectConfig.color
+        return result
+    }
+
+    /// A board's effective config (its own README over the root it inherits from) and
+    /// name, read from the two READMEs alone.
+    public static func loadEffectiveConfig(source: BoardFileSource, folder: String) async -> (name: String, config: EffectiveConfig) {
+        let rootConfig = await resolveRootConfig(source: source, projectFolder: folder)
+        let projectConfig = (try? await loadProjectConfig(source: source, dir: folder)) ?? ProjectConfig()
+        let fallback = folder.split(separator: "/").last.map(String.init) ?? "Board"
+        let name = projectConfig.project?.isEmpty == false ? projectConfig.project! : fallback
+        return (name, resolveEffectiveConfig(rootConfig, projectConfig))
+    }
+
+    /// A board without its cards: the project, its config and lanes, and which card files
+    /// exist. Enough to file a new card (lanes, a free file name) at a fraction of the
+    /// requests a full load costs over a provider API.
+    public static func loadBoardShell(
+        source: BoardFileSource, folder: String
+    ) async throws -> (project: BoardProject, rootConfig: BoardConfig, board: LoadedBoard, listing: BoardListing) {
+        let rootConfig = await resolveRootConfig(source: source, projectFolder: folder)
+        let projectConfig = (try? await loadProjectConfig(source: source, dir: folder)) ?? ProjectConfig()
+        let fallback = folder.split(separator: "/").last.map(String.init) ?? "Board"
+        let name = projectConfig.project?.isEmpty == false ? projectConfig.project! : fallback
+        let project = BoardProject(id: folder, name: name, folder: folder, config: projectConfig)
         let effective = resolveEffectiveConfig(rootConfig, projectConfig)
-        return try await withThrowingTaskGroup(of: Int.self) { group -> Int in
-            for lane in effective.lanes {
+        let listing = try await listing(source: source, folder: folder, lanes: effective.lanes.filter { !$0.folder.isEmpty })
+        let board = LoadedBoard(config: effective, columns: effective.lanes.map { Column(lane: $0, cards: []) }, uncategorised: [])
+        return (project, rootConfig, board, listing)
+    }
+
+    private static func listing(source: BoardFileSource, folder: String, lanes: [Lane]) async throws -> BoardListing {
+        try await withThrowingTaskGroup(of: (String, [String]).self) { group -> BoardListing in
+            for lane in lanes {
                 group.addTask {
                     let entries = (try? await source.list(join(folder, lane.folder))) ?? []
-                    return entries.filter {
+                    let files = entries.filter {
                         $0.kind == .file && $0.name.hasSuffix(".md") && $0.name != "README.md" && !$0.name.hasPrefix("00-")
-                    }.count
+                    }.map(\.name)
+                    return (lane.id, files)
                 }
             }
-            var total = 0
-            for try await count in group { total += count }
-            return total
+            var files: [String: [String]] = [:]
+            for try await (lane, names) in group { files[lane] = names }
+            return BoardListing(lanes: lanes, files: files)
         }
     }
 
@@ -205,11 +255,14 @@ public enum RemoteBoardStore {
             .filter { $0.name.hasSuffix(".md") && $0.name != "README.md" && !$0.name.hasPrefix("00-") }
             .sorted { $0.name < $1.name }
 
-        // Read every card file concurrently, then restore file-name order.
+        // One round trip for the whole folder where the source can; whatever that leaves
+        // out is read file by file, concurrently. File-name order is restored after.
+        let bulk = names.isEmpty ? nil : await (source as? any BulkTextSource)?.readTexts(in: dir)
         return try await withThrowingTaskGroup(of: (Int, Card).self) { group -> [Card] in
             for (index, entry) in names.enumerated() {
                 group.addTask {
-                    let text = try await source.readText(entry.path)
+                    let text: String
+                    if let known = bulk?[entry.name] { text = known } else { text = try await source.readText(entry.path) }
                     return (index, BoardStore.parseCard(text: text, fileName: entry.name, fieldSource: fieldSource))
                 }
             }
@@ -269,5 +322,36 @@ public enum RemoteBoardStore {
     /// base (the repo root).
     private static func join(_ base: String, _ component: String) -> String {
         base.isEmpty ? component : "\(base)/\(component)"
+    }
+}
+
+/// A board's card files per lane, without their contents.
+public struct BoardListing: Sendable, Equatable {
+    public var lanes: [Lane]
+    /// Lane id → card file names.
+    public var files: [String: [String]]
+    /// The board's `project:` name, `icon:` and `color:`, when the listing was made from its README.
+    public var name: String?
+    public var icon: String?
+    public var color: String?
+
+    public init(lanes: [Lane], files: [String: [String]]) {
+        self.lanes = lanes
+        self.files = files
+    }
+
+    public var total: Int { files.values.reduce(0) { $0 + $1.count } }
+    public func count(in lane: Lane) -> Int { files[lane.id]?.count ?? 0 }
+
+    /// Card file name → the lane it is in.
+    public var locations: [String: String] {
+        var result: [String: String] = [:]
+        for (lane, names) in files { for name in names { result[name] = lane } }
+        return result
+    }
+
+    /// How many cards are new or sit in a different lane than in an earlier snapshot.
+    public func changes(since snapshot: [String: String]) -> Int {
+        locations.reduce(0) { $0 + (snapshot[$1.key] == $1.value ? 0 : 1) }
     }
 }

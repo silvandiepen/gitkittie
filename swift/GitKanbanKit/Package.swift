@@ -15,7 +15,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../GitKittieKit"),
-        .package(url: "https://github.com/silvandiepen/git-pont.git", branch: "codex/initial-git-pont-monorepo")
+        .package(url: "https://github.com/silvandiepen/git-pont.git", branch: "master")
     ],
     targets: [
         .target(

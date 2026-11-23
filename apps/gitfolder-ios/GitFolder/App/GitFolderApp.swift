@@ -8,7 +8,9 @@ struct GitFolderApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
-                .preferredColorScheme(CaptureHooks.colorScheme)
+                .tint(Theme.accent)
+                // Dark navy is the design; the capture hook can still pin light.
+                .preferredColorScheme(CaptureHooks.colorScheme ?? .dark)
                 .task {
                     // Test hook: launch with GITFOLDER_DEMO=1 to open the offline demo.
                     if CaptureHooks.isDemo {

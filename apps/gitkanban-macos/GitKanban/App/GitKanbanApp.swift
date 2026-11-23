@@ -10,14 +10,43 @@ struct GitKanbanApp: App {
             RootView()
                 .environment(model)
                 .frame(minWidth: 900, minHeight: 600)
-                .preferredColorScheme(CaptureHooks.colorScheme)
+                .background(SolidWindow())
+                .tint(Theme.accent)
+                .preferredColorScheme(CaptureHooks.colorScheme ?? .dark)
                 .onAppear { CaptureHooks.applyWindowSize() }
                 .task {
                     // Test hook: launch with GITKANBAN_DEMO=1 to open the offline demo.
                     if CaptureHooks.isDemo {
                         await model.loadDemo()
+                        // `GITKANBAN_OPEN=settings|docs` — open that screen of the demo, for screenshots.
+                        switch ProcessInfo.processInfo.environment["GITKANBAN_OPEN"] {
+                        case "settings": model.wantsProjectSettings = true
+                        case "docs":
+                            if !model.hasDocs { _ = await model.createDoc(title: "Camera rules") }
+                            model.isShowingDocs = true
+                        default: break
+                        }
                     } else {
                         await model.restore()
+                        // `GITKANBAN_OPEN=docs` — start on the open board's Docs, for screenshots.
+                        // `GITKANBAN_BOARD=<name>` — start on that board, for screenshots.
+                        if let wanted = ProcessInfo.processInfo.environment["GITKANBAN_BOARD"] {
+                            for repo in model.addedRepos {
+                                if let board = repo.boards.first(where: { $0.name == wanted || $0.folder.hasSuffix(wanted) }) {
+                                    await model.openBoard(repo, folder: board.folder)
+                                    break
+                                }
+                            }
+                        }
+                        if ProcessInfo.processInfo.environment["GITKANBAN_OPEN"] == "docs" { model.isShowingDocs = true }
+                        // `GITKANBAN_OPEN=all` — start on All Tasks; `GITKANBAN_CARD=<id>` — with that task selected;
+                        // `GITKANBAN_VIEW=list|calendar` — in that view. For screenshots.
+                        if ProcessInfo.processInfo.environment["GITKANBAN_OPEN"] == "all" { model.isShowingAllTasks = true }
+                        if let id = ProcessInfo.processInfo.environment["GITKANBAN_CARD"] { model.selectedCard = model.card(withID: id) }
+                        if let view = ProcessInfo.processInfo.environment["GITKANBAN_VIEW"].flatMap(BoardViewMode.init(rawValue:)) { model.boardViewMode = view }
+                        // Agents on this Mac reach the boards through the app (Agent Access).
+                        await model.startAgentServerIfEnabled()
+                        await model.startNotifications()
                     }
                 }
         }
@@ -38,6 +67,18 @@ struct GitKanbanApp: App {
                     .disabled(model.board == nil)
             }
         }
+
+        // A task in a window of its own: double-click on the board, or Open in Panel.
+        WindowGroup("Task", id: TaskPanel.windowID, for: String.self) { $cardID in
+            if let cardID {
+                TaskPanel(cardID: cardID)
+                    .environment(model)
+                    .background(SolidWindow())
+                    .tint(Theme.accent)
+                    .preferredColorScheme(CaptureHooks.colorScheme ?? .dark)
+            }
+        }
+        .defaultSize(width: 920, height: 760)
     }
 }
 
@@ -79,6 +120,23 @@ enum CaptureHooks {
             window.center()
         }
     }
+}
+
+/// Gives the window the app's own opaque background, in place of the system's translucent
+/// one that takes a tint from the desktop picture, and keeps the whole app (sheets and
+/// menus too) in the dark appearance the design is drawn in.
+struct SolidWindow: NSViewRepresentable {
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            window.backgroundColor = NSColor(Theme.window)
+            window.isOpaque = true
+            if CaptureHooks.colorScheme == nil { NSApplication.shared.appearance = NSAppearance(named: .darkAqua) }
+        }
+    }
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ nsView: Probe, context: Context) {}
 }
 
 /// Small AppKit helpers so the ported views can copy/open/save on macOS.

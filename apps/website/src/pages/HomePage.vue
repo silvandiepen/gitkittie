@@ -3,17 +3,18 @@
  * @view HomePage
  * GitKittie family landing page — introduces the umbrella and all three apps.
  *
- * The page reads as a sequence of full-bleed bands rather than cards on a
- * background: statement, then the three products as their own colour panels,
- * then the shared principles as ruled rows, then an ink closing call.
+ * The page opens on the real Tasks window, then states the idea, then the three
+ * products as panels the way the apps draw them, then the shared principles as
+ * ruled rows, then the closing call on the deepest navy.
  */
 import { Markdown } from '@sil/ui'
 import MarketingLayout from '@/components/MarketingLayout.vue'
 import AppCard from '@/components/AppCard.vue'
+import AppShot from '@/components/AppShot.vue'
 import ClosingBand from '@/components/ClosingBand.vue'
 import FeatureGrid from '@/components/FeatureGrid.vue'
 import GitKittieMark from '@/components/GitKittieMark.vue'
-import type { Feature, AppCardContent } from '@/lib/content'
+import type { Feature, AppCardContent, Shot } from '@/lib/content'
 import { usePageMeta } from '@/lib/usePageMeta'
 import { useContent } from '@/i18n'
 
@@ -23,9 +24,10 @@ interface HomeContent {
     eyebrow: string
     title: string
     subtitle: string
-    ctaGitfolder: string
-    ctaGitkanban: string
-    ctaGitbud: string
+    ctaFolder: string
+    ctaTasks: string
+    ctaBud: string
+    shot: Shot
   }
   statement: { eyebrow: string; text: string }
   apps: { eyebrow: string; title: string; subtitle: string; items: AppCardContent[] }
@@ -53,10 +55,13 @@ function marker(i: number): string {
           <Markdown class="mkt__display" tag="h1" inline :content="t.hero.title" />
           <p class="mkt__lead">{{ t.hero.subtitle }}</p>
           <div class="mkt__actions home__hero-actions">
-            <router-link to="/gitfolder" class="mkt__btn home__btn--gf">{{ t.hero.ctaGitfolder }}</router-link>
-            <router-link to="/gitkanban" class="mkt__btn home__btn--gk">{{ t.hero.ctaGitkanban }}</router-link>
-            <router-link to="/gitbud" class="mkt__btn home__btn--gb">{{ t.hero.ctaGitbud }}</router-link>
+            <router-link to="/tasks" class="mkt__btn">{{ t.hero.ctaTasks }}</router-link>
+            <router-link to="/folder" class="mkt__btn mkt__btn--ghost">{{ t.hero.ctaFolder }}</router-link>
+            <router-link to="/bud" class="mkt__link">{{ t.hero.ctaBud }}</router-link>
           </div>
+        </div>
+        <div class="mkt__container home__hero-shot">
+          <AppShot :device="t.hero.shot.device" :light="t.hero.shot.light" :dark="t.hero.shot.dark" :alt="t.hero.shot.alt" eager />
         </div>
       </section>
 
@@ -81,7 +86,7 @@ function marker(i: number): string {
           </div>
         </div>
 
-        <div class="mkt__panels home__panels">
+        <div class="mkt__container mkt__panels">
           <AppCard
             v-for="(item, i) in t.apps.items"
             :key="item.app"
@@ -113,8 +118,8 @@ function marker(i: number): string {
 
       <!-- Closing call -->
       <ClosingBand :eyebrow="t.cta.eyebrow" :title="t.cta.title" :subtitle="t.cta.subtitle">
-        <router-link to="/gitfolder" class="mkt__btn mkt__btn--inverse">{{ t.cta.primary }}</router-link>
-        <router-link to="/gitkanban" class="mkt__btn mkt__btn--ghost">{{ t.cta.secondary }}</router-link>
+        <router-link to="/folder" class="mkt__btn mkt__btn--inverse">{{ t.cta.primary }}</router-link>
+        <router-link to="/tasks" class="mkt__btn mkt__btn--ghost">{{ t.cta.secondary }}</router-link>
       </ClosingBand>
     </div>
   </MarketingLayout>
@@ -124,7 +129,10 @@ function marker(i: number): string {
 .home {
   // ── Hero ───────────────────────────────────────────────────────────────
   &__hero {
-    padding: clamp(var(--space-xl), 10vw, var(--space-xxl)) 0;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(var(--space-l), 6vw, var(--space-xl));
+    padding: clamp(var(--space-xl), 10vw, var(--space-xxl)) 0 clamp(var(--space-l), 6vw, var(--space-xl));
   }
 
   &__hero-inner {
@@ -138,30 +146,13 @@ function marker(i: number): string {
     padding-top: var(--space);
   }
 
-  // Each hero button carries its own product's hue, which is the one place on
-  // the page where all three appear at once.
-  &__btn--gf {
-    background: var(--gf-dark);
-    color: var(--color-light);
-
-    &:hover { background: var(--gf); color: var(--color-dark); }
-  }
-
-  &__btn--gk {
-    background: var(--gk-dark);
-    color: var(--color-light);
-
-    &:hover { background: var(--gk); color: var(--color-dark); }
-  }
-
-  &__btn--gb {
-    background: var(--gb-dark);
-    color: var(--color-light);
-
-    &:hover { background: var(--gb); color: var(--color-dark); }
-  }
-
   // ── Statement ──────────────────────────────────────────────────────────
+  // The watermark below is oversized on purpose; the band clips it, so it never
+  // reaches up over the screenshot in the hero.
+  &__statement {
+    overflow: hidden;
+  }
+
   &__statement-inner {
     display: flex;
     flex-direction: column;
@@ -190,20 +181,15 @@ function marker(i: number): string {
   }
 
   // ── Apps ───────────────────────────────────────────────────────────────
-  &__apps-head {
-    padding: clamp(var(--space-xl), 9vw, var(--space-xxl)) var(--space-l);
+  &__apps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+    padding-bottom: clamp(var(--space-xl), 9vw, var(--space-xxl));
   }
 
-  // Three products in a two-up grid leaves one empty cell; letting the last
-  // panel span both columns closes it rather than leaving a hole.
-  &__panels {
-    > :last-child:nth-child(odd) {
-      grid-column: 1 / -1;
-    }
-
-    @include tablet {
-      > :last-child:nth-child(odd) { grid-column: auto; }
-    }
+  &__apps-head {
+    padding-top: clamp(var(--space-xl), 9vw, var(--space-xxl));
   }
 
   // ── Principles ─────────────────────────────────────────────────────────

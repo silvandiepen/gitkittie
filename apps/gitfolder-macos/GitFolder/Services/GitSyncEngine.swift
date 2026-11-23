@@ -205,8 +205,11 @@ struct GitSyncEngine: Sendable {
                     throw GitSyncError.largeFilesBlocked(largeFiles)
                 }
 
+                // `--sparse`: in a sparse checkout (a folder cloned without, say, its attachments)
+                // a new file in a left-out folder is otherwise refused, `git add` fails, and the
+                // folder stops syncing altogether. It changes nothing in an ordinary checkout.
                 _ = try requireSuccess(
-                    git(["add", "-A"], in: folderURL, timeoutSeconds: 1_800, environment: authContext.environment),
+                    git(["add", "-A", "--sparse"], in: folderURL, timeoutSeconds: 1_800, environment: authContext.environment),
                     failure: .gitAddFailed()
                 )
 
@@ -294,8 +297,8 @@ struct GitSyncEngine: Sendable {
             _ = try requireSuccess(git(["config", "user.email", authorEmail], in: folderURL, environment: environment), failure: .gitConfigFailed("Could not save Git author email for this folder."))
         }
 
-        _ = try requireSuccess(git(["config", "user.name"], in: folderURL, environment: environment), failure: .gitConfigFailed("Missing Git user.name. Add a Git author name in GitFolder Settings or configure Git globally."))
-        _ = try requireSuccess(git(["config", "user.email"], in: folderURL, environment: environment), failure: .gitConfigFailed("Missing Git user.email. Add a Git author email in GitFolder Settings or configure Git globally."))
+        _ = try requireSuccess(git(["config", "user.name"], in: folderURL, environment: environment), failure: .gitConfigFailed("Missing Git user.name. Add a Git author name in GitKittie Folder Settings or configure Git globally."))
+        _ = try requireSuccess(git(["config", "user.email"], in: folderURL, environment: environment), failure: .gitConfigFailed("Missing Git user.email. Add a Git author email in GitKittie Folder Settings or configure Git globally."))
     }
 
     private func ensureRemote(in folderURL: URL, repoUrl: String, environment: [String: String]) throws {
@@ -584,7 +587,7 @@ enum GitSyncError: LocalizedError, Equatable, Sendable {
         UserFacingError(
             code: code,
             title: "Sync failed",
-            message: errorDescription ?? "GitFolder could not sync this folder.",
+            message: errorDescription ?? "GitKittie Folder could not sync this folder.",
             recoverySuggestion: recoverySuggestion,
             technicalDetailsLogId: nil,
             affectedPaths: affectedPaths

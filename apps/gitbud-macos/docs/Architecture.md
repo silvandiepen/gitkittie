@@ -1,6 +1,6 @@
-# GitBud (macOS) — Architecture
+# GitKittie Bud (macOS) — Architecture
 
-GitBud is a native SwiftUI app in active development on top of shared GitKittie history
+GitKittie Bud is a native SwiftUI app in active development on top of shared GitKittie history
 services, GitPont-style direct provider integration, and AIPont-style Magic. The app is a thin UI
 and state layer; git operations belong in `swift/GitKittieKit`.
 
@@ -82,7 +82,7 @@ between the list and a full-height canvas.
 
 ### Local repository mode
 
-The user opens an existing local repository. GitBud stores a security-scoped
+The user opens an existing local repository. GitKittie Bud stores a security-scoped
 bookmark to the selected folder, reads graph/status through GitKittie, and performs
 history edits with macOS system git behind GitKittie APIs.
 
@@ -99,9 +99,9 @@ workflows.
 Open PR listing, selected PR review summaries, inline review comments, inline
 comment replies, overall review submission, and draft PR creation are implemented
 as direct app-to-provider requests using the user-supplied provider token and the
-selected provider repository. GitBud reads open PR metadata, fetches selected PR
+selected provider repository. GitKittie Bud reads open PR metadata, fetches selected PR
 detail/review counts and changed-file metadata, and sends review/PR actions
-directly to the provider API; no GitBud account, relay, hosted backend, or stored
+directly to the provider API; no GitKittie Bud account, relay, hosted backend, or stored
 server-side credential is involved.
 
 Remote-only API editing is not the macOS v1 path for rebase/split/squash because
@@ -110,7 +110,7 @@ can still support metadata and simpler provider-native operations.
 
 ## Shared GitKittie work
 
-GitBud needs GitKittie APIs beyond the current `GitEngine` surface:
+GitKittie Bud needs GitKittie APIs beyond the current `GitEngine` surface:
 
 - Graph: commits, parents, branch/ref decoration, ahead/behind, merge-base, branch-flow
   current-only/target-only commit summaries, and current-vs-target branch file impact.
@@ -164,18 +164,18 @@ GitBud needs GitKittie APIs beyond the current `GitEngine` surface:
 
 Direct rewritten-history push is additionally gated by local protected-branch
 policy. By default, `main`, `master`, `development`, and `release/*` are treated
-as protected: GitBud still allows local review/rewrite with safety refs, but the
+as protected: GitKittie Bud still allows local review/rewrite with safety refs, but the
 force-with-lease button is disabled and the user is pointed toward a branch plus
 draft PR workflow. The protected branch patterns are editable in the app and are
 persisted locally through `GitBudSettingsStore`; they are not synced through a
-GitBud account or backend.
+GitKittie Bud account or backend.
 
 ## Magic flow
 
 1. User selects a commit, rewrite plan, or selected diff.
 2. `MagicCoordinator` builds an AIPont request from the diff and local context.
 3. AIPont sends the request to the user's selected BYOK provider.
-4. GitBud displays the suggestion as editable text.
+4. GitKittie Bud displays the suggestion as editable text.
 5. User explicitly applies or discards it.
 
 Magic stores non-secret provider defaults in local app preferences and stores the
@@ -184,14 +184,14 @@ written to repo config or logs by default.
 
 ## Test flow
 
-`npm run gitbud:test` builds the GitBud scheme for testing and runs the generated
+`npm run gitbud:test` builds the GitKittie Bud scheme for testing and runs the generated
 `GitBudTests.xctest` bundle directly with `xcrun xctest`. This avoids macOS app
 test-host launch flakiness while still exercising the same `GitBudCore` state and
 GitKittie rewrite code that the app uses.
 
 ## iOS/iPad relationship
 
-iOS and iPadOS GitBud are remote-only through GitPont. Shared UI concepts can be
+iOS and iPadOS GitKittie Bud are remote-only through GitPont. Shared UI concepts can be
 ported, but shared services must not assume subprocess git, SSH agent access, or
 local clones are available on those platforms. iOS/iPad workflows should focus on
 remote repository browsing, file history, diffs, commit-message Magic, branch/PR

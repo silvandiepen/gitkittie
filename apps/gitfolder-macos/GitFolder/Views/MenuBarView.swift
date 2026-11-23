@@ -53,7 +53,7 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button("Quit GitFolder", systemImage: "power") {
+            Button("Quit GitKittie Folder", systemImage: "power") {
                 NSApp.terminate(nil)
             }
             .keyboardShortcut("q")
@@ -70,7 +70,7 @@ struct MenuBarView: View {
                     .resizable()
                     .renderingMode(.template)
                     .frame(width: 16, height: 16)
-                Text("GitFolder")
+                Text("GitKittie Folder")
                     .font(.headline)
             }
             Text(summaryText)

@@ -114,7 +114,7 @@ struct MagicTab: View {
             }
 
             Section {
-                Text("Your key goes straight from this Mac to the provider you choose. GitBud has no server and stores the key in the Keychain.")
+                Text("Your key goes straight from this Mac to the provider you choose. GitKittie Bud has no server and stores the key in the Keychain.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -1,8 +1,8 @@
-# GitBud — Product Spec
+# GitKittie Bud — Product Spec
 
 ## Name
 
-GitBud
+GitKittie Bud
 
 ## One-line description
 
@@ -15,7 +15,7 @@ interactive rebase, splitting commits, squashing, reordering, editing old messag
 and purging files from history. Existing clients expose the power, but often still
 require users to understand low-level git terminology and risk.
 
-GitBud turns those operations into visual, previewable workflows.
+GitKittie Bud turns those operations into visual, previewable workflows.
 
 ## Goal
 
@@ -39,7 +39,7 @@ The user should be able to:
 - Safe branch/ref before rewrite.
 - Force-push is explicit and uses force-with-lease.
 - Local data and user credentials stay on the user's device.
-- No GitBud accounts, hosted GitBud backend, or GitBud-owned sync infrastructure.
+- No GitKittie Bud accounts, hosted GitKittie Bud backend, or GitKittie Bud-owned sync infrastructure.
 - Provider integrations are direct app-to-provider through GitPont.
 - AI integrations are direct app-to-provider through AIPont BYOK.
 
@@ -52,7 +52,7 @@ The user should be able to:
 ## Core surfaces
 
 ```txt
-GitBud
+GitKittie Bud
 ├─ Repositories
 │  ├─ Open Local Repository...
 │  └─ Connect Remote Repository...
@@ -74,9 +74,9 @@ GitBud
 
 ## Non-goals
 
-- GitBud accounts.
-- Hosted GitBud backend.
-- GitBud-operated sync, relay, or AI infrastructure.
+- GitKittie Bud accounts.
+- Hosted GitKittie Bud backend.
+- GitKittie Bud-operated sync, relay, or AI infrastructure.
 - Realtime collaboration.
 - Windows, Linux, or web in v1.
 

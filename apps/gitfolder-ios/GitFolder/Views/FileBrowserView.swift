@@ -163,6 +163,7 @@ struct DirectoryView: View {
                 Section {
                     Label(loadError, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red).font(.callout)
+                        .listRowBackground(Theme.panel)
                 }
             }
             ForEach(entries) { entry in
@@ -175,10 +176,13 @@ struct DirectoryView: View {
                     }
                 }
             }
+            .listRowBackground(Theme.panel)
             if !isLoading && entries.isEmpty && loadError == nil {
                 Text("Empty folder").foregroundStyle(.secondary)
+                    .listRowBackground(Theme.panel)
             }
         }
+        .themedList()
     }
 
     private func gridLayout<Cell: View>(
@@ -199,6 +203,7 @@ struct DirectoryView: View {
             }
             .padding(16)
         }
+        .background(Theme.window.ignoresSafeArea())
     }
 
     /// A row/cell: folders navigate; files open on tap and expose actions on long-press.

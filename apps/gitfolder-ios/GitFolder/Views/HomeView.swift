@@ -45,9 +45,13 @@ struct HomeView: View {
                             } label: { Label("Remove", systemImage: "minus.circle") }
                         }
                     }
+                    .listRowBackground(Theme.panel)
                 }
+                .themedList()
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.window.ignoresSafeArea())
         .navigationTitle("Repositories")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

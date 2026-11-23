@@ -1,11 +1,11 @@
-# GitBud — Implementation Plan
+# GitKittie Bud — Implementation Plan
 
 This plan describes the intended build order and current implementation status. The macOS
 app target is scaffolded and the core v1 workflows are implemented behind real-git tests.
 
 ## Phase 0 — Foundation
 
-- **Done:** Add XcodeGen projects for `apps/gitbud-macos` and GitBud documentation for
+- **Done:** Add XcodeGen projects for `apps/gitbud-macos` and GitKittie Bud documentation for
   `apps/gitbud-ios`.
 - **Done:** Define GitKittie history models: commits, refs, graph rows, file diffs, hunks, rewrite plans, and
   rewrite results.
