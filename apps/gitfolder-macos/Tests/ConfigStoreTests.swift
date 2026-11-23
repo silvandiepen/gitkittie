@@ -456,7 +456,7 @@ final class S3StorageServiceTests: XCTestCase {
         }
 
         try await service.testConnection(
-            settings: settings,
+            bucket: settings.s3,
             credentials: S3Credentials(accessKeyID: "access", secretAccessKey: "secret")
         )
     }

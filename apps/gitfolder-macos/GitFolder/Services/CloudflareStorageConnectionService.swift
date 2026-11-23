@@ -2,6 +2,7 @@ import AppKit
 import AuthenticationServices
 import CryptoKit
 import Foundation
+import GitKittieKit
 
 struct CloudflareAccount: Codable, Identifiable, Equatable, Sendable {
     let id: String

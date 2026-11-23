@@ -1,47 +1,47 @@
 import CryptoKit
 import Foundation
 
-struct S3Credentials: Equatable, Sendable {
-    var accessKeyID: String
-    var secretAccessKey: String
-    var sessionToken: String? = nil
+/// Where an S3-compatible bucket is: Cloudflare R2, AWS S3 or any other server that
+/// speaks the same API.
+public struct S3Bucket: Equatable, Sendable {
+    public var endpoint: String
+    public var bucket: String
+    public var region: String
+
+    public init(endpoint: String, bucket: String, region: String = "auto") {
+        self.endpoint = endpoint
+        self.bucket = bucket
+        self.region = region
+    }
 }
 
-struct StoredObjectRecord: Codable, Equatable, Sendable {
-    var relativePath: String
-    var objectKey: String
-    var sha256: String
-    var byteCount: Int64
-    var modifiedAt: Date
+public struct S3Credentials: Equatable, Sendable {
+    public var accessKeyID: String
+    public var secretAccessKey: String
+    public var sessionToken: String?
+
+    public init(accessKeyID: String, secretAccessKey: String, sessionToken: String? = nil) {
+        self.accessKeyID = accessKeyID
+        self.secretAccessKey = secretAccessKey
+        self.sessionToken = sessionToken
+    }
 }
 
-struct StorageManifest: Codable, Equatable, Sendable {
-    var version: Int
-    var objects: [String: StoredObjectRecord]
-
-    static let empty = StorageManifest(version: 1, objects: [:])
-}
-
-struct StorageUploadOutcome: Equatable, Sendable {
-    var uploadedCount: Int
-    var uploadedBytes: Int64
-    var unchangedCount: Int
-    var manifest: StorageManifest
-}
-
-struct S3StorageService: Sendable {
+/// Signed requests (AWS Signature V4) to an S3-compatible bucket: upload, check and
+/// download. Shared by GitKittie Folder and Tasks.
+public struct S3StorageService: Sendable {
     private let session: URLSession
     private let now: @Sendable () -> Date
 
-    init(session: URLSession = .shared, now: @escaping @Sendable () -> Date = Date.init) {
+    public init(session: URLSession = .shared, now: @escaping @Sendable () -> Date = Date.init) {
         self.session = session
         self.now = now
     }
 
-    func testConnection(settings: BucketStorageSettings, credentials: S3Credentials) async throws {
+    public func testConnection(bucket: S3Bucket, credentials: S3Credentials) async throws {
         var request = try request(
             method: "HEAD",
-            settings: settings,
+            bucket: bucket,
             credentials: credentials,
             objectKey: nil,
             payloadHash: Self.emptyPayloadHash
@@ -51,11 +51,11 @@ struct S3StorageService: Sendable {
         try validate(response, expected: 200..<300)
     }
 
-    func uploadFile(
+    public func uploadFile(
         at fileURL: URL,
         objectKey: String,
         sha256: String,
-        settings: BucketStorageSettings,
+        bucket: S3Bucket,
         credentials: S3Credentials
     ) async throws {
         let byteCount = try fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
@@ -64,14 +64,14 @@ struct S3StorageService: Sendable {
                 at: fileURL,
                 objectKey: objectKey,
                 sha256: sha256,
-                settings: settings,
+                bucket: bucket,
                 credentials: credentials
             )
             return
         }
         var request = try request(
             method: "PUT",
-            settings: settings,
+            bucket: bucket,
             credentials: credentials,
             objectKey: objectKey,
             payloadHash: sha256,
@@ -82,15 +82,15 @@ struct S3StorageService: Sendable {
         try validate(response, expected: 200..<300)
     }
 
-    func verifyObject(
+    public func verifyObject(
         objectKey: String,
         sha256: String,
-        settings: BucketStorageSettings,
+        bucket: S3Bucket,
         credentials: S3Credentials
     ) async throws {
         var request = try request(
             method: "HEAD",
-            settings: settings,
+            bucket: bucket,
             credentials: credentials,
             objectKey: objectKey,
             payloadHash: Self.emptyPayloadHash
@@ -105,16 +105,68 @@ struct S3StorageService: Sendable {
         }
     }
 
+    /// Upload bytes held in memory (a task attachment, a review file). `contentType` is
+    /// what a browser is told when the object is opened by its public address.
+    public func upload(
+        _ data: Data,
+        objectKey: String,
+        contentType: String? = nil,
+        bucket: S3Bucket,
+        credentials: S3Credentials
+    ) async throws {
+        let sha256 = Self.sha256(data)
+        var headers = ["x-amz-meta-gitfolder-sha256": sha256]
+        if let contentType { headers["content-type"] = contentType }
+        var request = try request(
+            method: "PUT",
+            bucket: bucket,
+            credentials: credentials,
+            objectKey: objectKey,
+            payloadHash: sha256,
+            additionalHeaders: headers
+        )
+        request.timeoutInterval = 3_600
+        let (_, response) = try await session.upload(for: request, from: data)
+        try validate(response, expected: 200..<300)
+    }
+
+    /// Whether an object with this content is already in the bucket.
+    public func hasObject(objectKey: String, sha256: String, bucket: S3Bucket, credentials: S3Credentials) async -> Bool {
+        (try? await verifyObject(objectKey: objectKey, sha256: sha256, bucket: bucket, credentials: credentials)) != nil
+    }
+
+    /// Download an object with a signed request and check it against `expectedSHA256`.
+    public func download(
+        objectKey: String,
+        expectedSHA256: String,
+        bucket: S3Bucket,
+        credentials: S3Credentials
+    ) async throws -> Data {
+        var request = try request(
+            method: "GET",
+            bucket: bucket,
+            credentials: credentials,
+            objectKey: objectKey,
+            payloadHash: Self.emptyPayloadHash
+        )
+        request.timeoutInterval = 3_600
+        let (data, response) = try await session.data(for: request)
+        try validate(response, expected: 200..<300)
+        let actual = Self.sha256(data)
+        guard actual == expectedSHA256 else { throw S3StorageError.checksumMismatch(expected: expectedSHA256, actual: actual) }
+        return data
+    }
+
     private func uploadMultipartFile(
         at fileURL: URL,
         objectKey: String,
         sha256: String,
-        settings: BucketStorageSettings,
+        bucket: S3Bucket,
         credentials: S3Credentials
     ) async throws {
         let initiateRequest = try request(
             method: "POST",
-            settings: settings,
+            bucket: bucket,
             credentials: credentials,
             objectKey: objectKey,
             query: [("uploads", "")],
@@ -139,7 +191,7 @@ struct S3StorageService: Sendable {
                 let payloadHash = Self.sha256(data)
                 var partRequest = try request(
                     method: "PUT",
-                    settings: settings,
+                    bucket: bucket,
                     credentials: credentials,
                     objectKey: objectKey,
                     query: [("partNumber", String(partNumber)), ("uploadId", uploadID)],
@@ -161,7 +213,7 @@ struct S3StorageService: Sendable {
             let completionHash = Self.sha256(completionXML)
             var completeRequest = try request(
                 method: "POST",
-                settings: settings,
+                bucket: bucket,
                 credentials: credentials,
                 objectKey: objectKey,
                 query: [("uploadId", uploadID)],
@@ -178,7 +230,7 @@ struct S3StorageService: Sendable {
         } catch {
             var abortRequest = try? request(
                 method: "DELETE",
-                settings: settings,
+                bucket: bucket,
                 credentials: credentials,
                 objectKey: objectKey,
                 query: [("uploadId", uploadID)],
@@ -190,16 +242,16 @@ struct S3StorageService: Sendable {
         }
     }
 
-    func downloadFile(
+    public func downloadFile(
         objectKey: String,
         destinationURL: URL,
         expectedSHA256: String,
-        settings: BucketStorageSettings,
+        bucket: S3Bucket,
         credentials: S3Credentials
     ) async throws {
         var request = try request(
             method: "GET",
-            settings: settings,
+            bucket: bucket,
             credentials: credentials,
             objectKey: objectKey,
             payloadHash: Self.emptyPayloadHash
@@ -226,7 +278,7 @@ struct S3StorageService: Sendable {
 
     private func request(
         method: String,
-        settings: BucketStorageSettings,
+        bucket: S3Bucket,
         credentials: S3Credentials,
         objectKey: String?,
         query: [(String, String)] = [],
@@ -236,11 +288,11 @@ struct S3StorageService: Sendable {
         guard !credentials.accessKeyID.isEmpty, !credentials.secretAccessKey.isEmpty else {
             throw S3StorageError.missingCredentials
         }
-        guard let endpoint = URL(string: settings.endpoint), let host = endpoint.host, !settings.bucket.isEmpty else {
+        guard let endpoint = URL(string: bucket.endpoint), let host = endpoint.host, !bucket.bucket.isEmpty else {
             throw S3StorageError.invalidConfiguration
         }
 
-        let canonicalURI = canonicalPath(bucket: settings.bucket, objectKey: objectKey)
+        let canonicalURI = canonicalPath(bucket: bucket.bucket, objectKey: objectKey)
         var encodedQuery: [(name: String, value: String)] = []
         for item in query {
             encodedQuery.append((Self.percentEncodeQuery(item.0), Self.percentEncodeQuery(item.1)))
@@ -273,7 +325,7 @@ struct S3StorageService: Sendable {
         let canonicalHeaders = sortedHeaders.map { "\($0.0):\($0.1)\n" }.joined()
         let signedHeaders = sortedHeaders.map(\.0).joined(separator: ";")
         let canonicalRequest = [method, canonicalURI, canonicalQuery, canonicalHeaders, signedHeaders, payloadHash].joined(separator: "\n")
-        let region = settings.region.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "auto" : settings.region
+        let region = bucket.region.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "auto" : bucket.region
         let scope = "\(dateStamp)/\(region)/s3/aws4_request"
         let stringToSign = ["AWS4-HMAC-SHA256", timestamp, scope, Self.sha256(Data(canonicalRequest.utf8))].joined(separator: "\n")
         let signature = Self.signature(
@@ -303,7 +355,7 @@ struct S3StorageService: Sendable {
         guard expected.contains(response.statusCode) else { throw S3StorageError.httpStatus(response.statusCode) }
     }
 
-    static func sha256(of fileURL: URL) throws -> String {
+    public static func sha256(of fileURL: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: fileURL)
         defer { try? handle.close() }
         var hasher = SHA256()
@@ -315,7 +367,7 @@ struct S3StorageService: Sendable {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func sha256(_ data: Data) -> String {
+    public static func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
@@ -381,7 +433,7 @@ struct S3StorageService: Sendable {
     private static let multipartPartSize = 64 * 1_024 * 1_024
 }
 
-enum S3StorageError: LocalizedError, Equatable, Sendable {
+public enum S3StorageError: LocalizedError, Equatable, Sendable {
     case invalidConfiguration
     case missingCredentials
     case invalidResponse
@@ -390,7 +442,7 @@ enum S3StorageError: LocalizedError, Equatable, Sendable {
     case invalidMultipartResponse
     case multipartFailed
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidConfiguration: "The bucket endpoint, region, or name is invalid."
         case .missingCredentials: "Add storage credentials before connecting."

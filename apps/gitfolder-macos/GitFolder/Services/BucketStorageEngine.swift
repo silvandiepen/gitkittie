@@ -1,4 +1,5 @@
 import Foundation
+import GitKittieKit
 
 struct BucketStorageEngine: Sendable {
     private let service: S3StorageService
@@ -11,7 +12,7 @@ struct BucketStorageEngine: Sendable {
 
     func testConnection(folder: SyncedFolder, credentials: S3Credentials) async throws {
         guard let settings = folder.storage, settings.enabled else { throw BucketStorageError.notEnabled }
-        try await service.testConnection(settings: settings, credentials: credentials)
+        try await service.testConnection(bucket: settings.s3, credentials: credentials)
     }
 
     func uploadEligibleFiles(folder: SyncedFolder, credentials: S3Credentials) async throws -> StorageUploadOutcome {
@@ -35,13 +36,13 @@ struct BucketStorageEngine: Sendable {
                     at: candidate.url,
                     objectKey: objectKey,
                     sha256: hash,
-                    settings: settings,
+                    bucket: settings.s3,
                     credentials: credentials
                 )
                 try await service.verifyObject(
                     objectKey: objectKey,
                     sha256: hash,
-                    settings: settings,
+                    bucket: settings.s3,
                     credentials: credentials
                 )
                 manifest.objects[candidate.relativePath] = StoredObjectRecord(
@@ -75,7 +76,7 @@ struct BucketStorageEngine: Sendable {
                 objectKey: record.objectKey,
                 destinationURL: destination,
                 expectedSHA256: record.sha256,
-                settings: settings,
+                bucket: settings.s3,
                 credentials: credentials
             )
         }
@@ -158,4 +159,31 @@ private extension JSONDecoder {
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }
+}
+
+struct StoredObjectRecord: Codable, Equatable, Sendable {
+    var relativePath: String
+    var objectKey: String
+    var sha256: String
+    var byteCount: Int64
+    var modifiedAt: Date
+}
+
+struct StorageManifest: Codable, Equatable, Sendable {
+    var version: Int
+    var objects: [String: StoredObjectRecord]
+
+    static let empty = StorageManifest(version: 1, objects: [:])
+}
+
+struct StorageUploadOutcome: Equatable, Sendable {
+    var uploadedCount: Int
+    var uploadedBytes: Int64
+    var unchangedCount: Int
+    var manifest: StorageManifest
+}
+
+extension BucketStorageSettings {
+    /// The bucket these settings point at, for the shared S3 service.
+    var s3: S3Bucket { S3Bucket(endpoint: endpoint, bucket: bucket, region: region) }
 }
