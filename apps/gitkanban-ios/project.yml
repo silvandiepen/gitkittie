@@ -108,6 +108,8 @@ targets:
     sources:
       - path: ShareExtension
       - path: Shared
+      # Board colours, the same as on the home screen (the board panel).
+      - path: ../../swift/TasksUI/BoardColor.swift
     dependencies:
       - package: GitKanbanKit
         product: GitKanbanKit
@@ -159,6 +161,7 @@ targets:
           - "*.entitlements"
       - path: ActionExtension
       - path: Shared
+      - path: ../../swift/TasksUI/BoardColor.swift
     dependencies:
       - package: GitKanbanKit
         product: GitKanbanKit

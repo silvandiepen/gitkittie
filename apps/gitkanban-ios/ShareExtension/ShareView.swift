@@ -11,6 +11,8 @@ struct ShareView: View {
 
     /// The image open in the annotation editor.
     @State private var annotating: SharedImage.ID?
+    /// The board panel is open.
+    @State private var choosingBoard = false
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -118,13 +120,35 @@ struct ShareView: View {
 
     private var projectSection: some View {
         Section {
-            Picker("Project", selection: $share.destinationID) {
-                ForEach(share.destinations) { destination in
-                    Text(destination.label).tag(destination.id)
+            // The board, with its repository small under it, opening a panel to choose
+            // another: the board is what you are choosing, the repository only says where.
+            Button { choosingBoard = true } label: {
+                if let destination = share.destination {
+                    HStack(spacing: 12) {
+                        BoardIcon(board: destination.board)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(destination.board.name).font(.headline).foregroundStyle(.primary)
+                            Text(destination.repo.displayName).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
                 }
             }
-            .onChange(of: share.destinationID) { _, _ in Task { await share.openDestination() } }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Board, \(share.destination?.board.name ?? "")")
+            .accessibilityHint("Choose another board")
             .accessibilityIdentifier("shareProjectPicker")
+            .sheet(isPresented: $choosingBoard) {
+                BoardPanel(destinations: share.destinations, chosen: share.destinationID) { id in
+                    choosingBoard = false
+                    guard id != share.destinationID else { return }
+                    share.destinationID = id
+                    Task { await share.openDestination() }
+                }
+            }
 
             Picker("Add to", selection: $share.target) {
                 ForEach(ShareModel.Target.allCases) { Text($0.rawValue).tag($0) }
@@ -303,6 +327,94 @@ private struct ExistingTaskPicker: View {
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
             if share.cards.isEmpty { ContentUnavailableView("No tasks on this board", systemImage: "tray") }
+        }
+    }
+}
+
+/// A board's own icon in its own colour, as on the home screen.
+private struct BoardIcon: View {
+    let board: SelectedBoard
+
+    var body: some View {
+        Image(systemName: board.icon ?? BoardAppearance.defaultIcon)
+            .font(.title3)
+            .foregroundStyle(Color(boardColor: board.color))
+            .frame(width: 28)
+    }
+}
+
+/// The boards to share to, in a panel: each repository a small heading, its boards under
+/// it, the chosen one ticked. Searchable once there are more than a screenful.
+private struct BoardPanel: View {
+    let destinations: [ShareDestination]
+    let chosen: String
+    let onChoose: (String) -> Void
+
+    @State private var query = ""
+    @Environment(\.dismiss) private var dismiss
+
+    /// Repositories in the order they are in the app, each with its boards that match.
+    private var groups: [(repo: AddedRepo, boards: [ShareDestination])] {
+        let needle = query.trimmingCharacters(in: .whitespaces)
+        var order: [String] = []
+        var byRepo: [String: [ShareDestination]] = [:]
+        for destination in destinations {
+            guard needle.isEmpty
+                || destination.board.name.localizedCaseInsensitiveContains(needle)
+                || destination.repo.displayName.localizedCaseInsensitiveContains(needle) else { continue }
+            if byRepo[destination.repo.id] == nil { order.append(destination.repo.id) }
+            byRepo[destination.repo.id, default: []].append(destination)
+        }
+        return order.compactMap { id in byRepo[id].map { ($0[0].repo, $0) } }
+    }
+
+    var body: some View {
+        NavigationStack {
+            searchable(List {
+                ForEach(groups, id: \.repo.id) { group in
+                    Section {
+                        ForEach(group.boards) { destination in
+                            Button { onChoose(destination.id) } label: {
+                                HStack(spacing: 12) {
+                                    BoardIcon(board: destination.board)
+                                    Text(destination.board.name).foregroundStyle(.primary)
+                                    Spacer(minLength: 8)
+                                    if destination.id == chosen {
+                                        Image(systemName: "checkmark").font(.body.weight(.semibold)).foregroundStyle(.tint)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(destination.id == chosen ? .isSelected : [])
+                            .accessibilityIdentifier("shareBoard-\(destination.board.name)")
+                        }
+                    } header: {
+                        Text(group.repo.displayName)
+                    }
+                }
+                if groups.isEmpty {
+                    ContentUnavailableView.search(text: query)
+                }
+            })
+            .navigationTitle("Board")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        // Solid, so the form under the panel does not show through the list.
+        .presentationBackground(Color(uiColor: .systemGroupedBackground))
+    }
+
+    /// A search field only once there are more boards than fit on the panel.
+    @ViewBuilder private func searchable(_ list: some View) -> some View {
+        if destinations.count > 8 {
+            list.searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Boards")
+        } else {
+            list
         }
     }
 }
