@@ -11,6 +11,7 @@ import UserNotifications
 enum NotificationCategory {
     static let reviews = "gitkanban.reviews"
     static let board = "gitkanban.board"
+    static let newBoard = "gitkanban.newBoard"
 }
 
 /// Receives taps on notifications and shows banners while the app is in front.
@@ -176,5 +177,13 @@ extension AppModel {
         if addedRepos.isEmpty { await restoreForSharing() }
         if notifiesBoardChanges { await refreshBoardSummaries() }
         await loadReviewInbox()
+        await refreshBoardSuggestions()
+    }
+
+    /// A new board in a repository that is already added: opening the app asks whether to add it.
+    func postNewBoard(_ suggestion: BoardSuggestion) async {
+        await post(title: "New board: \(suggestion.name)",
+                   body: "\(suggestion.repoName) has a new board. Open Tasks to add it.",
+                   category: NotificationCategory.newBoard, id: "newBoard.\(suggestion.id)")
     }
 }

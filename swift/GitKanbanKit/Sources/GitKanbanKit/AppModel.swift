@@ -174,6 +174,8 @@ public final class AppModel {
     /// The open tasks of each board in the sidebar (see `loadAllTasks`).
     public var allTasks: [BoardTasks] = []
     public var isLoadingAllTasks = false
+    /// New boards found next to the ones in the sidebar, waiting for a yes or no.
+    public var boardSuggestions: [BoardSuggestion] = []
     /// A task to select once its board is on screen (picked in All Tasks).
     @ObservationIgnored var pendingSelection: String?
     /// The board `docs` was read for.

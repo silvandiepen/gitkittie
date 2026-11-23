@@ -436,7 +436,27 @@ private struct WorkspaceSplit: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { footer }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 0) {
+                    // A board that appeared in a repository you already have: add it, or not.
+                    ForEach(model.boardSuggestions) { suggestion in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("New board: \(suggestion.name)").font(.callout.weight(.semibold))
+                            Text("In \(suggestion.repoName). Add it to the sidebar?").font(.caption).foregroundStyle(.secondary)
+                            HStack {
+                                Button("Add") { model.addSuggestedBoard(suggestion) }.buttonStyle(.borderedProminent).controlSize(.small)
+                                Button("Not Now") { model.dismissBoardSuggestion(suggestion) }.controlSize(.small)
+                            }
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.stroke))
+                        .padding(.horizontal, 10).padding(.bottom, 6)
+                    }
+                    footer
+                }
+            }
             .toolbar {
                 // The app's name sits where a window title would, above the sidebar.
                 ToolbarItem(placement: .automatic) {
@@ -501,7 +521,10 @@ private struct WorkspaceSplit: View {
         // What changed on each board since it was last opened (the sidebar badges), and
         // each board's icon and colour: on launch, and again whenever the app comes forward.
         .task(id: scenePhase) {
-            if scenePhase == .active { await model.refreshBoardSummaries() }
+            if scenePhase == .active {
+                await model.refreshBoardSummaries()
+                await model.refreshBoardSuggestions()
+            }
         }
         .sheet(isPresented: $showAdd) { NavigationStack { AddRepoView() }.environment(model).frame(minWidth: 460, minHeight: 480) }
         .sheet(item: $browseRepo) { repo in NavigationStack { BoardPickerView(repo: repo) }.environment(model).frame(minWidth: 460, minHeight: 480) }

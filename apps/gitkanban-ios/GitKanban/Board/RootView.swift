@@ -259,6 +259,12 @@ private struct HomeView: View {
     /// Repositories folded shut on the home screen, by id.
     @AppStorage("homeFoldedRepos") private var foldedRepos = ""
 
+    /// What can be done with a repository: choose its boards, or take it off the phone.
+    @ViewBuilder private func repoMenu(_ repo: AddedRepo) -> some View {
+        Button("Add or Remove Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
+        Button(repo.kind.isFolder ? "Remove Folder" : "Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
+    }
+
     private func isFolded(_ repo: AddedRepo) -> Bool { foldedRepos.split(separator: "\n").contains(Substring(repo.id)) }
     private func toggleFolded(_ repo: AddedRepo) {
         var ids = foldedRepos.split(separator: "\n").map(String.init)
@@ -364,6 +370,23 @@ private struct HomeView: View {
                 }
                 .background(Theme.panel, in: RoundedRectangle(cornerRadius: 16))
 
+                // A board that appeared in a repository you already have: add it, or not.
+                ForEach(model.boardSuggestions) { suggestion in
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("New board: \(suggestion.name)", systemImage: "sparkles.rectangle.stack").font(.headline)
+                        Text("\(suggestion.repoName) has a board that is not on this phone yet. Add it?")
+                            .font(.callout).foregroundStyle(.secondary)
+                        HStack {
+                            Button("Add") { model.addSuggestedBoard(suggestion) }.buttonStyle(.borderedProminent)
+                            Button("Not Now") { model.dismissBoardSuggestion(suggestion) }.buttonStyle(.bordered)
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 16))
+                    .accessibilityIdentifier("boardSuggestion")
+                }
+
                 ForEach(model.addedRepos) { repo in
                     VStack(alignment: .leading, spacing: 0) {
                         Button { toggleFolded(repo) } label: {
@@ -374,14 +397,21 @@ private struct HomeView: View {
                                 Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                                     .rotationEffect(.degrees(isFolded(repo) ? -90 : 0))
                             }
-                            .padding(.horizontal, 16).padding(.vertical, 10)
+                            .padding(.leading, 16).padding(.trailing, 52).padding(.vertical, 10)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(repo.displayName), \(isFolded(repo) ? "folded" : "open")")
-                        .contextMenu {
-                            Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
-                            Button(repo.kind.isFolder ? "Remove Folder" : "Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
+                        .contextMenu { repoMenu(repo) }
+                        // The same choices in sight: adding a board should not need a long press.
+                        .overlay(alignment: .trailing) {
+                            Menu { repoMenu(repo) } label: {
+                                Image(systemName: "ellipsis").font(.body.weight(.semibold)).foregroundStyle(.secondary)
+                                    .frame(width: 44, height: 40).contentShape(Rectangle())
+                            }
+                            .padding(.trailing, 6)
+                            .accessibilityLabel("\(repo.displayName) options")
+                            .accessibilityIdentifier("repoOptions")
                         }
                         if !isFolded(repo) {
                             if repo.boards.isEmpty {
@@ -454,6 +484,7 @@ private struct HomeView: View {
         }
         .refreshable {
             await model.refreshBoardSummaries()
+            await model.refreshBoardSuggestions()
             await model.loadReviewInbox()
         }
         // Reviews on every board: on launch, whenever the app comes forward, and when a
