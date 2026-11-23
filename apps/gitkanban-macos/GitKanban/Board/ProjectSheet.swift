@@ -97,6 +97,14 @@ struct ProjectSheet: View {
     }
     @State private var sourceProblem: String?
     @State private var selection: Set<UUID> = []
+    /// A field of a list row: its name, or a product's prefix.
+    enum RowField: Hashable {
+        case name(UUID), prefix(UUID)
+        var row: UUID { switch self { case .name(let id), .prefix(let id): id } }
+    }
+    /// The row field being typed in, right in the list: a row just added, or one double-clicked.
+    @State private var editingField: RowField?
+    @FocusState private var focusedField: RowField?
     @State private var category: Category = .general
     @State private var seeded = false
     @State private var detecting = false
@@ -139,6 +147,50 @@ struct ProjectSheet: View {
         TextField(hint, text: text, prompt: Text(hint)).labelsHidden()
     }
 
+    /// Text in a list row that turns into a field to type in when it is double-clicked, or
+    /// when its row was just added. Return or clicking away ends the edit.
+    @ViewBuilder private func editableText(_ text: Binding<String>, hint: String, field: RowField) -> some View {
+        if editingField == field {
+            TextField(hint, text: text, prompt: Text(hint))
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .focused($focusedField, equals: field)
+                .onSubmit { editingField = nil }
+                .onAppear { Task { @MainActor in focusedField = field } }
+                .accessibilityIdentifier("settingsRename")
+        } else {
+            Text(text.wrappedValue.isEmpty ? hint : text.wrappedValue)
+                .foregroundStyle(text.wrappedValue.isEmpty ? .tertiary : .primary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                // Simultaneous, so the first click still selects the row.
+                .simultaneousGesture(TapGesture(count: 2).onEnded { edit(field) })
+        }
+    }
+
+    private func edit(_ field: RowField) {
+        selection = [field.row]
+        editingField = field
+    }
+
+    /// Typing ends when the field loses focus; Return on a selected row starts it again.
+    private func listEditing<V: View>(_ list: V, proxy: ScrollViewProxy) -> some View {
+        list
+            .onChange(of: focusedField) { old, new in
+                if new == nil, let old, editingField == old { editingField = nil }
+            }
+            .onChange(of: editingField) { _, field in
+                if let field { withAnimation { proxy.scrollTo(field.row) } }
+            }
+            .onKeyPress(.return) {
+                guard editingField == nil, selection.count == 1, let id = selection.first else { return .ignored }
+                edit(.name(id))
+                return .handled
+            }
+    }
+
     @ViewBuilder private func decoration(_ category: Category, _ index: Int) -> some View {
         switch category {
         case .lanes: Circle().fill(Self.laneColor(index)).frame(width: 11, height: 11)
@@ -169,7 +221,7 @@ struct ProjectSheet: View {
 
     private var categorized: some View {
         HStack(spacing: 0) {
-            List(Category.allCases, selection: Binding(get: { category }, set: { category = $0 ?? .general; selection = [] })) { item in
+            List(Category.allCases, selection: Binding(get: { category }, set: { category = $0 ?? .general; selection = []; editingField = nil })) { item in
                 HStack {
                     Label(item.rawValue, systemImage: item.symbol)
                     Spacer()
@@ -235,42 +287,73 @@ struct ProjectSheet: View {
     private var productsForm: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("A board can cover several products. Tasks name the one they are for; the sidebar and the filter show one at a time.")
+                Text("A board can cover several products. Tasks name the one they are for; the sidebar and the filter show one at a time. Double-click a name or prefix to change it.")
                     .font(.callout).foregroundStyle(.secondary)
                 Spacer()
+                if !selection.isEmpty, productRows.contains(where: { selection.contains($0.id) }) {
+                    Button(role: .destructive) { removeProducts(selection) } label: { Image(systemName: "trash") }
+                        .buttonStyle(.borderless)
+                        .help("Delete the selected products")
+                        .accessibilityLabel("Delete")
+                        .accessibilityIdentifier("settingsDeleteSelected")
+                }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
             Divider()
-            List {
-                ForEach($productRows) { $row in
-                    HStack(spacing: 10) {
-                        Image(systemName: "shippingbox").font(.caption).foregroundStyle(.tertiary).frame(width: 16)
-                        field("Product name", $row.name)
-                        TextField("Prefix", text: $row.prefix, prompt: Text("Prefix (optional)"))
-                            .labelsHidden().frame(width: 130).autocorrectionDisabled()
-                            .help("With a prefix, new tasks of this product are numbered with it, such as \(BoardProduct.cleanPrefix(row.prefix) ?? "TASKS")-001. Without one they use the board's numbering.")
-                        Button { productRows.removeAll { $0.id == row.id } } label: {
-                            Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+            ScrollViewReader { proxy in
+                listEditing(List(selection: $selection) {
+                    ForEach($productRows) { $row in
+                        HStack(spacing: 10) {
+                            Image(systemName: "shippingbox").font(.caption).foregroundStyle(.tertiary).frame(width: 16)
+                            editableText($row.name, hint: "Product name", field: .name(row.id))
+                            editableText($row.prefix, hint: "No prefix", field: .prefix(row.id))
+                                .frame(width: 130)
+                                .help("With a prefix, new tasks of this product are numbered with it, such as \(BoardProduct.cleanPrefix(row.prefix) ?? "TASKS")-001. Without one they use the board's numbering. Double-click to change it.")
+                            Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary).help("Drag to order")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Remove \(row.name)")
-                        Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary).help("Drag to order")
+                        .padding(.vertical, 2)
+                        .tag(row.id)
+                        .id(row.id)
+                        .contextMenu { productMenu(row) }
                     }
-                    .padding(.vertical, 2)
-                }
-                .onMove { productRows.move(fromOffsets: $0, toOffset: $1) }
+                    .onMove { productRows.move(fromOffsets: $0, toOffset: $1) }
+                }, proxy: proxy)
+                .onDeleteCommand { removeProducts(selection) }
             }
             .listStyle(.inset(alternatesRowBackgrounds: true))
             Divider()
             VStack(alignment: .leading, spacing: 8) {
                 Text("Removing a product leaves its tasks as they are; they only lose their place in the list.")
                     .font(.caption).foregroundStyle(.secondary)
-                Button { productRows.append(ProductRow(name: "", prefix: "", original: nil)) } label: { Label("Add Product", systemImage: "plus") }
+                Button {
+                    let row = ProductRow(name: "", prefix: "", original: nil)
+                    productRows.append(row)
+                    // Straight into its name, ready to type.
+                    edit(.name(row.id))
+                } label: { Label("Add Product", systemImage: "plus") }
                     .accessibilityIdentifier("settingsAddProduct")
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// A product row's right-click menu.
+    @ViewBuilder private func productMenu(_ row: ProductRow) -> some View {
+        // On a row that is part of the selection the menu acts on all of it.
+        let ids = selection.contains(row.id) ? selection : [row.id]
+        if ids.count == 1 {
+            Button("Rename", systemImage: "pencil") { edit(.name(row.id)) }
+            Button("Change Prefix", systemImage: "number") { edit(.prefix(row.id)) }
+            Divider()
+        }
+        Button(ids.count == 1 ? "Delete" : "Delete \(ids.count) Products", systemImage: "trash", role: .destructive) { removeProducts(ids) }
+    }
+
+    private func removeProducts(_ ids: Set<UUID>) {
+        productRows.removeAll { ids.contains($0.id) }
+        selection = []
+        editingField = nil
     }
 
     /// The rows as products. One that existed keeps its id, so its tasks stay with it when it is renamed.
@@ -356,55 +439,64 @@ struct ProjectSheet: View {
         sourceProblem = nil
     }
 
-    /// One part's rows: drag to order, select one or more for the actions above the list.
+    /// One part's rows: drag to order, select one to rename it in the field above, select
+    /// several to merge them into one of themselves or to delete them.
     private func entryList(_ category: Category) -> some View {
         let items = entries(category)
         let chosen = items.wrappedValue.filter { selection.contains($0.id) }
-        let targets = items.wrappedValue.filter { !selection.contains($0.id) && !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
         let pending = merges.filter { $0.category == category }
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
-                if chosen.isEmpty {
-                    Text("Drag to order. Select rows (⌘ or ⇧ for more) to delete\(category.canMerge ? " or merge" : "") them.")
+                if chosen.count < 2 {
+                    Text("Drag to order. Double-click a name to rename it. Select several (⌘ or ⇧) to \(category.canMerge ? "merge or " : "")delete them.")
                         .font(.callout).foregroundStyle(.secondary)
                     Spacer()
                 } else {
                     Text("\(chosen.count) selected").font(.callout.weight(.medium))
                     Spacer()
                     if category.canMerge {
-                        Menu("Merge Into") {
-                            ForEach(targets) { target in
-                                Button(target.text) { merge(chosen, into: target, in: category) }
-                            }
-                        }
+                        // Merge into one of the selected rows: the one you pick keeps its name,
+                        // the others are folded into it.
+                        Menu("Merge Into") { mergeTargets(chosen, in: category) }
                         .fixedSize()
-                        .disabled(targets.isEmpty)
-                        .help("Every task that has the selected \(category.rawValue.lowercased()) gets the one you pick")
+                        .help("Every task that has one of the selected \(category.rawValue.lowercased()) gets the one you pick")
                         .accessibilityIdentifier("settingsMergeInto")
                     }
-                    Button("Delete", role: .destructive) { remove(selection, from: category) }
-                        .accessibilityIdentifier("settingsDeleteSelected")
-                    Button("Deselect") { selection = [] }
+                }
+                if !chosen.isEmpty {
+                    Button(role: .destructive) {
+                        remove(selection, from: category)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Delete the selected \(chosen.count == 1 ? category.singular.lowercased() : category.rawValue.lowercased())")
+                    .accessibilityLabel("Delete")
+                    .accessibilityIdentifier("settingsDeleteSelected")
                 }
             }
             .padding(.horizontal, 14).frame(height: 40)
             Divider()
-            List(selection: $selection) {
-                ForEach(items) { $item in
-                    let index = items.wrappedValue.firstIndex { $0.id == item.id } ?? 0
-                    HStack(spacing: 10) {
-                        decoration(category, index).frame(width: 16)
-                        field(category.hint, $item.text).autocorrectionDisabled()
-                        Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary)
-                            .help("Drag to order")
+            ScrollViewReader { proxy in
+                listEditing(List(selection: $selection) {
+                    ForEach(items) { $item in
+                        let index = items.wrappedValue.firstIndex { $0.id == item.id } ?? 0
+                        HStack(spacing: 10) {
+                            decoration(category, index).frame(width: 16)
+                            editableText($item.text, hint: category.hint, field: .name(item.id))
+                            Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary)
+                                .help("Drag to order")
+                        }
+                        .padding(.vertical, 2)
+                        .tag(item.id)
+                        .id(item.id)
+                        .contextMenu { entryMenu(item, in: category) }
                     }
-                    .padding(.vertical, 2)
-                    .tag(item.id)
-                }
-                .onMove { items.wrappedValue.move(fromOffsets: $0, toOffset: $1) }
+                    .onMove { items.wrappedValue.move(fromOffsets: $0, toOffset: $1) }
+                }, proxy: proxy)
+                .listStyle(.inset(alternatesRowBackgrounds: true))
+                .onDeleteCommand { remove(selection, from: category) }
             }
-            .listStyle(.inset(alternatesRowBackgrounds: true))
-            .onDeleteCommand { remove(selection, from: category) }
             Divider()
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(pending) { merge in
@@ -422,12 +514,36 @@ struct ProjectSheet: View {
                 Button {
                     let entry = Entry(text: category == .priorities ? "P\(priorities.count)" : "")
                     items.wrappedValue.append(entry)
-                    selection = [entry.id]
+                    // Straight into its name, ready to type.
+                    edit(.name(entry.id))
                 } label: { Label("Add \(category.singular)", systemImage: "plus") }
                 .accessibilityIdentifier("settingsAdd")
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// A row's right-click menu. On a row that is part of the selection it acts on all of it.
+    @ViewBuilder private func entryMenu(_ item: Entry, in category: Category) -> some View {
+        let ids = selection.contains(item.id) ? selection : [item.id]
+        let chosen = entries(category).wrappedValue.filter { ids.contains($0.id) }
+        if chosen.count == 1 {
+            Button("Rename", systemImage: "pencil") { edit(.name(item.id)) }
+        } else if category.canMerge {
+            Menu("Merge Into") { mergeTargets(chosen, in: category) }
+        }
+        Divider()
+        Button(chosen.count == 1 ? "Delete" : "Delete \(chosen.count) \(category.rawValue)", systemImage: "trash", role: .destructive) {
+            remove(ids, from: category)
+        }
+    }
+
+    /// Merge into one of the chosen rows: the one you pick keeps its name, the others are
+    /// folded into it.
+    @ViewBuilder private func mergeTargets(_ chosen: [Entry], in category: Category) -> some View {
+        ForEach(chosen.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }) { target in
+            Button(target.text) { merge(chosen.filter { $0.id != target.id }, into: target, in: category) }
         }
     }
 
