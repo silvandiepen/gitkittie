@@ -148,6 +148,30 @@ exercised by hand in that session.
 | **Live updates** | Board menu → Live Updates…: registers a channel on the relay (`apps/gitkanban-relay`), adds a push webhook on GitHub or GitLab, commits `.gitkanban/relay.json`; an open board then reloads on push (`Relay.swift`, `ProviderWebhook.swift`, `RelayTests`). | Exists · verified against a local and the deployed relay with signed test pushes; no real webhook created yet |
 | **Agent Access** | Account menu → Agent Access…: a local MCP server so agents use the boards without a copy of the repository. See [`../AGENTS.md`](../AGENTS.md) → Agent access. | Exists · verified with Claude Code and Codex against the real board |
 
+### File storage in a bucket
+
+A repository can send its images, audio, video and other binary files to an
+S3-compatible bucket (Cloudflare R2, AWS S3), so the repository holds tasks, review
+requests and pointers, not media. Repository menu → **File Storage…** (Mac and iPhone).
+
+- **Settings** live in the repository, in `.tasks/storage.json`: endpoint, bucket, region
+  and an optional public address. Every device and every agent reads the same file.
+- **Keys** stay in the Keychain of each device, never in the repository.
+- **Writing:** a binary file written through the provider (a task attachment, a review
+  file, an annotated image, also by an agent through Agent Access) is uploaded as
+  `tasks/v1/objects/<aa>/<sha256>.<ext>` and checked; the repository gets a small JSON
+  file `<name>.bucket` with the key, hash, size and public link. The same content is
+  uploaded once.
+- **Reading:** the apps show `<name>` as before. The repository is tried first, so files
+  from before the bucket still open; then the pointer is followed, and the download is
+  checked against its hash. With a public address no keys are needed to read.
+- **Without settings or without keys** a file is written to the repository as before.
+- **Existing files** can be moved from the same screen, two commits per file. They stay
+  in git history: moving stops growth, it does not shrink the repository.
+- **Not covered:** folders on the device and folder servers keep their files in place.
+
+The S3 code (`S3StorageService` in GitKittieKit) is shared with GitKittie Folder.
+
 ### Agent Access in short
 
 - **Transport:** loopback HTTP (`POST /mcp`, default port 47810, bearer token) plus a stdio bridge

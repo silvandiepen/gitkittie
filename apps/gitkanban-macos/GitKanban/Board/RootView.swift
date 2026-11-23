@@ -85,6 +85,7 @@ private struct WorkspaceSplit: View {
     @State private var serverAddress = ""
     @State private var isCheckingServer = false
     @State private var browseRepo: AddedRepo?
+    @State private var storageRepo: AddedRepo?
     @State private var showAgentAccess = false
     @State private var showNotificationSettings = false
     @Environment(\.scenePhase) private var scenePhase
@@ -225,6 +226,9 @@ private struct WorkspaceSplit: View {
         .accessibilityLabel("\(repo.displayName), \(isFolded(repo) ? "folded" : "open")")
         .contextMenu {
             Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
+            if model.supportsFileStorage(repo) {
+                Button("File Storage…", systemImage: "externaldrive") { storageRepo = repo }
+            }
             Divider()
             Button(repo.kind.isFolder ? "Remove Folder" : "Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
         }
@@ -374,6 +378,9 @@ private struct WorkspaceSplit: View {
                                     }
                                     Divider()
                                     Button("Browse Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
+                                    if model.supportsFileStorage(repo) {
+                                        Button("File Storage…", systemImage: "externaldrive") { storageRepo = repo }
+                                    }
                                     Divider()
                                     Button("Remove from Sidebar", systemImage: "minus.circle", role: .destructive) {
                                         if model.activeRepo?.id == repo.id, model.activeBoardFolder == board.folder { model.closeRepo() }
@@ -528,6 +535,7 @@ private struct WorkspaceSplit: View {
         }
         .sheet(isPresented: $showAdd) { NavigationStack { AddRepoView() }.environment(model).frame(minWidth: 460, minHeight: 480) }
         .sheet(item: $browseRepo) { repo in NavigationStack { BoardPickerView(repo: repo) }.environment(model).frame(minWidth: 460, minHeight: 480) }
+        .sheet(item: $storageRepo) { repo in NavigationStack { StorageSettingsSheet(repo: repo) }.environment(model).frame(minWidth: 520, minHeight: 620) }
         .sheet(isPresented: $showConnect) {
             ConnectView()
                 .environment(model)

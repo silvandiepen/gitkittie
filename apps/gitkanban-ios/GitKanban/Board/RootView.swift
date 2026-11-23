@@ -236,6 +236,7 @@ private struct HomeView: View {
     @State private var showAISettings = false
     @State private var showNotificationSettings = false
     @State private var browseRepo: AddedRepo?
+    @State private var storageRepo: AddedRepo?
     @State private var showReviews = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -262,6 +263,9 @@ private struct HomeView: View {
     /// What can be done with a repository: choose its boards, or take it off the phone.
     @ViewBuilder private func repoMenu(_ repo: AddedRepo) -> some View {
         Button("Add or Remove Boards…", systemImage: "square.grid.2x2") { browseRepo = repo }
+        if model.supportsFileStorage(repo) {
+            Button("File Storage…", systemImage: "externaldrive") { storageRepo = repo }
+        }
         Button(repo.kind.isFolder ? "Remove Folder" : "Remove Repository", systemImage: "trash", role: .destructive) { model.removeAddedRepo(repo) }
     }
 
@@ -549,6 +553,7 @@ private struct HomeView: View {
                 .onChange(of: model.isConnected) { _, connected in if connected { showConnect = false } }
         }
         .sheet(item: $browseRepo) { repo in NavigationStack { BoardPickerView(repo: repo) }.environment(model) }
+        .sheet(item: $storageRepo) { repo in NavigationStack { StorageSettingsSheet(repo: repo) }.environment(model) }
     }
 }
 
