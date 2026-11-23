@@ -47,6 +47,7 @@ struct CommitWindow: View {
     @State private var suggestions: [SuggestedCommit] = []
     @State private var isSuggesting = false
     @State private var isShowingSuggestions = false
+    @State private var didApplyCaptureHooks = false
 
     private var options: GitDiffOptions {
         GitDiffOptions(contextLines: mode == .fullFile ? nil : 3, ignoreWhitespace: ignoreWhitespace)
@@ -105,9 +106,28 @@ struct CommitWindow: View {
             if selectedPath == nil || !loaded.files.contains(where: { $0.path == selectedPath }) {
                 selectedPath = loaded.files.first?.path
             }
+            applyCaptureHooks(loaded)
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    /// Launch hooks for screenshots, applied once to the first window that loads, like iOS:
+    /// `GITBUD_FILE=<path>`, `GITBUD_DIFF_MODE=unified|sideBySide|fullFile`,
+    /// `GITBUD_CHOOSE=<text>` (choose the changed lines containing it), `GITBUD_SUGGEST=1`.
+    /// No-ops when unset.
+    private func applyCaptureHooks(_ loaded: GitBudCommitDocument) {
+        guard !didApplyCaptureHooks else { return }
+        didApplyCaptureHooks = true
+        let environment = ProcessInfo.processInfo.environment
+        if let path = environment["GITBUD_FILE"], loaded.files.contains(where: { $0.path == path }) { selectedPath = path }
+        if let wanted = environment["GITBUD_DIFF_MODE"].flatMap(CommitDiffMode.init(rawValue:)), wanted != mode { mode = wanted }
+        if let text = environment["GITBUD_CHOOSE"], !text.isEmpty {
+            for hunk in loaded.diffs.flatMap(\.hunks) {
+                for (index, line) in hunk.lines.enumerated() where line.contains(text) { selection.toggle(hunk, line: index) }
+            }
+        }
+        if environment["GITBUD_SUGGEST"] == "1", model.onDeviceMagicUnavailableReason == nil { suggestSplit() }
     }
 
     // MARK: - Header
