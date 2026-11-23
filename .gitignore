@@ -38,6 +38,11 @@ apps/gitbud-macos/build/
 apps/gitbud-macos/*.xcuserdata/
 apps/gitbud-macos/GitBud/Info.plist
 apps/gitbud-macos/GitBud/GitBud.entitlements
+apps/gitbud-ios/*.xcodeproj/
+apps/gitbud-ios/DerivedData/
+apps/gitbud-ios/build/
+apps/gitbud-ios/*.xcuserdata/
+apps/gitbud-ios/GitBud/Info.plist
 swift/*/.build/
 .swiftpm/
 # Capture output from @sil/app-release (screenshots, promo videos, Deliver payloads).
