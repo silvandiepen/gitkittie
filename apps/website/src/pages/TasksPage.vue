@@ -14,7 +14,8 @@ import NotePanel from '@/components/NotePanel.vue'
 import ClosingBand from '@/components/ClosingBand.vue'
 import FeatureGrid from '@/components/FeatureGrid.vue'
 import ShowcaseRow from '@/components/ShowcaseRow.vue'
-import type { Feature, Shot, Showcase } from '@/lib/content'
+import WorkflowSteps from '@/components/WorkflowSteps.vue'
+import type { Feature, Shot, Showcase, Workflow } from '@/lib/content'
 import { usePageMeta } from '@/lib/usePageMeta'
 import { tasksMacAppStoreUrl, tasksAppStoreUrl } from '@/links'
 import { useContent } from '@/i18n'
@@ -23,6 +24,7 @@ interface TasksContent {
   meta: { title: string; description: string }
   hero: { badge: string; title: string; subtitle: string; download: string; downloadIos: string; shot: Shot }
   showcase: { eyebrow: string; title: string; subtitle: string; items: Showcase[] }
+  workflow: Workflow
   features: { eyebrow: string; title: string; subtitle: string; items: Feature[] }
   status: { badge: string; title: string; text: string; support: string }
   cta: { eyebrow: string; title: string; subtitle: string; download: string; downloadIos: string }
@@ -62,8 +64,15 @@ usePageMeta({ title: t.meta.title, description: t.meta.description })
         </div>
       </section>
 
-      <!-- Features -->
+      <!-- A workflow, step by step -->
       <section class="mkt__band mkt__band--paper">
+        <div class="mkt__container">
+          <WorkflowSteps :workflow="t.workflow" />
+        </div>
+      </section>
+
+      <!-- Features -->
+      <section class="mkt__band mkt__band--surface">
         <div class="mkt__container product__section">
           <div class="mkt__section-head">
             <span class="mkt__eyebrow">{{ t.features.eyebrow }}</span>

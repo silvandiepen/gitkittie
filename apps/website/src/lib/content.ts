@@ -37,6 +37,9 @@ export interface Shot {
   light?: string
   dark?: string
   alt: string
+  /** Pixel size of the file, when it is not the device's usual one (a Mac window of its own size). */
+  width?: number
+  height?: number
 }
 
 /** One feature shown with its screenshot. */
@@ -46,4 +49,19 @@ export interface Showcase {
   text: string
   points?: string[]
   shot: Shot
+}
+
+/** One step of a workflow, shown with its screenshot. */
+export interface WorkflowStep {
+  title: string
+  text: string
+  shot: Shot
+}
+
+/** A workflow: what it does, then its steps in order. */
+export interface Workflow {
+  eyebrow: string
+  title: string
+  subtitle: string
+  steps: WorkflowStep[]
 }

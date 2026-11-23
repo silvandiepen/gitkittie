@@ -19,6 +19,9 @@ const props = defineProps<{
   dark?: string
   /** Load with the page instead of when scrolled near (the hero shot). */
   eager?: boolean
+  /** The file's own pixel size, when it differs from the device's usual one. */
+  width?: number
+  height?: number
 }>()
 
 /** Pixel size of the files in public/screenshots, so the layout does not jump. */
@@ -28,7 +31,9 @@ const sizes: Record<ShotDevice, { width: number; height: number }> = {
   tablet: { width: 1100, height: 1467 },
 }
 
-const size = computed(() => sizes[props.device])
+const size = computed(() =>
+  props.width && props.height ? { width: props.width, height: props.height } : sizes[props.device],
+)
 const both = computed(() => Boolean(props.light && props.dark))
 const loading = computed(() => (props.eager ? 'eager' : 'lazy'))
 </script>

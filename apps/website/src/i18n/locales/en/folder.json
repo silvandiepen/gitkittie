@@ -23,7 +23,7 @@
         "points": [
           "GitHub and GitLab, with the access you already have",
           "Private repositories marked with a lock",
-          "Light and dark, like the rest of your phone"
+          "Light and dark, in the GitKittie navy"
         ],
         "shot": {
           "device": "phone",
@@ -39,7 +39,8 @@
         "shot": {
           "device": "phone",
           "light": "/screenshots/folder/iphone-browse-light.webp",
-          "alt": "GitKittie Folder on iPhone: the travel-journal repository open, showing its folders and its README."
+          "alt": "GitKittie Folder on iPhone: the travel-journal repository open, showing its folders and its README.",
+          "dark": "/screenshots/folder/iphone-browse-dark.webp"
         }
       }
     ]
