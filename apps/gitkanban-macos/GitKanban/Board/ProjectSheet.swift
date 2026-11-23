@@ -167,6 +167,8 @@ struct ProjectSheet: View {
                 .contentShape(Rectangle())
                 // Simultaneous, so the first click still selects the row.
                 .simultaneousGesture(TapGesture(count: 2).onEnded { edit(field) })
+                // An empty name has nothing to select for: one click goes straight to typing.
+                .simultaneousGesture(TapGesture().onEnded { if text.wrappedValue.isEmpty { edit(field) } })
         }
     }
 
