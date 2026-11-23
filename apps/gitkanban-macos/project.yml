@@ -33,6 +33,8 @@ targets:
       - path: GitKanban
       # Views both apps draw the same way (the rendered Markdown page).
       - path: ../../swift/TasksUI
+      # The colours every GitKittie app shares.
+      - path: ../../swift/GitKittieUI
       # The rendered, editable Markdown view's web runtime (from Lezin), kept as a folder.
       - path: ../../swift/RichEditorWeb
         type: folder
