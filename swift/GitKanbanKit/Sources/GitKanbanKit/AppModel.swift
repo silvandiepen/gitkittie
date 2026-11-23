@@ -74,6 +74,7 @@ public final class AppModel {
     public init() {
         defaults = .standard
         keychain = KeychainService(service: Bundle.main.bundleIdentifier ?? "app.hakobs.gitkanban")
+        bucketCredentials = BucketCredentialStore(service: (Bundle.main.bundleIdentifier ?? "app.hakobs.gitkanban") + ".storage")
         legacyKeychain = nil
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(Bundle.main.bundleIdentifier ?? "app.hakobs.gitkanban", isDirectory: true)
@@ -87,6 +88,7 @@ public final class AppModel {
     public init(appGroup: String, keychainService: String, migratesLegacyStorage: Bool) {
         defaults = UserDefaults(suiteName: appGroup) ?? .standard
         keychain = KeychainService(service: keychainService, accessGroup: appGroup)
+        bucketCredentials = BucketCredentialStore(service: keychainService + ".storage", accessGroup: appGroup)
         legacyKeychain = migratesLegacyStorage
             ? KeychainService(service: Bundle.main.bundleIdentifier ?? keychainService) : nil
         // The outbox lives in the group container so a write saved by the share extension
@@ -240,6 +242,8 @@ public final class AppModel {
     @ObservationIgnored private let aiAPIKeyKey = "gitkanban.aiAPIKey"
 
     @ObservationIgnored var source: (any BoardWritable)?
+    /// The keys of the buckets repositories offload their files to, in the Keychain.
+    @ObservationIgnored let bucketCredentials: BucketCredentialStore
     /// What a long settings save is doing right now (merging members rewrites tasks one by one).
     public var settingsProgress: String?
     /// True when viewing the offline in-memory demo board (no provider connection).
@@ -451,9 +455,11 @@ public final class AppModel {
     /// The provider itself, with nothing in between: what the outbox sends through.
     func remoteSource(for repo: AddedRepo) -> (any BoardWritable)? {
         guard !repo.kind.isFolder, let connection else { return nil }
-        return GitPontFileSource(
+        let provider = GitPontFileSource(
             provider: connection.provider, instance: connection.instance,
             owner: repo.namespace, repo: repo.name, branch: repo.branch, token: connection.token)
+        // Images and other big files go to the repository's bucket, when it has one.
+        return BucketSource(base: provider, repoKey: repo.id, keys: { [bucketCredentials] in bucketCredentials.load(for: $0) })
     }
 
     public func boardCount(_ repo: AddedRepo, _ folder: String) -> Int? { boardSummaries["\(repo.id)|\(folder)"]?.total }
