@@ -1,6 +1,6 @@
-# GitBud (macOS) — Features
+# GitKittie Bud (macOS) — Features
 
-GitBud is a native macOS git client for people who want to understand and repair
+GitKittie Bud is a native macOS git client for people who want to understand and repair
 history without living in git terminology. It visualizes branches, commits, file
 history, and rewrite previews, then turns advanced operations into explicit,
 reviewable workflows.
@@ -17,7 +17,7 @@ Anything not explicitly marked **Implemented** remains planned or future work.
 
 ## Surfaces
 
-GitBud has four places you can navigate to. Everything else is either a verb on a
+GitKittie Bud has four places you can navigate to. Everything else is either a verb on a
 selected item or a preference.
 
 | Surface | Shortcut | Holds |
@@ -37,7 +37,7 @@ command palette, which lists what applies to the current selection.
 | Capability | Status | Notes |
 |---|---|---|
 | Open local repository | Implemented | User selects an existing local git repo. Graph, diffs, file history, branch state, and conflicts load from real git. |
-| Connect provider account | Implemented | Token-backed provider repository listing is implemented through the GitPont/GitHub-style repo service. GitHub device-flow OAuth connects directly from the app to the provider and saves the token in local Keychain; pasted provider tokens can also be saved or cleared locally. No GitBud account or hosted backend is involved. |
+| Connect provider account | Implemented | Token-backed provider repository listing is implemented through the GitPont/GitHub-style repo service. GitHub device-flow OAuth connects directly from the app to the provider and saves the token in local Keychain; pasted provider tokens can also be saved or cleared locally. No GitKittie Bud account or hosted backend is involved. |
 | Open remote repository | Implemented | Remote URLs and selected provider repositories clone into app-managed checkouts for full macOS history editing. |
 | Remote metadata | Implemented | Local upstream/ahead/behind, configured remote list/add/remove, fetch/prune, current-branch push with upstream setup, pull-rebase, remote branch refresh, provider repo listing, open provider PR listing, selected PR review summaries with changed files and inline comments, new inline review comments, inline comment replies, overall PR review submission, draft PR creation, and force-with-lease readiness are implemented. |
 | iOS/iPad parity | Future | Remote-only through GitPont, not local shell git. |
@@ -59,7 +59,7 @@ command palette, which lists what applies to the current selection.
 - **Implemented:** Branch list with current branch, local/remote labels, upstream hints, and
   tested local branch switching.
 - **Implemented:** Linked git worktree list/create/remove so users can spin out a separate
-  checkout for branch work without leaving GitBud.
+  checkout for branch work without leaving GitKittie Bud.
 - **Implemented:** Submodule list and update/init actions for repositories that depend on
   nested git projects.
 - **Implemented:** Check out a remote branch by creating and switching to a local tracking branch.
@@ -89,7 +89,7 @@ command palette, which lists what applies to the current selection.
 
 ## History editing
 
-GitBud's core workflow is protected interactive rebase without exposing the user
+GitKittie Bud's core workflow is protected interactive rebase without exposing the user
 to an editor todo file.
 
 - **Implemented:** Select multiple commits and merge/squash them into one.
@@ -149,11 +149,11 @@ Magic uses AIPont with bring-your-own-key provider credentials.
   for selected changed files.
 - **Implemented:** Load provider inline review comments for the selected PR and show the
   comments attached to the selected changed file.
-- **Implemented:** Reply to a selected provider inline review comment directly from GitBud
+- **Implemented:** Reply to a selected provider inline review comment directly from GitKittie Bud
   using the user-supplied provider token.
 - **Implemented:** Create new provider inline review comments on the selected pull request
-  file and changed-file line directly from GitBud using the user-supplied provider token.
-- **Implemented:** Submit overall provider PR reviews directly from GitBud: approve,
+  file and changed-file line directly from GitKittie Bud using the user-supplied provider token.
+- **Implemented:** Submit overall provider PR reviews directly from GitKittie Bud: approve,
   comment, or request changes with a review body.
 - **Implemented:** Explain conflicts with affected files and provide `Use Your change`,
   `Use REmote change`, editable manual resolution, and mode-specific continue/abort actions.
@@ -182,8 +182,8 @@ Full-history purge is separate and dangerous:
 
 ## Permanent non-goals
 
-- GitBud accounts.
-- A hosted GitBud backend.
-- GitBud-owned sync infrastructure.
+- GitKittie Bud accounts.
+- A hosted GitKittie Bud backend.
+- GitKittie Bud-owned sync infrastructure.
 - Relaying repositories, diffs, commits, provider tokens, or AI provider keys
-  through infrastructure operated for GitBud.
+  through infrastructure operated for GitKittie Bud.

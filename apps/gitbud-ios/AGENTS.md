@@ -1,11 +1,11 @@
-# GitBud (iOS/iPadOS) — Agent Instructions
+# GitKittie Bud (iOS/iPadOS) — Agent Instructions
 
 Read the root `../../AGENTS.md` first; this file adds GitBud-iOS-specific rules.
 
 ## What this app is
 
-GitBud for iOS and iPadOS is planned as a remote-only native SwiftUI companion to
-GitBud macOS. It uses GitPont for repository access and AIPont BYOK for Magic.
+GitKittie Bud for iOS and iPadOS is planned as a remote-only native SwiftUI companion to
+GitKittie Bud macOS. It uses GitPont for repository access and AIPont BYOK for Magic.
 
 It must not depend on:
 
@@ -31,5 +31,5 @@ It must not depend on:
 - Do not add APIs to shared layers that make iOS pretend it has macOS shell-git
   capabilities.
 - Keep provider tokens and AI keys in Keychain only.
-- Do not add GitBud accounts, a hosted GitBud backend, or GitBud-owned sync
+- Do not add GitKittie Bud accounts, a hosted GitKittie Bud backend, or GitKittie Bud-owned sync
   infrastructure.

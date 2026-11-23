@@ -45,7 +45,7 @@ struct NoRepositoryView: View {
                 .controlSize(.large)
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("What GitBud is good at")
+                    Text("What GitKittie Bud is good at")
                         .font(.headline.weight(.semibold))
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 10)], spacing: 10) {
                         NoRepositoryCapability(

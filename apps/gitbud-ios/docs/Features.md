@@ -1,7 +1,7 @@
-# GitBud (iOS/iPadOS) — Features
+# GitKittie Bud (iOS/iPadOS) — Features
 
-GitBud for iOS and iPadOS is a remote-only companion for reviewing and improving
-git history through GitPont. It shares GitBud's simple language and visual model,
+GitKittie Bud for iOS and iPadOS is a remote-only companion for reviewing and improving
+git history through GitPont. It shares GitKittie Bud's simple language and visual model,
 but it does not perform macOS-style local history surgery in v1.
 
 ## Planned v1
@@ -20,7 +20,7 @@ but it does not perform macOS-style local history surgery in v1.
 - Remote-assisted rewrite workflows only if GitPont exposes safe provider-direct
   capabilities for them.
 - iPad-optimized visual branch graph and diff review.
-- Conflict/review workflows for PRs created from GitBud macOS.
+- Conflict/review workflows for PRs created from GitKittie Bud macOS.
 
 ## Non-goals
 
@@ -28,4 +28,4 @@ but it does not perform macOS-style local history surgery in v1.
 - SSH agent support.
 - Full local clone history rewriting in v1.
 - Force-push-first workflows.
-- GitBud accounts, hosted GitBud backend, or GitBud-owned sync infrastructure.
+- GitKittie Bud accounts, hosted GitKittie Bud backend, or GitKittie Bud-owned sync infrastructure.

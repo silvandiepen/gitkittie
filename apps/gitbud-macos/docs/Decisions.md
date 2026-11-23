@@ -1,13 +1,13 @@
-# GitBud (macOS) — Decisions
+# GitKittie Bud (macOS) — Decisions
 
-An ADR-lite log for GitBud. Entries are planned unless later updated with an
+An ADR-lite log for GitKittie Bud. Entries are planned unless later updated with an
 implementation status.
 
 ---
 
-### 1. GitBud lives inside the GitKittie monorepo
+### 1. GitKittie Bud lives inside the GitKittie monorepo
 
-**Decision.** GitBud is a third GitKittie product, alongside GitFolder and
+**Decision.** GitKittie Bud is a third GitKittie product, alongside GitFolder and
 GitKanban.
 
 **Context.** It needs the same native foundations: git process execution,
@@ -22,7 +22,7 @@ packages, never each other.
 
 ### 2. V1 is rebase-first, not generic-client-first
 
-**Decision.** GitBud should eventually feel like a simple Tower-style git client,
+**Decision.** GitKittie Bud should eventually feel like a simple Tower-style git client,
 but v1 focuses on visual history editing: split, squash/merge, reorder, drop,
 message edit, file history, and safe purge.
 
@@ -54,7 +54,7 @@ rewrite model.
 
 ### 4. iOS and iPadOS are remote-only through GitPont
 
-**Decision.** iOS and iPadOS GitBud do not use shell git, SSH agent workflows, or
+**Decision.** iOS and iPadOS GitKittie Bud do not use shell git, SSH agent workflows, or
 full local clone history surgery. They work against remote repositories through
 GitPont.
 
@@ -90,7 +90,7 @@ recoverable.
 **Decision.** AI-assisted commit messages use AIPont with bring-your-own-key
 provider credentials.
 
-**Context.** GitBud should support many AI providers without owning a hosted AI
+**Context.** GitKittie Bud should support many AI providers without owning a hosted AI
 backend or storing provider keys outside the user's machine.
 
 **Rationale.** AIPont keeps Magic provider-neutral and user-controlled.
@@ -115,13 +115,13 @@ editing.
 
 ---
 
-### 8. No GitBud backend or accounts
+### 8. No GitKittie Bud backend or accounts
 
-**Decision.** GitBud must work by itself. There is no GitBud account system,
-hosted GitBud backend, GitBud sync service, or GitBud-operated relay for
+**Decision.** GitKittie Bud must work by itself. There is no GitKittie Bud account system,
+hosted GitKittie Bud backend, GitKittie Bud sync service, or GitKittie Bud-operated relay for
 repositories, diffs, commits, provider tokens, or AI keys.
 
-**Context.** GitBud can integrate with user-selected git hosts through GitPont
+**Context.** GitKittie Bud can integrate with user-selected git hosts through GitPont
 and user-selected AI providers through AIPont BYOK, but those are client-side
 integration boundaries, not a product backend.
 
@@ -138,7 +138,7 @@ trust.
 and users can resolve by choosing either side or by editing the final resolved
 file contents.
 
-**Context.** Rebase and merge conflicts are central to GitBud's history-editing
+**Context.** Rebase and merge conflicts are central to GitKittie Bud's history-editing
 workflow. Side labels need to be plain and stable across the app and tests, and
 some conflicts need a real manual merge instead of a whole-side choice.
 
@@ -191,7 +191,7 @@ silently greying out.
 
 ### 12. The safety branch is automatic, and undo is one click
 
-**Decision.** GitBud cuts a safety branch before every rewrite without being
+**Decision.** GitKittie Bud cuts a safety branch before every rewrite without being
 asked, and surfaces a one-line undo banner afterwards that resets the branch back
 to that ref. The manual "Create Safety Branch" button is gone.
 

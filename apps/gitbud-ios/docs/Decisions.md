@@ -1,10 +1,10 @@
-# GitBud (iOS/iPadOS) — Decisions
+# GitKittie Bud (iOS/iPadOS) — Decisions
 
 ---
 
 ### 1. iOS/iPadOS is remote-only
 
-**Decision.** GitBud iOS and iPadOS use GitPont remote repository APIs. They do
+**Decision.** GitKittie Bud iOS and iPadOS use GitPont remote repository APIs. They do
 not shell out to git or maintain full local clones for v1.
 
 **Context.** macOS can rely on system git for full history semantics. iOS/iPadOS
@@ -45,14 +45,14 @@ platforms.
 
 ---
 
-### 4. No GitBud backend or accounts
+### 4. No GitKittie Bud backend or accounts
 
-**Decision.** GitBud iOS/iPadOS uses GitPont and AIPont directly from the app.
-It does not depend on GitBud accounts, a hosted GitBud backend, or GitBud-owned
+**Decision.** GitKittie Bud iOS/iPadOS uses GitPont and AIPont directly from the app.
+It does not depend on GitKittie Bud accounts, a hosted GitKittie Bud backend, or GitKittie Bud-owned
 sync infrastructure.
 
 **Context.** The app may talk to the user's git provider and AI provider, but
-GitBud does not operate a relay or account service.
+GitKittie Bud does not operate a relay or account service.
 
 **Rationale.** The mobile apps should preserve the same no-server trust model as
 the rest of GitKittie.

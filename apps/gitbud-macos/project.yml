@@ -65,7 +65,8 @@ targets:
     info:
       path: GitBud/Info.plist
       properties:
-        CFBundleDisplayName: GitBud
+        CFBundleDisplayName: GitKittie Bud
+        CFBundleName: GitKittie Bud
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.developer-tools

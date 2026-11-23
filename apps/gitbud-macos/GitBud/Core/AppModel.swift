@@ -402,7 +402,7 @@ public final class AppModel {
                 let remote = remoteURL(from: rawRemote)
                 let destination = try managedCloneDestination(for: rawRemote)
                 try await gitEngine.clone(remote, to: destination, auth: remoteAuth())
-                statusMessage = "Remote cloned into GitBud."
+                statusMessage = "Remote cloned into GitKittie Bud."
                 await openRepository(destination)
             } catch {
                 errorMessage = error.localizedDescription
@@ -2321,7 +2321,7 @@ public final class AppModel {
 
     private func defaultPullRequestBody(for branch: String) -> String {
         var lines = [
-            "Created from GitBud after local branch review.",
+            "Created from GitKittie Bud after local branch review.",
             "",
             "Branch: \(branch)"
         ]

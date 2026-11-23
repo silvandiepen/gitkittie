@@ -1,6 +1,6 @@
-# GitBud (iOS/iPadOS) — Architecture
+# GitKittie Bud (iOS/iPadOS) — Architecture
 
-GitBud iOS/iPadOS is remote-only. It talks to hosted git providers through
+GitKittie Bud iOS/iPadOS is remote-only. It talks to hosted git providers through
 GitPont and uses shared GitKittie types only where those types do not assume local
 git process access.
 
