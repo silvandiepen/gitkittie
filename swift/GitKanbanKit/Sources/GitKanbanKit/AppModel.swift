@@ -135,6 +135,8 @@ public final class AppModel {
     // MARK: Presentation
     public var selectedCard: Card?
     public var newTaskLane: Lane?
+    /// ⌘N with no board open: the sheet that asks which board the new task is for.
+    public var isChoosingBoardForNewTask = false
     public var boardViewMode: BoardViewMode = .lanes
     public var showQuickCreate = false
 

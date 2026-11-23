@@ -533,6 +533,9 @@ private struct WorkspaceSplit: View {
                 await model.refreshBoardSuggestions()
             }
         }
+        .sheet(isPresented: Binding(get: { model.isChoosingBoardForNewTask }, set: { model.isChoosingBoardForNewTask = $0 })) {
+            NewTaskBoardPicker().environment(model)
+        }
         .sheet(isPresented: $showAdd) { NavigationStack { AddRepoView() }.environment(model).frame(minWidth: 460, minHeight: 480) }
         .sheet(item: $browseRepo) { repo in NavigationStack { BoardPickerView(repo: repo) }.environment(model).frame(minWidth: 460, minHeight: 480) }
         .sheet(item: $storageRepo) { repo in NavigationStack { StorageSettingsSheet(repo: repo) }.environment(model).frame(minWidth: 520, minHeight: 620) }
@@ -1102,5 +1105,56 @@ private struct FolderLevel: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) { Button("Done") { commit() } }
         }
+    }
+}
+
+/// ⌘N with no board open: which board the new task is for. Boards as the sidebar shows
+/// them, by repository; picking one opens it and starts the task there.
+struct NewTaskBoardPicker: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("New Task")
+                .font(.title3.weight(.semibold))
+                .padding(.horizontal, 20).padding(.top, 18)
+            Text("Which board is it for?")
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 20).padding(.top, 2).padding(.bottom, 10)
+            List {
+                ForEach(model.addedRepos.filter { !$0.boards.isEmpty }) { repo in
+                    Section(repo.displayName) {
+                        ForEach(repo.boards) { board in
+                            Button {
+                                Task { await model.startNewTask(in: repo, board: board) }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: board.icon ?? BoardAppearance.defaultIcon)
+                                        .foregroundStyle(Color(boardColor: board.color))
+                                        .frame(width: 20)
+                                    Text(board.name)
+                                    Spacer()
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .background(Theme.panel)
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(14)
+        }
+        .frame(width: 380, height: 420)
+        .background(Theme.panel)
     }
 }

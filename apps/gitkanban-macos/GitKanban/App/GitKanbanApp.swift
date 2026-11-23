@@ -51,6 +51,12 @@ struct GitKanbanApp: App {
                 }
         }
         .commands {
+            // ⌘N is a new task — on the open board, or on the board you pick — not a window.
+            CommandGroup(replacing: .newItem) {
+                Button("New Task…") { model.requestNewTask() }
+                    .keyboardShortcut("n")
+                    .disabled(model.addedRepos.isEmpty && model.board == nil)
+            }
             CommandGroup(after: .toolbar) {
                 Button("Refresh Board") {
                     Task {
