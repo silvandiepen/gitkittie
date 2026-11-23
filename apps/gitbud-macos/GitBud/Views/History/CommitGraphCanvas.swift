@@ -73,7 +73,7 @@ struct CommitGraphCell: View {
                         height: (radius + 3.5) * 2
                     )
                 )
-                context.stroke(halo, with: .color(.white.opacity(0.75)), lineWidth: 1.5)
+                context.stroke(halo, with: .color(Color.primary.opacity(0.75)), lineWidth: 1.5)
             }
         }
         .frame(width: CGFloat(max(laneCount, 1)) * Self.laneWidth)

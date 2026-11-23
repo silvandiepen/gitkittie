@@ -11,9 +11,9 @@ struct HistoryView: View {
     var body: some View {
         HSplitView {
             graphColumn
-                .frame(minWidth: 380, idealWidth: 520)
+                .frame(minWidth: 320, idealWidth: 500)
             CommitDetailView()
-                .frame(minWidth: 420)
+                .frame(minWidth: 380)
         }
         .actionSheet(pending: $pending)
     }
@@ -21,7 +21,7 @@ struct HistoryView: View {
     private var graphColumn: some View {
         VStack(alignment: .leading, spacing: 0) {
             HistoryToolbar()
-            Divider().overlay(.white.opacity(0.08))
+            Divider().overlay(GitBudTheme.stroke)
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(rows) { row in
@@ -80,7 +80,7 @@ private struct HistoryToolbar: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("History")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.title3.weight(.semibold))
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(GitBudTheme.secondaryText)

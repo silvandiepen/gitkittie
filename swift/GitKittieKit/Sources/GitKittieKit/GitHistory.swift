@@ -62,12 +62,41 @@ public struct GitFileDiff: Sendable, Identifiable, Equatable {
     public let oldPath: String?
     public let path: String
     public let hunks: [GitHunk]
+    /// The commit created the file (`--- /dev/null`).
+    public let isNewFile: Bool
+    /// The commit deleted the file (`+++ /dev/null`).
+    public let isDeletedFile: Bool
 
-    public init(path: String, oldPath: String? = nil, hunks: [GitHunk]) {
+    public init(path: String, oldPath: String? = nil, hunks: [GitHunk], isNewFile: Bool = false, isDeletedFile: Bool = false) {
         self.path = path
         self.oldPath = oldPath
         self.hunks = hunks
+        self.isNewFile = isNewFile
+        self.isDeletedFile = isDeletedFile
         self.id = oldPath.map { "\($0)->\(path)" } ?? path
+    }
+}
+
+/// How a diff is read: how much unchanged text surrounds each change, and whether changes
+/// to whitespace alone count.
+public struct GitDiffOptions: Sendable, Equatable {
+    /// Unchanged lines around each change. `nil` shows the whole file.
+    public var contextLines: Int?
+    public var ignoreWhitespace: Bool
+
+    public init(contextLines: Int? = 3, ignoreWhitespace: Bool = false) {
+        self.contextLines = contextLines
+        self.ignoreWhitespace = ignoreWhitespace
+    }
+
+    public static let standard = GitDiffOptions()
+
+    /// The arguments for `git show`/`git diff`.
+    var arguments: [String] {
+        // "The whole file" is a context larger than any file a diff view can show.
+        var args = ["--unified=\(contextLines.map { max(0, $0) } ?? 1_000_000)"]
+        if ignoreWhitespace { args.append("--ignore-all-space") }
+        return args
     }
 }
 
@@ -477,6 +506,8 @@ public enum GitRewriteError: LocalizedError, Sendable {
     case invalidBranchName(String)
     case invalidTagName(String)
     case unsupportedCommit(String)
+    /// Chosen changes overlap edits made to the same lines since; nothing was changed.
+    case changesConflict([String])
 
     public var errorDescription: String? {
         switch self {
@@ -498,6 +529,8 @@ public enum GitRewriteError: LocalizedError, Sendable {
             return "\(name) is not a valid tag name."
         case let .unsupportedCommit(commit):
             return "This rewrite currently supports HEAD only, not \(commit)."
+        case let .changesConflict(paths):
+            return "The chosen changes overlap edits made since in \(paths.joined(separator: ", ")), so nothing was changed."
         }
     }
 }
@@ -828,8 +861,98 @@ public struct ShellGitHistoryService: Sendable {
     }
 
     public func diff(at repo: URL, commit: String) async throws -> [GitFileDiff] {
-        let result = try require(["show", "--format=", "--find-renames", "--patch", commit], in: repo, label: "show")
+        try await diff(at: repo, commit: commit, options: .standard)
+    }
+
+    public func diff(at repo: URL, commit: String, options: GitDiffOptions) async throws -> [GitFileDiff] {
+        let result = try require(["show", "--format=", "--find-renames", "--patch"] + options.arguments + [commit], in: repo, label: "show")
         return parsePatch(result.standardOutput)
+    }
+
+    /// Puts the selected changes of a commit into the working copy — and nothing else: the
+    /// index and history are not touched, so the result is ordinary changes to review.
+    ///
+    /// `reverse: false` picks the changes (as the commit made them); `reverse: true` undoes
+    /// them. Each file is a three-way merge, as `git revert` and `cherry-pick` do it: the file
+    /// as the commit had it, that file with the chosen lines applied, and the working copy. So
+    /// edits made since to other lines, even neighbouring ones, are kept. When chosen lines
+    /// overlap edits made since, nothing is written to any file.
+    public func applyCommitChanges(
+        at repo: URL,
+        commit: String,
+        diffs: [GitFileDiff],
+        selection: GitChangeSelection,
+        reverse: Bool
+    ) async throws {
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("gitbud-pick-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        var writes: [(url: URL, content: String?)] = []
+        var conflicts: [String] = []
+        for (index, file) in diffs.enumerated() {
+            let patch = GitPatchBuilder.patch(for: file, selection: selection, reverse: reverse)
+            guard !patch.isEmpty else { continue }
+
+            // base: the file on the side of the commit the patch starts from.
+            let baseMissing = reverse ? file.isDeletedFile : file.isNewFile
+            let base: String? = baseMissing ? nil : try require(
+                ["show", reverse ? "\(commit):\(file.path)" : "\(commit)^:\(file.oldPath ?? file.path)"],
+                in: repo, label: "read the commit's version of \(file.path)"
+            ).standardOutput
+
+            // theirs: base with the chosen lines applied. The patch was built from exactly this
+            // text, so it always fits.
+            let theirs = try GitPatchBuilder.applying(patch, to: base)
+            let folder = scratch.appendingPathComponent("\(index)")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+            // ours: the working copy, under the path the file has now.
+            let current = [file.path, file.oldPath].compactMap { $0 }.map { repo.appendingPathComponent($0) }
+            let oursURL = current.first { FileManager.default.fileExists(atPath: $0.path) } ?? repo.appendingPathComponent(file.path)
+            let ours = FileManager.default.fileExists(atPath: oursURL.path) ? try String(contentsOf: oursURL, encoding: .utf8) : nil
+
+            if ours == base {
+                writes.append((oursURL, theirs))
+            } else if ours == theirs {
+                continue
+            } else if let ours, let base, let theirs {
+                let oursFile = folder.appendingPathComponent(".gitbud-ours")
+                let baseFile = folder.appendingPathComponent(".gitbud-base")
+                let theirsFile = folder.appendingPathComponent(".gitbud-theirs")
+                try Data(ours.utf8).write(to: oursFile)
+                try Data(base.utf8).write(to: baseFile)
+                try Data(theirs.utf8).write(to: theirsFile)
+                // Exit 0: merged cleanly. Above 0: that many conflicts. Below 0: an error.
+                let merged = try runner.run(["merge-file", "-p", "--quiet", oursFile.path, baseFile.path, theirsFile.path], in: folder)
+                if merged.exitCode == 0 {
+                    writes.append((oursURL, merged.standardOutput))
+                } else if merged.exitCode > 0 {
+                    // git also refuses edits that only touch; take those, refuse true overlaps.
+                    if let lineMerged = GitLineMerge.merge(base: base, ours: ours, theirs: theirs) {
+                        writes.append((oursURL, lineMerged))
+                    } else {
+                        conflicts.append(file.path)
+                    }
+                } else {
+                    throw GitEngineError.commandFailed(command: "merge \(file.path)", exitCode: merged.exitCode, stderr: merged.standardError)
+                }
+            } else {
+                // The file was created or removed on one side only: no lines to line up.
+                conflicts.append(file.path)
+            }
+        }
+        guard conflicts.isEmpty else { throw GitRewriteError.changesConflict(conflicts) }
+        guard !writes.isEmpty else { throw GitRewriteError.emptySelection }
+
+        for write in writes {
+            if let content = write.content {
+                try FileManager.default.createDirectory(at: write.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data(content.utf8).write(to: write.url)
+            } else {
+                try FileManager.default.removeItem(at: write.url)
+            }
+        }
     }
 
     public func blame(at repo: URL, path: String, revision: String = "HEAD") async throws -> [GitBlameLine] {
@@ -1789,13 +1912,18 @@ public struct ShellGitHistoryService: Sendable {
             currentLines = []
         }
 
+        var isNewFile = false
+        var isDeletedFile = false
+
         func flushFile() {
             flushHunk()
             guard let finalPath = path else { return }
-            files.append(GitFileDiff(path: finalPath, oldPath: oldPath, hunks: hunks))
+            files.append(GitFileDiff(path: finalPath, oldPath: oldPath, hunks: hunks, isNewFile: isNewFile, isDeletedFile: isDeletedFile))
             oldPath = nil
             path = nil
             hunks = []
+            isNewFile = false
+            isDeletedFile = false
         }
 
         for line in patch.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
@@ -1805,10 +1933,12 @@ public struct ShellGitHistoryService: Sendable {
                 oldPath = String(line.dropFirst(6))
             } else if line == "--- /dev/null" {
                 oldPath = nil
+                isNewFile = true
             } else if line.hasPrefix("+++ b/") {
                 path = String(line.dropFirst(6))
             } else if line.hasPrefix("+++ /dev/null") {
                 path = oldPath
+                isDeletedFile = true
             } else if line.hasPrefix("@@") {
                 flushHunk()
                 currentHeader = line

@@ -2,24 +2,23 @@ import GitBudCore
 import GitKittieKit
 import SwiftUI
 
-/// The window. A sidebar of four surfaces, a toolbar of repository-wide verbs, and
-/// whichever surface is selected. Conflicts take over the canvas, because nothing else
-/// is safe to do until they are resolved.
+/// The window, built like Tasks': a sidebar of places on the left, the selected place on the
+/// right, and the repository-wide verbs in the window's toolbar. Conflicts take over the
+/// canvas, because nothing else is safe to do until they are resolved.
 struct ContentView: View {
     @Environment(AppModel.self) private var model
     @State private var isShowingCommandPalette = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
 
     var body: some View {
-        ZStack {
-            GitBudTheme.background.ignoresSafeArea()
-
+        Group {
             if model.repositoryURL == nil {
                 NoRepositoryView()
+                    .background(GitBudTheme.background)
             } else {
                 repositoryWorkspace
             }
         }
-        .foregroundStyle(GitBudTheme.primaryText)
         .background {
             // Invisible shortcut host: ⌘K works wherever focus happens to be.
             Button("") { isShowingCommandPalette = true }
@@ -46,28 +45,31 @@ struct ContentView: View {
     private var repositoryWorkspace: some View {
         @Bindable var model = model
 
-        return HStack(spacing: 0) {
+        return NavigationSplitView(columnVisibility: $columnVisibility) {
             Sidebar(selection: $model.workspaceMode)
-                .frame(width: 200)
-            Divider().overlay(.white.opacity(0.08))
+                .navigationSplitViewColumnWidth(min: 200, ideal: 230)
+        } detail: {
             VStack(spacing: 0) {
-                RepositoryToolbar()
-                Divider().overlay(.white.opacity(0.08))
                 if let undo = model.rewriteUndo {
                     UndoBanner(undo: undo)
-                    Divider().overlay(.white.opacity(0.08))
                 }
                 canvas
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .background(GitBudTheme.background)
+            // The window's title is the repository in the sidebar; each surface names itself.
+            .navigationTitle("")
+            .toolbar { RepositoryToolbar() }
         }
     }
 
     @ViewBuilder
     private var canvas: some View {
         if model.hasConflicts {
-            ConflictPanel()
-                .padding(18)
+            ScrollView {
+                ConflictPanel()
+                    .padding(18)
+            }
         } else {
             switch model.workspaceMode {
             case .history:
@@ -93,9 +95,9 @@ private struct UndoBanner: View {
             Image(systemName: "checkmark.shield")
                 .foregroundStyle(.green)
             Text(undo.summary)
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
             Text("Saved to \(undo.safetyBranch)")
-                .font(.caption2.monospaced())
+                .font(.caption.monospaced())
                 .foregroundStyle(GitBudTheme.secondaryText)
             Spacer()
             Button("Undo") {
@@ -113,6 +115,6 @@ private struct UndoBanner: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 9)
-        .background(.green.opacity(0.08))
+        .background(Color.green.opacity(0.10))
     }
 }

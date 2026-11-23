@@ -11,11 +11,11 @@ struct ChangesView: View {
         HSplitView {
             VStack(alignment: .leading, spacing: 0) {
                 header
-                Divider().overlay(.white.opacity(0.08))
+                Divider().overlay(GitBudTheme.stroke)
                 WorkingCopyList()
-                Divider().overlay(.white.opacity(0.08))
+                Divider().overlay(GitBudTheme.stroke)
                 commitBox
-                Divider().overlay(.white.opacity(0.08))
+                Divider().overlay(GitBudTheme.stroke)
                 StashSection()
             }
             .frame(minWidth: 320, idealWidth: 400, maxWidth: 520)
@@ -29,7 +29,7 @@ struct ChangesView: View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Changes")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.title3.weight(.semibold))
                 Text(model.worktreeFiles.isEmpty
                      ? "Working tree is clean"
                      : "\(model.worktreeFiles.count) changed · \(model.selectedWorktreePaths.count) selected")

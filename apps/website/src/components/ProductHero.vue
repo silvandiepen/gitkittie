@@ -55,7 +55,7 @@ defineProps<{
     </div>
 
     <div v-if="shot" class="mkt__container product-hero__shot">
-      <AppShot :device="shot.device" :light="shot.light" :dark="shot.dark" :alt="shot.alt" eager />
+      <AppShot :device="shot.device" :light="shot.light" :dark="shot.dark" :alt="shot.alt" :width="shot.width" :height="shot.height" eager />
     </div>
   </section>
 </template>

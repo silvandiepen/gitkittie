@@ -112,6 +112,35 @@
     "subtitle": "One design across the Mac, iPhone and iPad: a calm navy window, cards a step lighter, and colour only where it means something — a priority, a label, a due date that has passed.",
     "items": [
       {
+        "eyebrow": "The task panel",
+        "title": "Click a card, *read the task.*",
+        "text": "A task opens beside the board with its details, activity and files. Status, priority, assignee, labels and type are one click each, the notes are rendered Markdown you edit in place, and comments go at the bottom. Double-click a card for a window of its own.",
+        "points": [
+          "Details, Activity and Files",
+          "Rendered notes, edited where you read them",
+          "Comments kept in the task's own file"
+        ],
+        "shot": {
+          "device": "mac",
+          "dark": "/screenshots/tasks/mac-task-dark.webp",
+          "alt": "Tasks on the Mac with Design onboarding open in the panel beside the board: status, priority, assignee, labels, type and notes."
+        }
+      },
+      {
+        "eyebrow": "List",
+        "title": "Every lane, *as rows.*",
+        "text": "Switch the board to List for every task under its lane, with priority and assignee at a glance — the quickest way to scan a long board. Calendar puts tasks with a due date on their day.",
+        "points": [
+          "Board, List and Calendar in the toolbar",
+          "Filters and ⌘K search beside them"
+        ],
+        "shot": {
+          "device": "mac",
+          "dark": "/screenshots/tasks/mac-list-dark.webp",
+          "alt": "Tasks on the Mac in List view: To do, In Progress, Done and Backlog as sections of rows."
+        }
+      },
+      {
         "eyebrow": "The board",
         "title": "Every lane, *on every screen.*",
         "text": "Lanes are folders, and a card is a file. On the Mac they sit side by side as boxed columns; on iPhone and iPad they fold into sections you open and close. A card drops anywhere in a lane, also between two others.",
@@ -126,35 +155,40 @@
           "dark": "/screenshots/tasks/ipad-board-dark.webp",
           "alt": "GitKittie Tasks on iPad: the demo board with To do and In Progress sections of cards."
         }
-      },
+      }
+    ]
+  },
+  "workflow": {
+    "eyebrow": "Workflow",
+    "title": "Check on the board, *from your phone.*",
+    "subtitle": "The same repository on iPhone: open the board, read a task, and find any other in a moment.",
+    "steps": [
       {
-        "eyebrow": "A task",
-        "title": "A task is *a page,* not a form.",
-        "text": "Open a task and read it. The title and the notes are edited in place, the notes rendered as Markdown with checkboxes you can tick. Status, priority, assignee and labels are one tap each, and the activity log and comments sit underneath.",
-        "points": [
-          "Labels, due dates and priorities",
-          "Notes rendered and edited in place",
-          "Activity and comments, kept in the task's own file"
-        ],
+        "title": "Open the board",
+        "text": "Lanes fold into sections you open and close; each card shows its priority and who has it.",
         "shot": {
           "device": "phone",
-          "light": "/screenshots/tasks/iphone-task-light.webp",
-          "alt": "A task on iPhone: Design onboarding, with its status, priority, assignee and labels above the notes."
+          "light": "/screenshots/tasks/iphone-board-light.webp",
+          "dark": "/screenshots/tasks/iphone-board-dark.webp",
+          "alt": "Tasks on iPhone: the demo board's To do and In Progress lanes."
         }
       },
       {
-        "eyebrow": "Search",
-        "title": "Find *any task.*",
-        "text": "Search a board by title, id, text or assignee. On the Mac it is in the toolbar, one Command-K away; All Tasks puts the open tasks of every board in one list.",
-        "points": [
-          "Search with Command-K on the Mac",
-          "All Tasks across every board",
-          "Each result shows its priority and its lane"
-        ],
+        "title": "Read the task",
+        "text": "Status, priority, assignee and labels at the top, then the notes. Change any of them in place.",
+        "shot": {
+          "device": "phone",
+          "light": "/screenshots/tasks/iphone-task-light.webp",
+          "alt": "A task on iPhone: Design onboarding with its details and notes."
+        }
+      },
+      {
+        "title": "Find any task",
+        "text": "Search by title, id, text or assignee across the board.",
         "shot": {
           "device": "phone",
           "light": "/screenshots/tasks/iphone-search-light.webp",
-          "alt": "Search on iPhone: every task of the demo board with its priority badge and lane."
+          "alt": "Search on iPhone listing every task with its priority and lane."
         }
       }
     ]

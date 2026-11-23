@@ -76,7 +76,7 @@ struct NoRepositoryView: View {
             .padding(40)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
 
-            Divider().overlay(.white.opacity(0.08))
+            Divider().overlay(GitBudTheme.stroke)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -184,10 +184,10 @@ private struct NoRepositoryCapability: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(GitBudTheme.cardFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(GitBudTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(GitBudTheme.cardBorder)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(GitBudTheme.stroke)
         }
     }
 }

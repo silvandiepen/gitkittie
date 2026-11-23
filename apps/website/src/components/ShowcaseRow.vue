@@ -33,6 +33,8 @@ defineProps<{
         :light="item.shot.light"
         :dark="item.shot.dark"
         :alt="item.shot.alt"
+        :width="item.shot.width"
+        :height="item.shot.height"
       />
     </div>
   </article>

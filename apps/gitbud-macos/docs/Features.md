@@ -26,7 +26,33 @@ selected item or a preference.
 | Changes | ⌘2 | The working copy: file selection, commit box, amend, Magic message drafting, and stashes. |
 | Branches | ⌘3 | Local and remote branches, most recently updated first, plus tags. |
 | Pull Requests | ⌘4 | Provider PR list, review summary, per-file patches, inline comment threads, and review submission. |
-| Settings | ⌘, | Accounts, Magic (BYOK), Safety (protected branches), and Repository (remotes, linked worktrees, submodules). |
+| Settings | ⌘, | Accounts, Magic (on-device or BYOK), Safety (protected branches), and Repository (remotes, linked worktrees, submodules). |
+
+The window is built like GitKittie Tasks: a sidebar on the family's navy (places, then where the
+repository stands: branch, upstream with ahead/behind badges, working copy, conflicts), the
+selected place on the right, and Fetch / Pull / Push in the window toolbar. Colours come from
+`swift/GitKittieUI/Theme.swift`, shared with Tasks and Folder.
+
+## Commit window
+
+Double-click a commit in History (or use the window button in its detail pane) to open it in a
+window of its own.
+
+- **Implemented:** The full message, author, date, copyable commit id, merge parents and refs, and
+  the size of the change per file and in total.
+- **Implemented:** The diff three ways: Unified, Side by Side (removals paired with the additions
+  that replaced them), and Full File (every line of the file, changes marked). Ignore Whitespace
+  hides changes to spacing only.
+- **Implemented:** Choose changed lines — click, ⇧-click for a range, or a whole hunk or file — and
+  **Apply to Working Copy** (pick them, as the commit made them) or **Undo in Working Copy** (take
+  them back out). The index and history are not touched: the result is ordinary changes to review
+  in Changes. Each file is a three-way merge, so edits made since — even to the very next line — are
+  kept; only when the chosen lines themselves were changed since does nothing change, and GitKittie
+  Bud names the files. The chosen lines survive switching between the views.
+- **Implemented:** Suggest a Split (Apple Intelligence on this Mac): groups the commit's hunks into
+  separate commits with a message each. Use one to tick its hunks and put its message in the split
+  draft; the split itself is still confirmed in History. Splits make two commits at a time, so a
+  three-way suggestion is applied one group after the other.
 
 Verbs reach the user three ways, all rendered from one registry (`GitBudActions`):
 right-click the item, the small toolbar in the commit detail pane, or the ⌘K
@@ -114,7 +140,9 @@ to an editor todo file.
 
 ## Magic
 
-Magic uses AIPont with bring-your-own-key provider credentials.
+Magic uses Apple's on-device model (Apple Intelligence) when this Mac has it — no key, and the
+diff never leaves the Mac — and is the default until another provider is chosen. AIPont with
+bring-your-own-key provider credentials is the alternative.
 
 - **Implemented:** Suggest commit titles and descriptions from selected diffs through direct BYOK provider calls.
 - **Implemented:** Suggest a better message for a selected commit.

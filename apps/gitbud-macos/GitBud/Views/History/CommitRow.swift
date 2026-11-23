@@ -10,6 +10,7 @@ struct CommitRow: View {
     let row: GitGraphRow
     let laneCount: Int
     @Binding var pending: GitBudAction?
+    @Environment(\.openWindow) private var openWindow
 
     private var commit: GitCommitNode { row.commit }
     private var isFocused: Bool { model.focusedCommitID == commit.id }
@@ -53,7 +54,7 @@ struct CommitRow: View {
                     .font(.caption2.monospaced().weight(.bold))
                     .foregroundStyle(GitBudTheme.secondaryText)
                     .frame(width: 20, height: 20)
-                    .background(.white.opacity(0.10), in: Circle())
+                    .background(Color.primary.opacity(0.10), in: Circle())
             }
         }
         .padding(.horizontal, 12)
@@ -61,6 +62,12 @@ struct CommitRow: View {
         .background(rowBackground)
         .contentShape(Rectangle())
         .onTapGesture { handleTap() }
+        // Double-click also opens the commit in its own window. Simultaneous, so a single
+        // click selects at once instead of waiting to see whether a second one follows.
+        .simultaneousGesture(TapGesture(count: 2).onEnded {
+            openWindow(id: CommitWindow.windowID, value: commit.id)
+        })
+        .help("Double-click to open this commit in its own window")
         .contextMenu {
             ActionMenuItems(actions: GitBudActions.commit(commit, model: model), pending: $pending)
         }

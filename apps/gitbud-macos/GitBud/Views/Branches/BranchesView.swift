@@ -12,7 +12,7 @@ struct BranchesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider().overlay(.white.opacity(0.08))
+            Divider().overlay(GitBudTheme.stroke)
             ScrollView {
                 LazyVStack(spacing: 4) {
                     ForEach(locals) { branch in
@@ -39,7 +39,7 @@ struct BranchesView: View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Branches")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.title3.weight(.semibold))
                 Text("Most recently updated first")
                     .font(.caption)
                     .foregroundStyle(GitBudTheme.secondaryText)

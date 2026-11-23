@@ -1283,6 +1283,157 @@ final class GitHistoryTests: XCTestCase {
     }
 
     @discardableResult
+    // MARK: - Picking and undoing parts of a commit in the working copy
+
+    func testUndoChosenLinesOfACommitLeavesTheRestAndHistoryAlone() async throws {
+        let repo = try makeRepo()
+        try write("a\nb\nc\n", to: repo, "file.txt")
+        try commit("base", repo: repo)
+        try write("a\nB\nc\nd\n", to: repo, "file.txt")
+        try commit("change", repo: repo)
+        let head = try revParse("HEAD", repo: repo)
+
+        let diffs = try await history.diff(at: repo, commit: "HEAD")
+        let hunk = try XCTUnwrap(diffs.first?.hunks.first)
+        let added = try XCTUnwrap(hunk.lines.firstIndex(of: "+d"))
+        var selection = GitChangeSelection()
+        selection.toggle(hunk, line: added)
+
+        try await history.applyCommitChanges(at: repo, commit: "HEAD", diffs: diffs, selection: selection, reverse: true)
+
+        XCTAssertEqual(try read(repo, "file.txt"), "a\nB\nc\n")
+        XCTAssertEqual(try revParse("HEAD", repo: repo), head)
+        XCTAssertEqual(try require(["diff", "--cached", "--name-only"], in: repo).standardOutput, "")
+    }
+
+    func testPickChosenLinesOfAnOlderCommitIntoTheWorkingCopy() async throws {
+        let repo = try makeRepo()
+        let base = (1...12).map { "line \($0)" }.joined(separator: "\n") + "\n"
+        try write(base, to: repo, "file.txt")
+        try commit("base", repo: repo)
+        var changed = (1...12).map { "line \($0)" }
+        changed[1] = "line two"
+        changed[10] = "line eleven"
+        try write(changed.joined(separator: "\n") + "\n", to: repo, "file.txt")
+        try commit("two changes", repo: repo)
+        let picked = try revParse("HEAD", repo: repo)
+        try write(base, to: repo, "file.txt")
+        try commit("back to base", repo: repo)
+
+        let diffs = try await history.diff(at: repo, commit: picked)
+        var selection = GitChangeSelection()
+        for hunk in diffs.flatMap(\.hunks) {
+            for (index, line) in hunk.lines.enumerated() where line.contains("eleven") || line == "-line 11" {
+                selection.toggle(hunk, line: index)
+            }
+        }
+
+        try await history.applyCommitChanges(at: repo, commit: picked, diffs: diffs, selection: selection, reverse: false)
+
+        var expected = (1...12).map { "line \($0)" }
+        expected[10] = "line eleven"
+        XCTAssertEqual(try read(repo, "file.txt"), expected.joined(separator: "\n") + "\n")
+    }
+
+    func testUndoingEveryLineOfAnAddedFileRemovesTheFile() async throws {
+        let repo = try makeRepo()
+        try write("base\n", to: repo, "base.txt")
+        try commit("base", repo: repo)
+        try write("new\nfile\n", to: repo, "added.txt")
+        try commit("add a file", repo: repo)
+
+        let diffs = try await history.diff(at: repo, commit: "HEAD")
+        let file = try XCTUnwrap(diffs.first { $0.path == "added.txt" })
+        XCTAssertTrue(file.isNewFile)
+        var selection = GitChangeSelection()
+        selection.toggle(file)
+
+        try await history.applyCommitChanges(at: repo, commit: "HEAD", diffs: diffs, selection: selection, reverse: true)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repo.appendingPathComponent("added.txt").path))
+    }
+
+    func testChangesThatNoLongerFitFailWithoutTouchingTheFile() async throws {
+        let repo = try makeRepo()
+        try write("a\nb\nc\n", to: repo, "file.txt")
+        try commit("base", repo: repo)
+        try write("a\nB\nc\n", to: repo, "file.txt")
+        try commit("change", repo: repo)
+        let diffs = try await history.diff(at: repo, commit: "HEAD")
+        try write("something else entirely\n", to: repo, "file.txt")
+        var selection = GitChangeSelection()
+        selection.toggle(try XCTUnwrap(diffs.first))
+
+        do {
+            try await history.applyCommitChanges(at: repo, commit: "HEAD", diffs: diffs, selection: selection, reverse: true)
+            XCTFail("Expected the patch not to apply")
+        } catch {}
+        XCTAssertEqual(try read(repo, "file.txt"), "something else entirely\n")
+    }
+
+    func testUndoKeepsAnEditMadeSinceToTheNeighbouringLine() async throws {
+        let repo = try makeRepo()
+        try write("<main/>\n<footer>2025</footer>\n</body>\n", to: repo, "index.html")
+        try commit("base", repo: repo)
+        try write("<main/>\n<footer>2025</footer>\n<script/>\n</body>\n", to: repo, "index.html")
+        try commit("add a script", repo: repo)
+        let script = try revParse("HEAD", repo: repo)
+        try write("<main/>\n<footer>2026</footer>\n<script/>\n</body>\n", to: repo, "index.html")
+        try commit("correct the year", repo: repo)
+
+        let diffs = try await history.diff(at: repo, commit: script)
+        var selection = GitChangeSelection()
+        selection.toggle(try XCTUnwrap(diffs.first))
+
+        try await history.applyCommitChanges(at: repo, commit: script, diffs: diffs, selection: selection, reverse: true)
+
+        XCTAssertEqual(try read(repo, "index.html"), "<main/>\n<footer>2026</footer>\n</body>\n")
+    }
+
+    func testChosenLinesThatOverlapLaterEditsChangeNothing() async throws {
+        let repo = try makeRepo()
+        try write("one\ntwo\nthree\n", to: repo, "file.txt")
+        try commit("base", repo: repo)
+        try write("one\nTWO\nthree\n", to: repo, "file.txt")
+        try commit("shout two", repo: repo)
+        let shout = try revParse("HEAD", repo: repo)
+        try write("one\nzwei\nthree\n", to: repo, "file.txt")
+        try write("untouched\n", to: repo, "other.txt")
+        try commit("translate two", repo: repo)
+
+        let diffs = try await history.diff(at: repo, commit: shout)
+        var selection = GitChangeSelection()
+        selection.toggle(try XCTUnwrap(diffs.first))
+
+        do {
+            try await history.applyCommitChanges(at: repo, commit: shout, diffs: diffs, selection: selection, reverse: true)
+            XCTFail("Expected a conflict")
+        } catch GitRewriteError.changesConflict(let paths) {
+            XCTAssertEqual(paths, ["file.txt"])
+        }
+        XCTAssertEqual(try read(repo, "file.txt"), "one\nzwei\nthree\n")
+    }
+
+    func testWholeFileOptionShowsEveryLineAndIgnoreWhitespaceHidesSpacingChanges() async throws {
+        let repo = try makeRepo()
+        let lines = (1...20).map { "value \($0)" }
+        try write(lines.joined(separator: "\n") + "\n", to: repo, "file.txt")
+        try commit("base", repo: repo)
+        var changed = lines
+        changed[0] = "value  1"
+        changed[19] = "value twenty"
+        try write(changed.joined(separator: "\n") + "\n", to: repo, "file.txt")
+        try commit("change", repo: repo)
+
+        let whole = try await history.diff(at: repo, commit: "HEAD", options: GitDiffOptions(contextLines: nil))
+        XCTAssertEqual(whole.first?.hunks.count, 1)
+        XCTAssertTrue(whole.first?.hunks.first?.lines.contains(" value 10") ?? false)
+
+        let noSpace = try await history.diff(at: repo, commit: "HEAD", options: GitDiffOptions(ignoreWhitespace: true))
+        let changes = noSpace.flatMap(\.hunks).flatMap(\.lines).filter { $0.hasPrefix("+") || $0.hasPrefix("-") }
+        XCTAssertEqual(changes, ["-value 20", "+value twenty"])
+    }
+
     private func require(_ args: [String], in repo: URL) throws -> GitCommandResult {
         let result = try runner.run(args, in: repo)
         XCTAssertTrue(result.succeeded, "git \(args.joined(separator: " ")) failed: \(result.standardError)")

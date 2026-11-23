@@ -1,32 +1,40 @@
+import AppKit
 import GitBudCore
 import GitKittieKit
 import SwiftUI
 
-// Visual primitives shared by every GitBud surface.
+// Visual primitives shared by every GitKittie Bud surface. The colours are the family's
+// (`swift/GitKittieUI/Theme.swift`, the same file Tasks and Folder use); this file only
+// names what Bud draws with them.
 
 enum GitBudTheme {
-    static let background = Color(red: 0.075, green: 0.078, blue: 0.085)
-    static let panel = Color(red: 0.105, green: 0.110, blue: 0.120)
-    static let cardFill = Color.white.opacity(0.064)
-    static let cardBorder = Color.white.opacity(0.105)
-    static let toolFill = Color.white.opacity(0.080)
-    static let toolBorder = Color.white.opacity(0.130)
-    static let primaryText = Color.white.opacity(0.92)
-    static let secondaryText = Color.white.opacity(0.58)
+    /// Behind everything.
+    static let background = Theme.window
+    /// The sidebar, a step darker than the window.
+    static let sidebar = Theme.sidebar
+    /// A raised area: a sheet, a header strip, a group of rows.
+    static let panel = Theme.panel
+    /// A row or card on a panel, a step lighter again.
+    static let card = Theme.card
+    /// The one hairline.
+    static let stroke = Theme.stroke
+    static let primaryText = Color.primary
+    static let secondaryText = Color.secondary
 }
 
 extension View {
+    /// A group on the window: a step lighter, one hairline, no shadow.
     func panelCard() -> some View {
         padding(12)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .background(GitBudTheme.cardFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(GitBudTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(GitBudTheme.cardBorder)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(GitBudTheme.stroke)
             }
-            .shadow(color: .black.opacity(0.16), radius: 10, x: 0, y: 4)
     }
 
+    /// A row in a list. Selected and marked rows are told apart by a tinted fill and nothing
+    /// else — never an outline or an edge bar.
     func gitBudPanelRow(
         isSelected: Bool = false,
         isMarked: Bool = false,
@@ -36,16 +44,46 @@ extension View {
         baseOpacity: Double = 0.055
     ) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        return background(isSelected ? tint.opacity(0.22) : Color.white.opacity(baseOpacity), in: shape)
-            .overlay {
-                shape.strokeBorder(rowBorderColor(isSelected: isSelected, isMarked: isMarked, tint: tint, markedColor: markedColor))
-            }
+        let fill: Color
+        if isSelected {
+            fill = tint.opacity(0.20)
+        } else if isMarked {
+            fill = markedColor.opacity(0.14)
+        } else {
+            fill = Color.primary.opacity(baseOpacity)
+        }
+        return background(fill, in: shape)
+    }
+}
+
+/// Gives the window the family's opaque background in place of the system's translucent
+/// one, and draws the app in dark, as Tasks does, unless the system is asked otherwise.
+struct SolidWindow: NSViewRepresentable {
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            window.backgroundColor = NSColor(Theme.window)
+            window.isOpaque = true
+        }
     }
 
-    private func rowBorderColor(isSelected: Bool, isMarked: Bool, tint: Color, markedColor: Color) -> Color {
-        if isMarked { return markedColor.opacity(0.72) }
-        if isSelected { return tint.opacity(0.50) }
-        return Color.white.opacity(0.085)
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ nsView: Probe, context: Context) {}
+}
+
+/// A count in the sidebar: grey for a plain number, coloured when it wants attention.
+struct CountBadge: View {
+    let count: Int
+    var color: Color?
+
+    var body: some View {
+        Text("\(count)")
+            .font(.caption2.weight(.semibold).monospacedDigit())
+            .foregroundStyle(color == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.white))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(color.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.quaternary), in: Capsule())
     }
 }
 
@@ -67,17 +105,13 @@ struct EmptyPanel: View {
     }
 }
 
-
 func panelTitle(_ title: String, icon: String) -> some View {
     HStack(spacing: 9) {
         Image(systemName: icon)
             .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Color.accentColor)
             .frame(width: 26, height: 26)
-            .background(GitBudTheme.toolFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(GitBudTheme.toolBorder)
-            }
+            .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         Text(title)
             .font(.headline.weight(.semibold))
         Spacer(minLength: 0)
@@ -86,21 +120,19 @@ func panelTitle(_ title: String, icon: String) -> some View {
     .padding(.top, 14)
 }
 
-
 struct StatusPill: View {
     let title: String
     let color: Color
 
     var body: some View {
         Text(title)
-            .font(.caption2.monospaced().weight(.bold))
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(color)
             .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(color.opacity(0.12), in: Capsule())
+            .padding(.vertical, 4)
+            .background(color.opacity(0.14), in: Capsule())
     }
 }
-
 
 struct CompactMetric: View {
     let label: String
@@ -121,7 +153,7 @@ struct CompactMetric: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 7)
-        .background(.black.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
+        .background(GitBudTheme.card, in: RoundedRectangle(cornerRadius: 7))
     }
 }
 
@@ -140,4 +172,3 @@ struct SectionHeader: View {
         }
     }
 }
-

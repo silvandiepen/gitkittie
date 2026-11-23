@@ -13,18 +13,18 @@ struct PullRequestReviewView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let pullRequest = model.selectedProviderPullRequest {
                 header(pullRequest)
-                Divider().overlay(.white.opacity(0.08))
+                Divider().overlay(GitBudTheme.stroke)
 
                 if let summary = model.providerPullRequestReviewSummary {
                     stats(summary)
-                    Divider().overlay(.white.opacity(0.08))
+                    Divider().overlay(GitBudTheme.stroke)
                     HSplitView {
                         fileList(summary)
                             .frame(minWidth: 200, idealWidth: 250)
                         patchAndComments
                             .frame(minWidth: 320)
                     }
-                    Divider().overlay(.white.opacity(0.08))
+                    Divider().overlay(GitBudTheme.stroke)
                     reviewBar
                 } else {
                     EmptyPanel(
@@ -134,7 +134,7 @@ struct PullRequestReviewView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Divider().overlay(.white.opacity(0.08))
+                    Divider().overlay(GitBudTheme.stroke)
 
                     ForEach(model.selectedProviderPullRequestFileComments) { comment in
                         commentThread(comment)
