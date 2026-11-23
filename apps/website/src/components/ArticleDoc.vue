@@ -104,6 +104,31 @@ defineProps<{ post: Post }>()
 
     strong { font-weight: var(--font-weight-semibold); }
 
+    // Screenshots, framed the way AppShot frames them elsewhere on the site: a Mac
+    // window brings its own frame and is only lifted; a phone or tablet screen gets the
+    // device's corners and the hairline. Told apart by the file name, since Markdown
+    // gives an image nothing else.
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin: var(--space) auto;
+    }
+
+    img[src*="/mac-"] { filter: drop-shadow(var(--shadow-l)); }
+
+    img[src*="/iphone-"] {
+      max-width: 300px;
+      border-radius: 14% / 6.5%;
+      border: var(--border-width) solid var(--color-border);
+    }
+
+    img[src*="/ipad-"] {
+      max-width: 480px;
+      border-radius: 4% / 3%;
+      border: var(--border-width) solid var(--color-border);
+    }
+
     blockquote {
       padding-left: var(--space);
       border-left: 2px solid var(--accent-legible);

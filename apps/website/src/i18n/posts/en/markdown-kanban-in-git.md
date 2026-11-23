@@ -3,6 +3,8 @@ title: My kanban board is just markdown files in git
 description: I stopped using project management tools for my own work. One task is one markdown file, the folders are the workflow, and git records everything — which turns out to matter most when coding agents are doing half the work.
 date: 2026-08-14
 app: tasks
+shot: /screenshots/tasks/mac-board-dark.webp
+shotAlt: A GitKittie Tasks board on the Mac, with its lanes side by side
 related: one-task-one-file, git-backed-task-folder
 ---
 

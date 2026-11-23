@@ -3,6 +3,8 @@ title: Keeping a task folder in git without running git
 description: The board only works if it is always synced. I keep one folder — conventions, task board, project notes — versioned automatically by GitKittie Folder, and symlinked into the place my coding agents already read from.
 date: 2026-08-12
 app: folder
+shot: /screenshots/folder/iphone-browse-dark.webp
+shotAlt: Browsing a repository as a folder in GitKittie Folder on iPhone
 related: markdown-kanban-in-git, one-task-one-file
 ---
 

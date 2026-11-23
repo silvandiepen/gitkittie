@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "typecheck": "vue-tsc -p tsconfig.json --noEmit",
-    "build": "vite build"
+    "build": "vite build",
+    "og": "node scripts/og-images.mjs"
   },
   "dependencies": {
     "@sil/ui": "^2.6.0",

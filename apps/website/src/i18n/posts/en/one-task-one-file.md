@@ -3,6 +3,8 @@ title: The anatomy of a task file
 description: What actually goes in the frontmatter, how lanes are configured per project, and the trick that lets several agents share one board without two of them grabbing the same card — the push is the lock.
 date: 2026-08-13
 app: tasks
+shot: /screenshots/tasks/mac-task-dark.webp
+shotAlt: A task open in its own window in GitKittie Tasks
 related: markdown-kanban-in-git, git-backed-task-folder
 ---
 
