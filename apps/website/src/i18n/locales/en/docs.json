@@ -6,7 +6,7 @@
   "sidebarNote": "Documentation covers all three apps. Anything missing? Send a message.",
   "products": [
     {
-      "id": "gitfolder",
+      "id": "folder",
       "label": "Folder",
       "name": "GitKittie Folder",
       "sections": [
@@ -205,12 +205,12 @@
       ]
     },
     {
-      "id": "gitkanban",
+      "id": "tasks",
       "label": "Tasks",
       "name": "GitKittie Tasks",
       "sections": [
         {
-          "id": "kanban-start",
+          "id": "tasks-start",
           "label": "Getting Started",
           "title": "Getting Started",
           "blocks": [
@@ -242,7 +242,7 @@
           ]
         },
         {
-          "id": "kanban-format",
+          "id": "tasks-format",
           "label": "Board Format",
           "title": "The board format",
           "blocks": [
@@ -270,7 +270,7 @@
           ]
         },
         {
-          "id": "kanban-cards",
+          "id": "tasks-cards",
           "label": "Cards",
           "title": "Working with cards",
           "blocks": [
@@ -321,7 +321,7 @@
           ]
         },
         {
-          "id": "kanban-capture",
+          "id": "tasks-capture",
           "label": "Screenshots",
           "title": "From a screenshot to a task",
           "blocks": [
@@ -378,7 +378,7 @@
           ]
         },
         {
-          "id": "kanban-sync",
+          "id": "tasks-sync",
           "label": "Sync & Updates",
           "title": "Sending, offline and updates",
           "blocks": [
@@ -466,7 +466,7 @@
           ]
         },
         {
-          "id": "kanban-boards",
+          "id": "tasks-boards",
           "label": "Boards",
           "title": "Boards on the Mac",
           "blocks": [
@@ -494,7 +494,7 @@
           ]
         },
         {
-          "id": "kanban-reviews",
+          "id": "tasks-reviews",
           "label": "Reviews",
           "title": "Reviews",
           "blocks": [
@@ -555,7 +555,7 @@
           ]
         },
         {
-          "id": "kanban-agents",
+          "id": "tasks-agents",
           "label": "Agents",
           "title": "Agents",
           "blocks": [
@@ -663,7 +663,7 @@
           ]
         },
         {
-          "id": "kanban-faq",
+          "id": "tasks-faq",
           "label": "FAQ",
           "title": "FAQ",
           "blocks": [
@@ -713,7 +713,7 @@
       ]
     },
     {
-      "id": "gitbud",
+      "id": "bud",
       "label": "Bud",
       "name": "GitKittie Bud",
       "sections": [

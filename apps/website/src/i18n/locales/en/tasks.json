@@ -1,0 +1,162 @@
+{
+  "meta": {
+    "title": "GitKittie Tasks — Your task board is a git repo",
+    "description": "GitKittie Tasks is a task board whose only data source is a git repo of markdown files. One file = one card, history from git, agents work on it through the app, and you review what they make. On Mac, iPhone and iPad."
+  },
+  "hero": {
+    "badge": "On Mac, iPhone & iPad",
+    "title": "Your task board *is a git repo.*",
+    "subtitle": "GitKittie Tasks is a task board whose only data source is a git repo of markdown files. Every edit is a change to a file and a commit, written straight to your own remote. No backend, no accounts.",
+    "download": "Download on the Mac App Store",
+    "downloadIos": "Also on iPhone & iPad",
+    "shot": {
+      "device": "mac",
+      "light": "/screenshots/tasks/mac-board-light.webp",
+      "dark": "/screenshots/tasks/mac-board-dark.webp",
+      "alt": "GitKittie Tasks on the Mac: a board with To do, In Progress, Done and Backlog lanes, each card showing its priority and assignee."
+    }
+  },
+  "features": {
+    "eyebrow": "Everything it does",
+    "title": "A board made of *plain files.*",
+    "subtitle": "The board is a folder of markdown you own. The Mac, iPhone and iPad apps read and write the same files.",
+    "items": [
+      {
+        "icon": "columns",
+        "title": "Your board is a git repo",
+        "desc": "Point it at a repo and a folder of markdown files. There is no backend and no hosted database — the board is a folder you own."
+      },
+      {
+        "icon": "file",
+        "title": "One file = one card",
+        "desc": "Each card is a markdown file: YAML frontmatter for machines, a markdown body for humans. Labels, due dates, comments and the activity log are written in the same file, so anything that reads a folder can read your board."
+      },
+      {
+        "icon": "git-branch",
+        "title": "A lane is a folder",
+        "desc": "Moving a card moves its file into the lane's folder and updates one line (status: todo → done). Folder and status always agree, so the repo reads the same as the board."
+      },
+      {
+        "icon": "history",
+        "title": "History from git",
+        "desc": "Every change is a commit in your repository. Who changed a card and when is in the history you already have, not in a separate activity database."
+      },
+      {
+        "icon": "menu",
+        "title": "A window made for the Mac",
+        "desc": "A sidebar with All Tasks, Reviews and your repositories, folding per repository. Board, List and Calendar in the toolbar, with filters and Command-K search beside them."
+      },
+      {
+        "icon": "file",
+        "title": "A task in its own window",
+        "desc": "Double-click a card on the Mac and it opens in a window of its own, with Details, Activity and Files, and notes you read and edit in the same place."
+      },
+      {
+        "icon": "clock",
+        "title": "Due dates and a calendar",
+        "desc": "Give a task a day. It shows on the card, turns red once the day has passed, and on the Mac the Calendar puts every task on the day it is due."
+      },
+      {
+        "icon": "folder",
+        "title": "Docs next to the board",
+        "desc": "A board can keep its own documents — specs, rules, notes — in the repository beside the tasks, and Tasks opens them as rendered pages."
+      },
+      {
+        "icon": "bot",
+        "title": "Agents work through the app",
+        "desc": "On the Mac, turn on Agent Access and Claude Code, Codex and other agents can list, create, claim and update cards through Tasks. They need no copy of the repository, and they get the board's own rules with it."
+      },
+      {
+        "icon": "check",
+        "title": "Review what agents make",
+        "desc": "An agent that made images, models, audio or video asks you to judge them. Reviews lists every request across your boards; approve, reject or ask for changes, and comment. On iPhone and iPad you go through them one per screen and can draw on an image to show what you mean."
+      },
+      {
+        "icon": "file",
+        "title": "From a screenshot to a task",
+        "desc": "On iPhone and iPad, share a screenshot or photo to Tasks. Pick the project, mark the part that is wrong, add a comment, and the task gets a drafted title, description, type and priority that you can change."
+      },
+      {
+        "icon": "refresh",
+        "title": "Live updates, offline sending",
+        "desc": "Turn on live updates for a repository on GitHub or GitLab and a push shows up on the open board within seconds. On iPhone and iPad an edit is saved at once and sent in the background, also after you were offline."
+      },
+      {
+        "icon": "bell",
+        "title": "Notifications you choose",
+        "desc": "Get told when a review is waiting for you, and if you want, when tasks are new or moved. The app icon can show how many items are waiting. Each one is a switch under Notifications."
+      },
+      {
+        "icon": "check",
+        "title": "Validated & lenient",
+        "desc": "Cards are checked against a board config with root → project inheritance, while frontmatter the app does not know is kept as it is. A card with a broken header still shows its title."
+      }
+    ]
+  },
+  "status": {
+    "badge": "Now on Mac",
+    "title": "The same board, on every device",
+    "text": "The Mac app is on the Mac App Store alongside the iPhone and iPad app — one purchase, one board, the same repository. Connect GitHub, GitLab.com or a self-hosted GitLab with a token, sign in to GitHub without one, or open the built-in demo board and try the whole thing without an account.",
+    "support": "Ask about GitKittie Tasks"
+  },
+  "cta": {
+    "eyebrow": "Available now",
+    "title": "Your board, *in your own repo.*",
+    "subtitle": "Available now on Mac, iPhone and iPad.",
+    "download": "Download on the Mac App Store",
+    "downloadIos": "Get it for iPhone & iPad"
+  },
+  "showcase": {
+    "eyebrow": "A closer look",
+    "title": "Built like *the apps you already use.*",
+    "subtitle": "One design across the Mac, iPhone and iPad: a calm navy window, cards a step lighter, and colour only where it means something — a priority, a label, a due date that has passed.",
+    "items": [
+      {
+        "eyebrow": "The board",
+        "title": "Every lane, *on every screen.*",
+        "text": "Lanes are folders, and a card is a file. On the Mac they sit side by side as boxed columns; on iPhone and iPad they fold into sections you open and close. A card drops anywhere in a lane, also between two others.",
+        "points": [
+          "Board and List on every device, and Calendar on the Mac",
+          "Filters and sorting on the board",
+          "See which cards changed since you last looked"
+        ],
+        "shot": {
+          "device": "tablet",
+          "light": "/screenshots/tasks/ipad-board-light.webp",
+          "dark": "/screenshots/tasks/ipad-board-dark.webp",
+          "alt": "GitKittie Tasks on iPad: the demo board with To do and In Progress sections of cards."
+        }
+      },
+      {
+        "eyebrow": "A task",
+        "title": "A task is *a page,* not a form.",
+        "text": "Open a task and read it. The title and the notes are edited in place, the notes rendered as Markdown with checkboxes you can tick. Status, priority, assignee and labels are one tap each, and the activity log and comments sit underneath.",
+        "points": [
+          "Labels, due dates and priorities",
+          "Notes rendered and edited in place",
+          "Activity and comments, kept in the task's own file"
+        ],
+        "shot": {
+          "device": "phone",
+          "light": "/screenshots/tasks/iphone-task-light.webp",
+          "alt": "A task on iPhone: Design onboarding, with its status, priority, assignee and labels above the notes."
+        }
+      },
+      {
+        "eyebrow": "Search",
+        "title": "Find *any task.*",
+        "text": "Search a board by title, id, text or assignee. On the Mac it is in the toolbar, one Command-K away; All Tasks puts the open tasks of every board in one list.",
+        "points": [
+          "Search with Command-K on the Mac",
+          "All Tasks across every board",
+          "Each result shows its priority and its lane"
+        ],
+        "shot": {
+          "device": "phone",
+          "light": "/screenshots/tasks/iphone-search-light.webp",
+          "alt": "Search on iPhone: every task of the demo board with its priority badge and lane."
+        }
+      }
+    ]
+  }
+}

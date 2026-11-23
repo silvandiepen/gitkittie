@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * @view GitBudPage
+ * @view BudPage
  * GitKittie Bud product page — not yet shipped. Framed "In development", with
  * Arlez as the way to be told when it ships or to say what you'd want from it.
- * Themed to the blue app icon background via data-app="gitbud".
+ * Themed to the blue app icon background via data-app="bud".
  */
 import { Markdown } from '@sil/ui'
 import MarketingLayout from '@/components/MarketingLayout.vue'
@@ -16,7 +16,7 @@ import type { Feature } from '@/lib/content'
 import { usePageMeta } from '@/lib/usePageMeta'
 import { useContent } from '@/i18n'
 
-interface GitBudContent {
+interface BudContent {
   meta: { title: string; description: string }
   hero: { badge: string; title: string; subtitle: string; notify: string }
   features: { eyebrow: string; title: string; subtitle: string; items: Feature[] }
@@ -25,16 +25,16 @@ interface GitBudContent {
   cta: { eyebrow: string; title: string; subtitle: string; notify: string }
 }
 
-const t = useContent<GitBudContent>('gitbud')
+const t = useContent<BudContent>('bud')
 
 usePageMeta({ title: t.meta.title, description: t.meta.description })
 </script>
 
 <template>
   <MarketingLayout>
-    <div class="mkt product" data-app="gitbud">
+    <div class="mkt product" data-app="bud">
       <ProductHero
-        app="gitbud"
+        app="bud"
         :badge="t.hero.badge"
         :title="t.hero.title"
         :subtitle="t.hero.subtitle"

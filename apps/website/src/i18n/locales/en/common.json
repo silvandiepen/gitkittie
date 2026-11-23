@@ -9,17 +9,17 @@
       "items": [
         {
           "label": "GitKittie Folder",
-          "to": "/gitfolder",
+          "to": "/folder",
           "description": "Automatic version history for your folders"
         },
         {
           "label": "GitKittie Tasks",
-          "to": "/gitkanban",
+          "to": "/tasks",
           "description": "A task board that is a git repo of markdown"
         },
         {
           "label": "GitKittie Bud",
-          "to": "/gitbud",
+          "to": "/bud",
           "description": "Rewrite git history, visually and safely"
         }
       ]
@@ -49,15 +49,15 @@
         "links": [
           {
             "label": "GitKittie Folder",
-            "to": "/gitfolder"
+            "to": "/folder"
           },
           {
             "label": "GitKittie Tasks",
-            "to": "/gitkanban"
+            "to": "/tasks"
           },
           {
             "label": "GitKittie Bud",
-            "to": "/gitbud"
+            "to": "/bud"
           }
         ]
       },

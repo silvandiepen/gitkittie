@@ -2,7 +2,7 @@
 title: Keeping a task folder in git without running git
 description: The board only works if it is always synced. I keep one folder — conventions, task board, project notes — versioned automatically by GitKittie Folder, and symlinked into the place my coding agents already read from.
 date: 2026-08-12
-app: gitfolder
+app: folder
 related: markdown-kanban-in-git, one-task-one-file
 ---
 
@@ -30,7 +30,7 @@ Code lives elsewhere, in `~/Repositories`. This folder is deliberately *not*
 code: it is the layer above it — how I want things built, and what is currently
 being built.
 
-[GitKittie Folder](/gitfolder) watches that folder and commits when files
+[GitKittie Folder](/folder) watches that folder and commits when files
 change, on an interval I set once and then forget. It lives in the menu bar,
 uses the git and SSH config I already have, and pushes to a repository I own.
 There is no GitKittie account and no server in the middle; the files go from my
@@ -93,7 +93,7 @@ synced, and read at the start of every run.
 
 The part I did not plan for is how often I want the board without a laptop.
 GitKittie Folder opens the same repositories as plain browsable folders on
-iPhone and iPad, and [GitKittie Kanban](/gitkanban) renders the same files as
+iPhone and iPad, and [GitKittie Tasks](/tasks) renders the same files as
 an actual board. Same repo, same markdown, two views, no export step — because
 there was never an internal format to export from.
 
@@ -102,7 +102,7 @@ there was never an internal format to export from.
 - **Notes and tasks** live in one folder, separate from code.
 - **GitKittie Folder** commits and pushes it automatically.
 - **Global agent instructions** point into that folder instead of copying it.
-- **GitKittie Kanban** draws the board when I want to look at it.
+- **GitKittie Tasks** draws the board when I want to look at it.
 - **Git** is the sync, the history, and the lock.
 
 None of these pieces know about each other. They all just agree that the files

@@ -11,6 +11,39 @@
     "docs": "Read the docs",
     "downloadIos": "Also on iPhone & iPad"
   },
+  "mobile": {
+    "eyebrow": "On iPhone & iPad",
+    "title": "Your repos, *as folders.*",
+    "subtitle": "The same repositories your Mac snapshots, opened on iPhone and iPad as plain folders you can browse and edit.",
+    "items": [
+      {
+        "eyebrow": "Repositories",
+        "title": "Every repo, *one list.*",
+        "text": "Sign in with the GitHub or GitLab access you already have and add the repositories you want. Each one opens as a folder — no clone to manage, no git to learn.",
+        "points": [
+          "GitHub and GitLab, with the access you already have",
+          "Private repositories marked with a lock",
+          "Light and dark, like the rest of your phone"
+        ],
+        "shot": {
+          "device": "phone",
+          "light": "/screenshots/folder/iphone-repos-light.webp",
+          "dark": "/screenshots/folder/iphone-repos-dark.webp",
+          "alt": "GitKittie Folder on iPhone: a list of three repositories, travel-journal, recipes and website."
+        }
+      },
+      {
+        "eyebrow": "Files",
+        "title": "Browse it *like a folder.*",
+        "text": "Open a repository and walk its folders and files the way you would in Files. Open a file to read or edit it, and the change goes back to the repository as a commit.",
+        "shot": {
+          "device": "phone",
+          "light": "/screenshots/folder/iphone-browse-light.webp",
+          "alt": "GitKittie Folder on iPhone: the travel-journal repository open, showing its folders and its README."
+        }
+      }
+    ]
+  },
   "steps": {
     "eyebrow": "Setup",
     "title": "Simple app, *simple setup.*",

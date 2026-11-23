@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * GitBud app icon derived from project-assets/GitKittie/assets/icon_gitbud.svg.
+ * GitKittie Bud app icon derived from project-assets/GitKittie/assets/icon_gitbud.svg.
  * Colours are mapped through the website brand tokens in _variables.scss.
  *
  * The source art shades the face features with a white → grey gradient. A flat
@@ -14,14 +14,14 @@ withDefaults(
   }>(),
   {
     size: 24,
-    title: 'GitBud',
+    title: 'GitKittie Bud',
   },
 )
 </script>
 
 <template>
   <svg
-    class="gitbud-mark"
+    class="bud-mark"
     :width="size"
     :height="size"
     viewBox="0 0 153 153"
@@ -29,15 +29,15 @@ withDefaults(
     :aria-label="title"
     xmlns="http://www.w3.org/2000/svg"
   >
-    <rect class="gitbud-mark__background" x="0" y="0" width="153" height="153" />
+    <rect class="bud-mark__background" x="0" y="0" width="153" height="153" />
     <!-- Offset ink plate reads as the window's drop shadow. -->
     <path
-      class="gitbud-mark__ink"
+      class="bud-mark__ink"
       d="M53,40.5h65c4.42,0,8,3.58,8,8v59.5c0,9.93-8.07,18-18,18h-54c-4.97,0-9-4.03-9-9V48.5c0-4.42,3.58-8,8-8Z"
     />
-    <rect class="gitbud-mark__paper" x="36" y="36" width="81" height="81" rx="9" ry="9" />
+    <rect class="bud-mark__paper" x="36" y="36" width="81" height="81" rx="9" ry="9" />
     <rect
-      class="gitbud-mark__feature"
+      class="bud-mark__feature"
       x="54"
       y="67.5"
       width="18"
@@ -47,7 +47,7 @@ withDefaults(
       transform="translate(-9 135) rotate(-90)"
     />
     <rect
-      class="gitbud-mark__feature"
+      class="bud-mark__feature"
       x="76.5"
       y="67.5"
       width="18"
@@ -56,12 +56,12 @@ withDefaults(
       ry="4.5"
       transform="translate(13.5 157.5) rotate(-90)"
     />
-    <path class="gitbud-mark__smile" d="M98.55,90c-12.3,12.3-32.25,12.3-44.55,0" />
+    <path class="bud-mark__smile" d="M98.55,90c-12.3,12.3-32.25,12.3-44.55,0" />
   </svg>
 </template>
 
 <style lang="scss">
-.gitbud-mark {
+.bud-mark {
   display: block;
   overflow: hidden;
   border-radius: 22%;

@@ -2,14 +2,11 @@
 // Shared marketing primitives (.mkt)
 //
 // One source of truth for the container, type scale, buttons, panels, rules and
-// closing band used by every marketing page. The register is editorial: flat
-// fills, hairline rules, hierarchy from scale and whitespace. There are no
-// shadows and no gradients here on purpose — a group of related content is
-// separated by space and alignment, not by a box around it.
-//
-// Everything is driven by @sil/ui tokens + --color-accent*, so any element that
-// sets [data-app] themes itself and its children (GitFolder green, GitKanban
-// orange, GitBud blue, slate = the neutral shell).
+// closing band used by every marketing page. The register is the one GitKittie
+// Tasks is drawn in: an opaque navy window, panels a step lighter with one
+// hairline around them, one blue accent, hierarchy from scale and whitespace.
+// No gradients; a panel is separated by its surface step and its stroke, never
+// by a shadow. Real screenshots carry the products, not colour blocks.
 // ==========================================================================
 
 @use 'mixins' as *;
@@ -57,24 +54,26 @@
     padding: clamp(var(--space-xl), 9vw, var(--space-xxl)) 0;
 
     @include m(paper) {
-      background: var(--color-paper);
+      background: var(--color-background);
       color: var(--color-foreground);
     }
 
+    // A step darker than the window, like the app's sidebar. Alternating the
+    // two is how long pages mark a new section without a line.
     @include m(surface) {
-      background: var(--surface);
+      background: var(--surface-sunken);
       color: var(--color-foreground);
     }
 
+    // The deepest navy in both modes, for the page's closing statement.
     @include m(ink) {
       background: var(--color-dark);
       color: var(--color-light);
     }
 
-    // Filled with whatever accent the nearest [data-app] resolves to.
     @include m(accent) {
-      background: var(--color-accent);
-      color: var(--color-accent-contrast);
+      background: var(--color-accent-tint);
+      color: var(--color-foreground);
     }
   }
 
@@ -89,14 +88,14 @@
     text-transform: uppercase;
     letter-spacing: var(--tracking-eyebrow);
     line-height: 1.4;
-    color: color-mix(in srgb, currentColor 65%, transparent);
+    color: var(--accent-legible);
   }
 
   // One phrase per heading carries the accent. `<em>` is the hook because it
   // survives translation — the copy files mark the phrase with *…*, and the
   // markup never has to know which words they are.
   @include e(display) {
-    @include display-type(--font-size-display, 0.95);
+    @include display-type(--font-size-display, 1);
 
     em {
       font-style: normal;
@@ -162,6 +161,8 @@
   }
 
   // ── Buttons ──────────────────────────────────────────────────────────
+  // The app's own buttons: the primary is the accent, filled; the secondary is
+  // a capsule on a panel with the hairline around it, like the toolbar's.
   @include e(btn) {
     display: inline-flex;
     align-items: center;
@@ -171,44 +172,37 @@
     font-size: var(--font-size-s);
     font-weight: var(--font-weight-semibold);
     text-decoration: none;
-    background: var(--color-foreground);
-    color: var(--color-background);
+    background: var(--color-accent-dark);
+    color: var(--color-accent-contrast);
     border: var(--border-width) solid transparent;
     transition:
       background-color var(--transition),
       color var(--transition),
-      border-color var(--transition),
-      transform var(--transition);
+      border-color var(--transition);
 
     &:hover {
       background: var(--color-accent);
       color: var(--color-accent-contrast);
-      transform: translateY(-1px);
     }
 
-    // On an ink or accent panel the fill has to invert to stay visible.
+    // On the ink band: the same accent fill reads, so this only keeps the name.
     @include m(inverse) {
-      background: var(--color-light);
-      color: var(--color-dark);
-
-      &:hover {
-        background: var(--color-accent);
-        color: var(--color-accent-contrast);
-      }
+      &:hover { background: var(--color-accent); }
     }
 
     @include m(ghost) {
-      background: transparent;
-      color: inherit;
-      border-color: color-mix(in srgb, currentColor 35%, transparent);
+      background: var(--surface);
+      color: var(--color-foreground);
+      border-color: var(--color-border);
 
       &:hover {
-        background: transparent;
-        color: inherit;
-        border-color: currentColor;
+        background: var(--surface-raised);
+        color: var(--color-foreground);
+        border-color: color-mix(in srgb, var(--color-foreground) 30%, var(--color-border));
       }
     }
   }
+
 
   // Underlined text link with a trailing arrow — the editorial alternative to a
   // second button when the action is secondary.
@@ -240,18 +234,17 @@
 
   // ── Badge ────────────────────────────────────────────────────────────
   // Only used where the status is real information (shipped / in development).
+  // Drawn like a label chip in the app: a tint of the colour, no outline.
   @include e(badge) {
     display: inline-flex;
     align-items: center;
     width: fit-content;
-    padding: var(--space-xs) var(--space-s);
-    border: var(--border-width) solid color-mix(in srgb, currentColor 40%, transparent);
+    padding: var(--space-xs) calc(var(--space-s) * 1.25);
     border-radius: var(--radius-pill);
+    background: var(--color-accent-tint);
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-semibold);
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-eyebrow);
-    color: inherit;
+    color: var(--accent-legible);
   }
 
   // ── Ruled list ───────────────────────────────────────────────────────
@@ -279,10 +272,12 @@
   }
 
   // ── Panel grid ───────────────────────────────────────────────────────
-  // Full-bleed colour blocks, two up. Each child sets its own [data-app].
+  // Panels as the app draws them: a step lighter than the window, one hairline,
+  // the app's corner radius.
   @include e(panels) {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space);
 
     @include tablet { grid-template-columns: 1fr; }
   }
@@ -291,28 +286,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-l);
-    min-height: 30rem;
-    padding: clamp(var(--space-l), 4.5vw, var(--space-xxl));
-    background: var(--color-accent);
-    color: var(--color-accent-contrast);
-
-    @include tablet { min-height: 0; }
-
-    // Inside a filled panel the accent-coloured em would vanish into the fill.
-    .mkt__display em,
-    .mkt__display-s em {
-      color: inherit;
-    }
-
-    @include m(ink) {
-      background: var(--color-dark);
-      color: var(--color-light);
-    }
-
-    @include m(paper) {
-      background: var(--color-paper);
-      color: var(--color-foreground);
-    }
+    padding: clamp(var(--space-l), 3vw, var(--space-xl));
+    background: var(--surface);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--radius-panel);
+    color: var(--color-foreground);
   }
 
   // Pushes whatever follows it to the bottom of a panel or column.
@@ -328,10 +306,41 @@
 // `.mkt`, which gives these rules the one extra step they need.
 .mkt {
   .mkt__display {
-    @include display-type(--font-size-display, 0.95);
+    @include display-type(--font-size-display, 1);
   }
 
   .mkt__display-s {
     @include display-type(--font-size-display-s, 1.05);
+  }
+}
+
+// A ghost button on the ink band, which is navy in both modes.
+.mkt__band--ink .mkt__btn--ghost {
+  background: transparent;
+  color: var(--color-light);
+  border-color: color-mix(in srgb, var(--color-light) 25%, transparent);
+
+  &:hover {
+    background: transparent;
+    color: var(--color-light);
+    border-color: color-mix(in srgb, var(--color-light) 55%, transparent);
+  }
+}
+
+// ── Product page sections ──────────────────────────────────────────────────
+// Shared by every product page, which are loaded per route — so the rule lives
+// here and not in one page's own styles, where it only applied once that page
+// had been visited.
+.product {
+  // The vertical rhythm between a section's head and its body.
+  &__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+
+  // Screenshot rows need more air between them than a section head does.
+  &__section--showcase {
+    gap: clamp(var(--space-xl), 9vw, var(--space-xxl));
   }
 }

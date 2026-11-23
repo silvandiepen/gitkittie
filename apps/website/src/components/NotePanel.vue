@@ -2,9 +2,8 @@
 /**
  * @component NotePanel
  * A single aside on a product page — release status, or a capability that needs
- * explaining on its own. Rendered as a filled band in the product's own hue,
- * so it reads as a deliberate interruption of the page rather than a tinted box
- * dropped into it.
+ * explaining on its own. One panel on the window, the way the app shows a
+ * notice: a step lighter, one hairline, the badge in the accent tint.
  *
  * Actions are optional and go in the default slot.
  */
@@ -20,15 +19,17 @@ const slots = useSlots()
 </script>
 
 <template>
-  <section class="mkt__band mkt__band--accent note-panel">
-    <div class="mkt__container note-panel__inner">
-      <div class="mkt__section-head">
-        <span v-if="badge" class="mkt__badge">{{ badge }}</span>
-        <div class="mkt__section-head-copy">
-          <h2 class="mkt__display-s">{{ title }}</h2>
-          <p class="note-panel__text">{{ text }}</p>
-          <div v-if="slots.default" class="mkt__actions note-panel__actions">
-            <slot />
+  <section class="mkt__band mkt__band--paper note-panel">
+    <div class="mkt__container">
+      <div class="mkt__panel note-panel__inner">
+        <div class="mkt__section-head">
+          <span v-if="badge" class="mkt__badge">{{ badge }}</span>
+          <div class="mkt__section-head-copy">
+            <h2 class="mkt__display-s">{{ title }}</h2>
+            <p class="note-panel__text">{{ text }}</p>
+            <div v-if="slots.default" class="mkt__actions note-panel__actions">
+              <slot />
+            </div>
           </div>
         </div>
       </div>
@@ -38,13 +39,11 @@ const slots = useSlots()
 
 <style lang="scss">
 .note-panel {
-  // The band fills with --color-accent and inherits --color-accent-contrast, so
-  // the body copy fades against the panel's own text colour, not a page grey.
   &__text {
     font-size: var(--font-size-m);
     line-height: var(--line-height-relaxed);
     max-width: 62ch;
-    color: color-mix(in srgb, currentColor 82%, transparent);
+    color: var(--color-muted);
   }
 
   &__actions {

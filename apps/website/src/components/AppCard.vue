@@ -1,14 +1,13 @@
 <script setup lang="ts">
 /**
  * @component AppCard
- * One product, as a full-bleed colour panel rather than a card on a background.
- * Sets [data-app] so the panel fills with that product's own hue and everything
- * inside it — badge border, rules, link underline — inherits the contrast text
- * colour from `--color-accent-contrast`.
+ * One product, as a panel the way the apps draw one: a step lighter than the
+ * window, one hairline, the app's icon at the top. The icon is the product's
+ * colour; the panel itself stays in the family's navy and its one accent.
  */
-import GitFolderMark from './GitFolderMark.vue'
-import GitKanbanMark from './GitKanbanMark.vue'
-import GitBudMark from './GitBudMark.vue'
+import FolderMark from './FolderMark.vue'
+import TasksMark from './TasksMark.vue'
+import BudMark from './BudMark.vue'
 import type { AppSlug } from '@/lib/content'
 
 defineProps<{
@@ -25,20 +24,20 @@ defineProps<{
 </script>
 
 <template>
-  <article class="mkt__panel app-panel" :data-app="app">
+  <article class="mkt__panel app-panel">
     <div class="app-panel__head">
       <span v-if="marker" class="mkt__marker">{{ marker }}</span>
       <span v-if="badge" class="mkt__badge">{{ badge }}</span>
     </div>
 
     <span class="app-panel__mark" aria-hidden="true">
-      <GitFolderMark v-if="app === 'gitfolder'" :size="72" />
-      <GitKanbanMark v-else-if="app === 'gitkanban'" :size="72" />
-      <GitBudMark v-else :size="72" />
+      <FolderMark v-if="app === 'folder'" :size="72" />
+      <TasksMark v-else-if="app === 'tasks'" :size="72" />
+      <BudMark v-else :size="72" />
     </span>
 
     <div class="app-panel__copy">
-      <h3 class="mkt__display-s">{{ name }}</h3>
+      <h3 class="app-panel__name">{{ name }}</h3>
       <p class="app-panel__tagline">{{ tagline }}</p>
     </div>
 
@@ -59,56 +58,57 @@ defineProps<{
 .app-panel {
   gap: var(--space);
 
-  // A panel that spans the full grid — the odd one out of three — would
-  // otherwise stretch its copy across the whole viewport. The reading measure
-  // stays one column wide regardless of how many columns the panel occupies.
-  --app-panel-measure: 46ch;
-
   &__head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space);
-    max-width: var(--app-panel-measure);
   }
 
   &__mark {
     display: inline-flex;
-    margin-top: auto;
+    padding-top: var(--space-s);
   }
 
   &__copy {
     display: flex;
     flex-direction: column;
     gap: var(--space-s);
-    max-width: var(--app-panel-measure);
+  }
+
+  &__name {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--tracking-heading);
+    line-height: var(--line-height-tight);
   }
 
   &__tagline {
     font-size: var(--font-size-m);
     line-height: 1.45;
-    max-width: 30ch;
-    color: color-mix(in srgb, currentColor 80%, transparent);
+    color: var(--color-muted);
   }
 
   &__points {
     display: flex;
     flex-direction: column;
     padding: 0;
-    max-width: var(--app-panel-measure);
   }
 
-  // The hairline between points is the panel's own text colour, faded — on a
-  // filled panel a neutral --color-rule would read as a foreign grey.
   &__point {
     padding: var(--space-s) 0;
-    border-top: var(--border-width) solid color-mix(in srgb, currentColor 25%, transparent);
+    border-top: var(--border-width) solid var(--color-rule);
     font-size: var(--font-size-s);
     line-height: var(--line-height-normal);
+    color: var(--color-muted);
   }
 
+  // The link sits on the panel's bottom edge, so three panels line up.
   &__cta {
-    margin-top: var(--space-s);
+    margin-top: auto;
+    color: var(--accent-legible);
+
+    &:hover { color: var(--accent-legible); }
   }
 
   &__arrow {

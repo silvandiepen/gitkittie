@@ -2,7 +2,7 @@
 title: My kanban board is just markdown files in git
 description: I stopped using project management tools for my own work. One task is one markdown file, the folders are the workflow, and git records everything — which turns out to matter most when coding agents are doing half the work.
 date: 2026-08-14
-app: gitkanban
+app: tasks
 related: one-task-one-file, git-backed-task-folder
 ---
 
@@ -115,7 +115,7 @@ So I built the view.
 
 ## GitKittie Tasks
 
-[GitKittie Tasks](/gitkanban) reads the markdown and draws the board. It does
+[GitKittie Tasks](/tasks) reads the markdown and draws the board. It does
 not become the source of truth — the files stay the source of truth.
 
 - Move a card, and the markdown file moves.

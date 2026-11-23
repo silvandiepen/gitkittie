@@ -6,7 +6,7 @@
   "eyebrow": "Help",
   "title": "Support",
   "intro": "GitKittie Folder, GitKittie Tasks and GitKittie Bud are small, local-first apps. Most issues come down to git, token access, repository URLs, or folder permissions. Pick your app below.",
-  "gitfolder": {
+  "folder": {
     "heading": "GitKittie Folder",
     "setup": {
       "title": "Check your setup",
@@ -43,13 +43,13 @@
       ]
     }
   },
-  "gitkanban": {
+  "tasks": {
     "heading": "GitKittie Tasks",
     "title": "Getting connected",
     "body": "GitKittie Tasks is on the Mac App Store and the App Store for iPhone and iPad — one record, so the download button gives you the build for the device you're on. Open the demo board to try it without an account, or connect GitHub, GitLab.com or a self-hosted GitLab. If a repository doesn't show up, check that the token you pasted has repository read and write scope, and that self-hosted GitLab was given its server URL. If live updates won't turn on, your account needs admin access to the repository on GitHub, or the Maintainer role on GitLab. Anything else — a board that won't load, a card that won't save, an agent that can't connect — send a message and it lands against GitKittie Tasks.",
     "action": "Message about GitKittie Tasks"
   },
-  "gitbud": {
+  "bud": {
     "heading": "GitKittie Bud",
     "title": "In development",
     "body": "GitKittie Bud's macOS app isn't on the App Store yet, so there's nothing to install. Send a message to be told when it ships, or to say what you'd want from it.",
