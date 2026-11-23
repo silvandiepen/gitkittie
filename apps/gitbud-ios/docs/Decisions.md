@@ -92,13 +92,12 @@ touch the chosen lines and treats identical changes on both sides as no conflict
 
 ---
 
-### 7. GitPont comes from its history branch until that is merged
+### 7. GitPont is pinned to a revision of master
 
-**Decision.** `project.yml` takes `git-pont` from GitHub, branch `feat/commit-history`
-(git-pont#7), where the commit history, commit detail and pull request list APIs live. Once that
-is merged it goes to `branch: master`, like the other apps.
+**Decision.** `project.yml` takes `git-pont` from GitHub at a fixed revision of `master`
+(`6c0ffa9`, the merge of git-pont#7), moved on purpose when GitPont gains something the app needs. The commit history,
+commit detail and pull request list APIs the app needs were added to GitPont (git-pont#7, merged
+2026-11-23) for GitHub, GitLab, Forgejo/Gitea and Bitbucket, rather than called directly from the
+app.
 
-**Rationale.** GitPont is the only gateway to a git host; what it lacked was added there, for
-GitHub, GitLab, Forgejo/Gitea and Bitbucket, rather than called directly from the app.
-
-**Status.** Temporary.
+**Status.** Accepted.

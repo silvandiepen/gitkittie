@@ -14,12 +14,12 @@ settings:
     DEVELOPMENT_TEAM: "38MGF83L2L"
 
 packages:
-  # Every git host, through GitPont only (repo rule). Commit history and pull request lists
-  # are on GitPont's feat/commit-history branch (git-pont#7); switch to `branch: master`
-  # once that is merged, like the other apps.
+  # Every git host, through GitPont only (repo rule). Pinned to a revision of master (the
+  # merge of git-pont#7) rather than following the branch, so a build is reproducible; move
+  # the pin on purpose when GitPont gains something this app needs (see GITKIT-106).
   git-pont:
     url: https://github.com/silvandiepen/git-pont.git
-    branch: feat/commit-history
+    revision: 6c0ffa99ad31cc8f112c585455101529e9be5085
   # Diff layout, choosing lines, patches, the line merge, on-device Magic.
   GitKittieKit:
     path: ../../swift/GitKittieKit
