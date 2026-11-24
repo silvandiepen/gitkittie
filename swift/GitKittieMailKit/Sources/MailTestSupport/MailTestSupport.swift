@@ -63,3 +63,18 @@ public struct FixtureExpectations: Codable, Sendable {
         public var warnings: [ParseWarning]
     }
 }
+
+extension MailFixtures {
+    /// The hostile-HTML fixtures (`Fixtures/hostile-html`, GKM-012), sorted by name.
+    public static func hostileHTMLURLs() throws -> [URL] {
+        guard let directory = directory?.appendingPathComponent("hostile-html", isDirectory: true) else { throw FixtureError.missingDirectory }
+        return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "eml" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    public static func hostileHTML(_ name: String) throws -> Data {
+        guard let url = try hostileHTMLURLs().first(where: { $0.lastPathComponent == name }) else { throw FixtureError.missingDirectory }
+        return try Data(contentsOf: url)
+    }
+}

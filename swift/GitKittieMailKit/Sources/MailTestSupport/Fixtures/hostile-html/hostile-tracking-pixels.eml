@@ -1,0 +1,25 @@
+From: Ada Example <ada@example.com>
+To: alex.morgan@example.net
+Subject: Tracking pixels
+Date: Tue, 24 Nov 2026 10:00:00 +0000
+Message-ID: <hostile-pixels@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<p>Your weekly update. Real image below.</p>
+<img src="https://images.example.net/hero.png" width="600" height="300" alt="Hero">
+<img src="https://track.example.net/open?id=alex-4711" width="1" height="1" alt="">
+<img src="https://track.example.net/p.gif" style="display:none">
+<img src="https://track.example.net/w0.gif" width="0" height="0">
+<img src="//track.example.net/protocol-relative.gif" width="1" height="1">
+<img src="https://images.example.net/small.png" srcset="https://images.example.net/2x.png 2x">
+<picture><source srcset="https://images.example.net/source.webp"><img src="https://images.example.net/fallback.png" alt="fallback"></picture>
+<video poster="https://media.example.net/poster.png" src="https://media.example.net/v.mp4"></video>
+<audio src="https://media.example.net/a.mp3" autoplay></audio>
+<input type="image" src="https://track.example.net/input.png">
+<link rel="prefetch" href="https://prefetch.example.net/x">
+<link rel="dns-prefetch" href="https://dns.example.net">
+<link rel="preconnect" href="https://preconnect.example.net">
+<a href="https://shop.example.com/sale" ping="https://ping.example.net/ping">Shop the sale</a>
+</body></html>

@@ -20,8 +20,13 @@ public struct StoredMessage: Sendable {
     public var markdownURL: URL
     /// The plain-text body as the parser reads it from the `.eml`; `nil` when there is none.
     public var textBody: String?
-    /// True when the message has an HTML body, which nothing renders yet (GKM-012).
-    public var hasHTMLBody: Bool
+    /// The HTML body as the sender wrote it. Hostile: only ever shown through MailHTML's
+    /// sanitizer in the reader's locked-down web view (GKM-012).
+    public var htmlBody: String?
+    /// What the parser found malformed in the original, for the reader to say so.
+    public var parseProblems: [String]
+
+    public var hasHTMLBody: Bool { htmlBody != nil }
 
     /// The Markdown below the front matter.
     public var body: String {
@@ -61,7 +66,7 @@ public actor MailStore {
 
     /// Opens (or creates) the store, finishes or undoes any write a crash interrupted, and
     /// rebuilds the index from the folder when it is missing, damaged or from another schema.
-    public static func open(_ locations: StoreLocations, parser: any MessageParsing = BasicMessageParser(),
+    public static func open(_ locations: StoreLocations, parser: any MessageParsing = MIMEMessageParser(),
                             faults: WriteFaults = .none) async throws -> MailStore {
         try locations.validate()
         let fileManager = FileManager.default
@@ -85,7 +90,7 @@ public actor MailStore {
     /// the existing id comes back: fetching the same UID twice never makes two messages.
     @discardableResult
     public func ingest(_ eml: Data, account: MailAccountID, remote: RemoteLocation? = nil,
-                       receivedAt: Date = Date()) throws -> IngestResult {
+                       receivedAt: Date = Date(), flags: MessageFlags? = nil) throws -> IngestResult {
         let accountName = try SafePath.component(account.rawValue)
         if let remote, let existing = try mapping(for: accountName).localID(at: remote) {
             return IngestResult(id: existing, isNew: false)
@@ -107,8 +112,16 @@ public actor MailStore {
         try writer.commit(original)
 
         try faults.check(.beforeIndex)
-        try index.upsert(IndexRecord(front: derived.front, message: derived.message, path: relativePath(of: original.destination)))
-        if let remote { try mapping(for: accountName).record(remote, for: id) }
+        try index.upsert(IndexRecord(front: derived.front, message: derived.message, path: relativePath(of: original.destination),
+                                     attachmentText: attachmentText(for: derived.front.attachments)))
+        if let remote {
+            try mapping(for: accountName).record(remote, for: id)
+            try index.setMailboxes([remote.mailbox], for: id, account: account)
+        }
+        if let flags {
+            try mapping(for: accountName).setFlags(flags, for: id)
+            try index.setFlags(flags, for: id)
+        }
         try FileManager.default.removeItem(at: journalURL)
         return IngestResult(id: id, isNew: true)
     }
@@ -155,13 +168,93 @@ public actor MailStore {
         try index.search(text, account: account, limit: limit)
     }
 
+    /// Messages matching a search with filters (GKM-016): best text matches first, then newest.
+    /// With no text, the filtered messages newest first. Reads the local index only: offline.
+    public func search(_ query: SearchQuery, limit: Int = 200, offset: Int = 0) throws -> [MessageSummary] {
+        try index.summaries(matching: query, limit: limit, offset: offset)
+    }
+
+    /// Conversations in a view (account, folder, unread…), newest activity first (GKM-012).
+    public func threads(_ query: SearchQuery = SearchQuery(), limit: Int = 200, offset: Int = 0) throws -> [ThreadSummary] {
+        try index.threads(matching: query, limit: limit, offset: offset)
+    }
+
+    /// Every message in a thread, oldest first.
+    public func thread(_ threadID: String) throws -> [MessageSummary] {
+        try index.thread(threadID)
+    }
+
+    public func unreadCount(account: MailAccountID? = nil, mailbox: String? = nil) throws -> Int {
+        try index.unreadCount(account: account, mailbox: mailbox)
+    }
+
+    /// The folders that hold stored messages in an account (from this device's sync state).
+    public func folders(account: MailAccountID) throws -> [String] {
+        try index.mailboxes(account: account)
+    }
+
+    /// True when exactly these bytes are already stored in the account: an import of the same
+    /// `.eml` twice is skipped, while a different message with the same Message-ID is not.
+    public func containsOriginal(_ eml: Data, account: MailAccountID) throws -> Bool {
+        try index.containsOriginal(sha256: Hashing.sha256Hex(eml), account: account)
+    }
+
+    // MARK: - Flags
+
+    public func flags(of id: MailMessageID) throws -> MessageFlags {
+        guard let account = try index.account(of: id) else { throw MailStoreError.messageNotFound(id.rawValue) }
+        return try mapping(for: SafePath.component(account.rawValue)).flags(of: id)
+    }
+
+    /// Records the provider flags for a message (the sync calls this), or a local change such
+    /// as "read" when the reader opens it. Kept in the device's sync state, mirrored in the index.
+    public func setFlags(_ flags: MessageFlags, for id: MailMessageID) throws {
+        guard let account = try index.account(of: id) else { throw MailStoreError.messageNotFound(id.rawValue) }
+        try mapping(for: SafePath.component(account.rawValue)).setFlags(flags, for: id)
+        try index.setFlags(flags, for: id)
+    }
+
+    // MARK: - Attachment text (GKM-016)
+
+    /// Attachments of the given media types whose text has not been extracted yet. The caller
+    /// extracts them (in an isolated process, ThreatModel §4) and hands the text back.
+    public func attachmentsNeedingText(mediaTypes: Set<String>, limit: Int = 50) throws -> [(blob: String, mediaType: String)] {
+        let done = Set((try? FileManager.default.contentsOfDirectory(atPath: attachmentTextFolder.path)) ?? [])
+            .compactMap { $0.hasSuffix(".txt") ? String($0.dropLast(4)) : nil }
+        return try index.blobs(ofTypes: Set(mediaTypes.map { $0.lowercased() }), excluding: Set(done), limit: limit)
+    }
+
+    /// Stores what extraction found for a blob (nil or empty: nothing, which is remembered so it
+    /// is not tried again) and makes it searchable in every message carrying that blob. The
+    /// text lives in the device cache, never in the mail folder.
+    public func recordAttachmentText(_ text: String?, forBlob blob: String) throws {
+        guard SafePath.isSHA256Hex(blob) else { throw MailStoreError.unsafePathComponent(blob) }
+        try writer.write(Data((text ?? "").utf8), to: attachmentTextFolder.appendingPathComponent("\(blob).txt"))
+        for (id, blobs) in try index.messages(withBlob: blob) {
+            try index.setAttachmentText(blobs.compactMap(cachedText(forBlob:)).joined(separator: "\n"), for: id)
+        }
+    }
+
+    private var attachmentTextFolder: URL { locations.cacheFolder.appendingPathComponent("attachment-text", isDirectory: true) }
+
+    private func cachedText(forBlob blob: String) -> String? {
+        guard SafePath.isSHA256Hex(blob) else { return nil }
+        let text = try? String(contentsOf: attachmentTextFolder.appendingPathComponent("\(blob).txt"), encoding: .utf8)
+        return text?.isEmpty == false ? text : nil
+    }
+
+    private func attachmentText(for attachments: [AttachmentReference]) -> String {
+        attachments.compactMap { cachedText(forBlob: $0.blob) }.joined(separator: "\n")
+    }
+
     public func message(_ id: MailMessageID) throws -> StoredMessage {
         let emlURL = try url(of: id)
         let markdownURL = emlURL.deletingPathExtension().appendingPathExtension("md")
         let markdown = try String(contentsOf: markdownURL, encoding: .utf8)
         let parsed = try parser.parse(Data(contentsOf: emlURL))
         return StoredMessage(front: try DerivedMarkdown.frontMatter(of: markdown), markdown: markdown, emlURL: emlURL,
-                             markdownURL: markdownURL, textBody: parsed.textBody, hasHTMLBody: parsed.hasHTMLBody)
+                             markdownURL: markdownURL, textBody: parsed.textBody, htmlBody: parsed.htmlBody,
+                             parseProblems: parsed.problems)
     }
 
     /// The original bytes, checked against the hash recorded when they were stored.
@@ -180,6 +273,15 @@ public actor MailStore {
         let url = locations.blobsFolder.appendingPathComponent(reference.blob)
         let data = try Data(contentsOf: url)
         guard Hashing.sha256Hex(data) == reference.blob else { throw MailStoreError.integrityMismatch(path: relativePath(of: url)) }
+        return data
+    }
+
+    /// A blob's bytes by its hash, checked.
+    public func blobData(_ blob: String) throws -> Data {
+        guard SafePath.isSHA256Hex(blob) else { throw MailStoreError.unsafePathComponent(blob) }
+        let url = locations.blobsFolder.appendingPathComponent(blob)
+        let data = try Data(contentsOf: url)
+        guard Hashing.sha256Hex(data) == blob else { throw MailStoreError.integrityMismatch(path: relativePath(of: url)) }
         return data
     }
 
@@ -218,12 +320,17 @@ public actor MailStore {
     /// Records that a stored message is (also) at `location`: after a move, or when the same
     /// message turns up in a second mailbox and reconciliation matched it.
     public func record(_ location: RemoteLocation, for id: MailMessageID, account: MailAccountID) throws {
-        try mapping(for: SafePath.component(account.rawValue)).record(location, for: id)
+        let mapping = try mapping(for: SafePath.component(account.rawValue))
+        try mapping.record(location, for: id)
+        try index.setMailboxes(Set(mapping.locations(of: id).map(\.mailbox)), for: id, account: account)
     }
 
     /// The message left `location` (moved or expunged at the provider). The local message stays.
     public func forget(_ location: RemoteLocation, account: MailAccountID) throws {
-        try mapping(for: SafePath.component(account.rawValue)).forget(location)
+        let mapping = try mapping(for: SafePath.component(account.rawValue))
+        let id = try mapping.localID(at: location)
+        try mapping.forget(location)
+        if let id { try index.setMailboxes(Set(mapping.locations(of: id).map(\.mailbox)), for: id, account: account) }
     }
 
     /// The mailboxes this device has seen for the account.
@@ -234,7 +341,10 @@ public actor MailStore {
     /// The server's UIDVALIDITY for a mailbox. When it changed, the old UIDs are void; the ids
     /// that no longer have any location come back for reconciliation.
     public func updateUIDValidity(_ uidValidity: UInt32, mailbox: String, account: MailAccountID) throws -> [MailMessageID] {
-        try mapping(for: SafePath.component(account.rawValue)).setUIDValidity(uidValidity, mailbox: mailbox)
+        let mapping = try mapping(for: SafePath.component(account.rawValue))
+        let orphaned = try mapping.setUIDValidity(uidValidity, mailbox: mailbox)
+        try index.setMembers(mapping.localIDs(inMailbox: mailbox), ofMailbox: mailbox, account: account)
+        return orphaned
     }
 
     /// Stored messages in the account that may be the same message as `eml`: same Message-ID
@@ -276,6 +386,20 @@ public actor MailStore {
                 }
             }
         }
+        try restoreDeviceState()
+    }
+
+    /// Folders and flags are device state (the sync's own database), not folder content: after
+    /// the index is rebuilt from the folder, they are copied back in from there.
+    private func restoreDeviceState() throws {
+        let stateRoot = locations.deviceFolder.appendingPathComponent("state", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: stateRoot.path) else { return }
+        for folder in try sortedContents(of: stateRoot) {
+            guard let name = try? SafePath.component(folder.lastPathComponent), name != "journal",
+                  FileManager.default.fileExists(atPath: folder.appendingPathComponent("sync.sqlite").path) else { continue }
+            let mapping = try mapping(for: name)
+            try index.restore(flags: mapping.allFlags(), locations: mapping.allMemberships(), account: MailAccountID(name))
+        }
     }
 
     /// Finishes or undoes every write the journal still lists. Returns false when a journal
@@ -301,7 +425,10 @@ public actor MailStore {
             let markdownURL = directory.appendingPathComponent("\(entry.id.rawValue).md")
             if fileManager.fileExists(atPath: emlURL.path) {
                 try index.upsert(complete(id: entry.id, account: entry.account, emlURL: emlURL, fallbackReceived: entry.received))
-                if let remote = entry.remote { try mapping(for: accountName).record(remote, for: entry.id) }
+                if let remote = entry.remote {
+                    try mapping(for: accountName).record(remote, for: entry.id)
+                    try index.setMailboxes(Set(mapping(for: accountName).locations(of: entry.id).map(\.mailbox)), for: entry.id, account: entry.account)
+                }
             } else if fileManager.fileExists(atPath: markdownURL.path) {
                 try fileManager.removeItem(at: markdownURL)
             }
@@ -328,7 +455,8 @@ public actor MailStore {
         if existingText != derived.markdown {
             try AtomicWriter(faults: .none).write(Data(derived.markdown.utf8), to: markdownURL)
         }
-        return IndexRecord(front: derived.front, message: derived.message, path: relativePath(of: emlURL))
+        return IndexRecord(front: derived.front, message: derived.message, path: relativePath(of: emlURL),
+                           attachmentText: attachmentText(for: derived.front.attachments))
     }
 
     // MARK: - Helpers
@@ -346,7 +474,8 @@ public actor MailStore {
             let hash = Hashing.sha256Hex(attachment.data)
             blobs.append((hash, attachment.data))
             return AttachmentReference(blob: hash, fileName: SafePath.displayFileName(attachment.fileName),
-                                       mediaType: attachment.mediaType, size: attachment.data.count, inline: attachment.isInline)
+                                       mediaType: attachment.mediaType, size: attachment.data.count, inline: attachment.isInline,
+                                       contentId: attachment.contentID)
         }
         let front = MessageFrontMatter(
             schema: DerivedMarkdown.schemaVersion, id: id, account: account, messageId: message.messageID,

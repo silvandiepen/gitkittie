@@ -1,0 +1,52 @@
+From: "cloudvault.example.com Security" <alerts@cloudvau1t.example.net>
+To: alex.morgan@example.net
+Reply-To: billing@payments.example.org
+Subject: Your storage is almost full
+Date: Tue, 24 Nov 2026 11:00:00 +0000
+Message-ID: <lookalike-links@cloudvau1t.example.net>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=_lookalike_boundary"
+
+--=_lookalike_boundary
+Content-Type: multipart/alternative; boundary="=_lookalike_boundary-alt"
+
+--=_lookalike_boundary-alt
+Content-Type: text/plain; charset=utf-8
+
+Your CloudVault storage is almost full. Log in at https://cloudvau1t.example.net/login
+--=_lookalike_boundary-alt
+Content-Type: multipart/related; boundary="=_lookalike_boundary-rel"
+
+--=_lookalike_boundary-rel
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<p>Your CloudVault storage is almost full.</p>
+<p><img src="cid:logo@cloudvault" alt="CloudVault logo" width="120" height="40"></p>
+<p><a href="https://cloudvau1t.example.net/login">https://www.cloudvault.example.com/account</a></p>
+<p><a href="https://www.cloudvault.example.com@login.example.net/verify">Verify your account</a></p>
+<p><a href="https://xn--cludvault-12h.example.com/">clоudvault.example.com</a></p>
+<p><a href="http://192.0.2.1/upgrade">Upgrade storage</a></p>
+<p><a href="https://help.cloudvault.example.com/faq">Help centre</a></p>
+<p><a href="mailto:support@cloudvault.example.com">Write to support</a></p>
+<p><a href="file:///etc/passwd">Local file</a></p>
+<p><a href="data:text/html,hello">Data URL</a></p>
+<p><a href="cloudvault-app://open">Open the app</a></p>
+</body></html>
+
+--=_lookalike_boundary-rel
+Content-Type: image/png
+Content-ID: <logo@cloudvault>
+Content-Disposition: inline; filename="logo.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+--=_lookalike_boundary-rel--
+--=_lookalike_boundary-alt--
+--=_lookalike_boundary
+Content-Type: application/pdf; name="storage-report.pdf"
+Content-Disposition: attachment; filename="storage-report.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQgc3ludGhldGlj
+--=_lookalike_boundary--

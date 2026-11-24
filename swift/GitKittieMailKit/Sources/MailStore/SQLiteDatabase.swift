@@ -61,6 +61,9 @@ final class SQLiteDatabase {
         }
     }
 
+    /// The rowid of the last row inserted on this connection.
+    var lastInsertRowID: Int64 { sqlite3_last_insert_rowid(handle) }
+
     func setUserVersion(_ version: Int) throws { try execute("PRAGMA user_version = \(version)") }
 
     fileprivate func lastError(_ code: Int32) -> MailStoreError {
