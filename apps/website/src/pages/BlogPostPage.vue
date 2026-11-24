@@ -30,6 +30,10 @@ const related = computed(() => (post.value ? useRelatedPosts(post.value) : []))
 usePageMeta({
   title: () => (post.value ? `${post.value.title} — GitKittie` : 'Writing — GitKittie'),
   description: () => post.value?.description ?? '',
+  type: () => (post.value ? 'article' : 'website'),
+  published: () => post.value?.date,
+  imageAlt: () => post.value?.shotAlt,
+  headline: () => post.value?.title,
 })
 </script>
 

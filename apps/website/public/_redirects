@@ -1,4 +1,8 @@
 /gitfolder /folder 301
 /gitkanban /tasks 301
 /gitbud /bud 301
-/* /index.html 200
+
+# No catch-all "/* /index.html 200": Pages applies redirects before files, so it would
+# serve the home page's head for every route and hide the static page each route has
+# (build/static-pages.ts). Without a top-level 404.html, Pages already serves index.html
+# for paths that have no file — the app's own routes still work.

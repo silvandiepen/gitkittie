@@ -1,4 +1,8 @@
 {
+  "meta": {
+    "title": "Writing — GitKittie",
+    "description": "Notes on running projects out of plain markdown in git: the folder-per-lane kanban workflow, what it looks like when coding agents share the same task files, and how the GitKittie apps fit around it."
+  },
   "eyebrow": "Writing",
   "title": "Notes from running everything out of git",
   "lead": "Longer pieces on the workflow the apps came out of: tasks as markdown files, folders as lanes, git as the only backend, and what changes once coding agents read the same files you do.",

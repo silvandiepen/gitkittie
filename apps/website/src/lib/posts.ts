@@ -1,4 +1,5 @@
 import type { AppSlug } from './content'
+import { missingPostFields, parseFrontmatter, readingMinutes } from './frontmatter'
 
 /**
  * Blog post registry.
@@ -9,7 +10,9 @@ import type { AppSlug } from './content'
  * summary), so each file opens with a small frontmatter block rather than
  * keeping that in a parallel JSON file where it would drift from the prose.
  *
- * Adding an article = dropping one `.md` file in the folder. Nothing else.
+ * Adding an article = dropping one `.md` file in the folder, then `npm run og` for its
+ * share card. The build fails on an article without its title, description, date or
+ * share screenshot, or without its card.
  */
 
 /** Frontmatter as authored, plus the derived fields the pages render. */
@@ -22,6 +25,13 @@ export interface Post {
   date: string
   /** Optional product the piece is about — themes the page via `[data-app]`. */
   app?: AppSlug
+  /**
+   * Screenshot on the article's share card, from `public/` (`/screenshots/…`). The card
+   * itself is `public/og/blog/<slug>.png`, made by `npm run og`.
+   */
+  shot: string
+  /** What the screenshot shows, for the share card's `og:image:alt`. */
+  shotAlt: string
   /** Slugs of articles to surface at the end of this one. */
   related: string[]
   /** Markdown body, frontmatter stripped. */
@@ -38,35 +48,11 @@ const postModules = import.meta.glob('../i18n/posts/*/*.md', {
   import: 'default',
 }) as Record<string, string>
 
-/**
- * Frontmatter is a deliberately small subset of YAML: `key: value` lines
- * between two `---` fences, with `related` as a comma-separated list. Enough
- * for an article header, and no parser dependency to carry for it.
- */
-function parseFrontmatter(raw: string): { fields: Record<string, string>; body: string } {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw)
-  if (!match) return { fields: {}, body: raw }
-
-  const fields: Record<string, string> = {}
-  for (const line of match[1].split(/\r?\n/)) {
-    const separator = line.indexOf(':')
-    if (separator === -1) continue
-    const key = line.slice(0, separator).trim()
-    const value = line.slice(separator + 1).trim().replace(/^["']|["']$/g, '')
-    if (key) fields[key] = value
-  }
-
-  return { fields, body: raw.slice(match[0].length) }
-}
-
-function readingMinutes(body: string): number {
-  const words = body.trim().split(/\s+/).filter(Boolean).length
-  return Math.max(1, Math.ceil(words / 200))
-}
-
 function toPost(path: string, raw: string): Post {
   const slug = path.replace(/^.*\/(.+)\.md$/, '$1')
   const { fields, body } = parseFrontmatter(raw)
+  const missing = missingPostFields(fields)
+  if (missing.length) throw new Error(`Article ${slug} is missing ${missing.join(', ')} in its frontmatter`)
 
   return {
     slug,
@@ -74,6 +60,8 @@ function toPost(path: string, raw: string): Post {
     description: fields.description ?? '',
     date: fields.date ?? '',
     app: (fields.app as AppSlug) || undefined,
+    shot: fields.shot,
+    shotAlt: fields.shotAlt,
     related: fields.related ? fields.related.split(',').map((s) => s.trim()).filter(Boolean) : [],
     body,
     readingMinutes: readingMinutes(body),

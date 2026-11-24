@@ -7,13 +7,15 @@
 import MarketingLayout from '@/components/MarketingLayout.vue'
 import LegalDoc from '@/components/LegalDoc.vue'
 import { usePageMeta } from '@/lib/usePageMeta'
-import { usePageMarkdown } from '@/i18n'
+import { useContent, usePageMarkdown } from '@/i18n'
 
-usePageMeta({
-  title: 'Terms & Conditions — GitKittie',
-  description:
-    'The terms of use for the GitKittie apps, GitKittie Folder, GitKittie Tasks and GitKittie Bud — provided as-is, using your own git repositories and accounts.',
-})
+interface LegalContent {
+  privacy: { meta: { title: string; description: string } }
+  terms: { meta: { title: string; description: string } }
+}
+
+const { meta } = useContent<LegalContent>('legal').terms
+usePageMeta({ title: meta.title, description: meta.description })
 
 const body = usePageMarkdown('terms')
 </script>

@@ -8,8 +8,10 @@ import MarketingLayout from '@/components/MarketingLayout.vue'
 import { usePageMeta } from '@/lib/usePageMeta'
 import { usePosts, formatPostDate } from '@/lib/posts'
 import { useContent } from '@/i18n'
+import { shareImagePath } from '@/lib/seo'
 
 interface BlogContent {
+  meta: { title: string; description: string }
   eyebrow: string
   title: string
   lead: string
@@ -20,11 +22,7 @@ interface BlogContent {
 const t = useContent<BlogContent>('blog')
 const posts = usePosts()
 
-usePageMeta({
-  title: 'Writing — GitKittie',
-  description:
-    'Notes on running projects out of plain markdown in git: the folder-per-lane kanban workflow, what it looks like when coding agents share the same task files, and how the GitKittie apps fit around it.',
-})
+usePageMeta({ title: t.meta.title, description: t.meta.description })
 </script>
 
 <template>
@@ -44,6 +42,16 @@ usePageMeta({
         <ol v-else class="blog__list">
           <li v-for="post in posts" :key="post.slug" class="blog__item" :data-app="post.app">
             <router-link :to="`/blog/${post.slug}`" class="blog__item-link">
+              <!-- The article's share card: the same picture a shared link shows. -->
+              <img
+                class="blog__item-card"
+                :src="shareImagePath(`/blog/${post.slug}`)"
+                :alt="post.shotAlt"
+                width="1200"
+                height="630"
+                loading="lazy"
+                decoding="async"
+              />
               <span class="mkt__eyebrow">
                 {{ formatPostDate(post.date) }} · {{ post.readingMinutes }} min read
               </span>
@@ -95,7 +103,17 @@ usePageMeta({
     color: inherit;
 
     &:hover .blog__item-title { color: var(--accent-legible); }
+    &:hover .blog__item-card { border-color: var(--accent-legible); }
     &:hover .blog__item-more { gap: var(--space); }
+  }
+
+  &__item-card {
+    width: 100%;
+    height: auto;
+    margin-bottom: var(--space-s);
+    border-radius: var(--radius-shot);
+    border: var(--border-width) solid var(--color-rule);
+    transition: border-color var(--transition-fast);
   }
 
   &__item-title {

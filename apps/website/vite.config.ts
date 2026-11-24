@@ -2,6 +2,8 @@ import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
 import { ui } from '@sil/ui/vite'
+import { staticPagesPlugin } from './build/static-pages'
+import { siteOrigin } from './src/links'
 
 export default defineConfig({
   plugins: [
@@ -15,6 +17,8 @@ export default defineConfig({
       },
     }),
     ui(),
+    // A static page per route and article, so shared links get their own preview.
+    staticPagesPlugin({ origin: siteOrigin }),
   ],
   resolve: {
     alias: {
