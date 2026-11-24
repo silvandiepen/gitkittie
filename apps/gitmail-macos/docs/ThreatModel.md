@@ -203,6 +203,8 @@ Built and tested in `swift/GitKittieMailKit` and the app:
 - §3 The address is always shown beside the name; warnings for a name carrying another address or domain and a Reply-To elsewhere; no positive trust badge. Authentication-Results are not used yet (GKM-011/017).
 - §4 Attachment names are displayed sanitized; Quick Look opens a quarantined private copy only on click; text extraction runs in the sandboxed `GitMailExtractor.xpc` (MAIL-031). The XPC round trip is tested in process over an anonymous listener; the bundled service's isolation is configured (sandbox, no entitlements) and built, not exercised by a test, because that needs the app running.
 
+- §4 Attachment library and export (GKM-023, MAIL-044, MAIL-045): the library lists from the index and never decodes or previews while listing; Quick Look uses the reader's quarantined copy; Save As writes hash-checked bytes with the quarantine attribute; file names are display text and only go into a save panel's suggestion. §7: exports copy mail-folder files only (no index, sync state, flags or extracted text) and strip server settings from `account.json`; a tampered original is reported, not exported. Decompression-bomb limits stay with GKM-015 (nothing here decompresses).
+
 ## Open points
 
 - **Authentication-Results per provider.** Which header iCloud, Gmail and generic hosts add, and its authserv-id, must be verified against real mail during GKM-004 and GKM-029.
