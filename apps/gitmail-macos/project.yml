@@ -2,8 +2,8 @@ name: GitMail
 options:
   bundleIdPrefix: app.hakobs
   deploymentTarget:
-    macOS: "14.0"
-  xcodeVersion: "16.0"
+    macOS: "15.0"
+  xcodeVersion: "26.0"
   generateEmptyDirectories: true
 
 settings:
