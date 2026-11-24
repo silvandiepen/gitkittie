@@ -7,6 +7,16 @@ public struct MailAccountID: Hashable, Codable, Sendable, CustomStringConvertibl
     public init(_ rawValue: String) { self.rawValue = rawValue }
     public init() { self.rawValue = UUID().uuidString.lowercased() }
     public var description: String { rawValue }
+
+    // Encoded as the bare string, so files and the index carry `"…"`, not `{"rawValue":"…"}`.
+    public init(from decoder: Decoder) throws {
+        rawValue = try decoder.singleValueContainer().decode(String.self)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 /// One email address with an optional display name, as written in a header.

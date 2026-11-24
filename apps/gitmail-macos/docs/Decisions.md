@@ -20,6 +20,10 @@ Proposed, subject to validation.
 | MAIL-014 | First release supports iCloud, any standard IMAP account, and Gmail. iCloud is built first; Microsoft comes later | Reach: most people overwhelmed by marketing mail use Gmail. Decided by Sil, 2026-11-24 |
 | MAIL-015 | Code lives in the gitkittie monorepo: apps/gitmail-macos (later -ios) and a shared package under swift/ | Shares GitKittieUI, GitPont and CI with the other apps. Decided by Sil, 2026-11-24 |
 | MAIL-016 | Gmail at first release connects over IMAP with an app password, through the IMAP adapter; OAuth is added later only as a different sign-in on the same connections | No verification or yearly assessment needed; reaches most personal Gmail accounts. Proposed by GKM-008 (ProviderAccess.md), 2026-11-24. **Needs Sil** |
+| MAIL-018 | A message exists when its `.eml` exists. Writes go journal → blobs → `.md` → `.eml` → index → mapping, each file staged, fsynced and renamed; the next open finishes or undoes an interrupted write from the journal (`<Application Support>/Mail/state/journal/`) | One recovery path for crashes and errors; the original is the commit point, everything else is derived. GKM-005 |
+| MAIL-019 | The `.md` front matter is YAML in JSON-compatible flow form, one key per line | Any YAML reader takes it; the store reads it back exactly without a YAML dependency. GKM-005 |
+| MAIL-020 | The IMAP mapping (mailbox + UIDVALIDITY + UID → local id) lives in `<Application Support>/Mail/state/<account-id>/sync.sqlite`, not in the folder | It is a device's position at the provider, like the cursors (MAIL-013); losing it costs a reconciliation pass by Message-ID and fingerprint, not mail. GKM-005 |
+| MAIL-021 | The app's default mail folder is `Documents/Mail` in its container; choosing another folder comes with account setup | Works in the sandbox with no prompt; a user-chosen folder needs a security-scoped bookmark. GKM-009 |
 
 Decided by Sil on 2026-11-24 (GKM-001), through the review `GitKittie/review/GKM-001-mail-decisions` on the board:
 

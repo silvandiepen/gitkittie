@@ -38,6 +38,12 @@ apps/gitbud-macos/build/
 apps/gitbud-macos/*.xcuserdata/
 apps/gitbud-macos/GitBud/Info.plist
 apps/gitbud-macos/GitBud/GitBud.entitlements
+apps/gitmail-macos/*.xcodeproj/
+apps/gitmail-macos/DerivedData/
+apps/gitmail-macos/build/
+apps/gitmail-macos/*.xcuserdata/
+apps/gitmail-macos/GitMail/Info.plist
+apps/gitmail-macos/GitMail/GitMail.entitlements
 apps/gitbud-ios/*.xcodeproj/
 apps/gitbud-ios/DerivedData/
 apps/gitbud-ios/build/

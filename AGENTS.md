@@ -19,6 +19,7 @@ no-server apps that treat a git repository as the source of truth.
 | GitKanban server | `apps/gitkanban-server/` | Node + Hono file server (tailnet-only) | In development |
 | GitBud (macOS) | `apps/gitbud-macos/` | SwiftUI git client | In development — tested local history/rewrite UI |
 | GitBud (iOS/iPadOS) | `apps/gitbud-ios/` | SwiftUI remote git client (planned) | Docs/spec — GitPont remote-only |
+| GitKittie Mail (macOS) | `apps/gitmail-macos/` | SwiftUI mail client, core in `swift/GitKittieMailKit` | In development — store + empty window |
 | Website | `apps/website/` | Vue 3 + Vite | Shipping |
 
 Each app folder carries its own `AGENTS.md` and `docs/{Features,Decisions,Architecture}.md`.

@@ -27,7 +27,9 @@
     "macos:archive:app-store": "apps/gitfolder-macos/scripts/archive-app-store.sh",
     "gitkanban:run": "apps/gitkanban-macos/scripts/run.sh",
     "gitbud:generate": "cd apps/gitbud-macos && xcodegen generate",
-    "gitbud:test": "zsh apps/gitbud-macos/scripts/test.sh"
+    "gitbud:test": "zsh apps/gitbud-macos/scripts/test.sh",
+    "gitmail:generate": "cd apps/gitmail-macos && xcodegen generate",
+    "gitmail:test": "zsh apps/gitmail-macos/scripts/test.sh"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
