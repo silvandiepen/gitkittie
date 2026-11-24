@@ -1,0 +1,64 @@
+name: Swift Mail core on iOS
+
+# GKM-025 / MAIL-050: the Mail core builds and passes its tests on iOS as well as macOS. Both
+# packages are built and tested on an iPhone simulator; the macOS runs are in
+# swift-gitkittiemailkit.yml and swift-gitkittiemailproviders.yml.
+
+on:
+  pull_request:
+    branches: [main, development]
+    paths:
+      - swift/GitKittieMailKit/**
+      - swift/GitKittieMailProviders/**
+      - .github/workflows/swift-mail-ios.yml
+  push:
+    branches: [main, development]
+    paths:
+      - swift/GitKittieMailKit/**
+      - swift/GitKittieMailProviders/**
+      - .github/workflows/swift-mail-ios.yml
+  workflow_dispatch:
+
+env:
+  DESTINATION: platform=iOS Simulator,name=iPhone 17 Pro Max
+
+jobs:
+  mailkit:
+    name: GitKittieMailKit (iOS Simulator)
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: swift/GitKittieMailKit
+    steps:
+      - uses: actions/checkout@v6
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Build for testing
+        run: xcodebuild -scheme GitKittieMailKit-Package -destination "$DESTINATION" -derivedDataPath "$RUNNER_TEMP/dd" build-for-testing
+      - name: Test
+        run: xcodebuild -scheme GitKittieMailKit-Package -destination "$DESTINATION" -derivedDataPath "$RUNNER_TEMP/dd" test-without-building
+
+  providers:
+    name: GitKittieMailProviders (iOS Simulator, with the test mail server)
+    # swift-nio-imap 0.5 needs Swift 6.2 (Xcode 26).
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: swift/GitKittieMailProviders
+    steps:
+      - uses: actions/checkout@v6
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Build for testing
+        run: xcodebuild -scheme GitKittieMailProviders-Package -destination "$DESTINATION" -derivedDataPath "$RUNNER_TEMP/dd" build-for-testing
+      - name: Start the local test mail server (GreenMail, loopback only)
+        run: scripts/test-mail-server.sh start
+      - name: Test (unit and integration)
+        # TEST_RUNNER_ variables reach the test process in the simulator without the prefix. The
+        # simulator shares the Mac's loopback and finds the server's state via SIMULATOR_HOST_HOME.
+        env:
+          TEST_RUNNER_GKM_REQUIRE_TEST_MAIL_SERVER: "1"
+        run: xcodebuild -scheme GitKittieMailProviders-Package -destination "$DESTINATION" -derivedDataPath "$RUNNER_TEMP/dd" test-without-building
+      - name: Stop the test mail server
+        if: always()
+        run: scripts/test-mail-server.sh stop
