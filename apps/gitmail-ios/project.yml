@@ -80,9 +80,8 @@ targets:
         # Account passwords, in the same group as the Mac app's (GKM-010).
         keychain-access-groups:
           - $(AppIdentifierPrefix)app.hakobs.gitmail
-        # Background sync writes while the phone is locked, so files are readable after the
-        # first unlock, the same class as the Keychain items (MAIL-051).
-        com.apple.developer.default-data-protection: NSFileProtectionCompleteUntilFirstUserAuthentication
+        # No Data Protection entitlement: iOS's default class for app files is already
+        # CompleteUntilFirstUserAuthentication, which background sync needs (MAIL-068).
     info:
       path: GitMail/Info.plist
       properties:
