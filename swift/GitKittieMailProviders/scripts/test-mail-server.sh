@@ -98,7 +98,9 @@ wait_for_port() {
     sleep 0.5
   done
   # Say why: GreenMail's own log, and whether something else already holds the port.
-  echo "--- last lines of $LOG_FILE ---" >&2; tail -30 "$LOG_FILE" >&2 || true
+  echo "--- start-up and API lines of $LOG_FILE ---" >&2
+  grep -iE "api|rest|jetty|jersey|undertow|bind|address|started|starting|error|severe" "$LOG_FILE" | grep -v "SSL peer shut down" | head -40 >&2 || true
+  echo "--- last lines of $LOG_FILE ---" >&2; tail -15 "$LOG_FILE" >&2 || true
   echo "--- listeners on port $port ---" >&2; lsof -nP -iTCP:"$port" -sTCP:LISTEN >&2 || true
   die "port $port did not open within ${START_TIMEOUT} s (log: $LOG_FILE)"
 }
