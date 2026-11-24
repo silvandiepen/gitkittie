@@ -37,8 +37,12 @@ final class ExtractionTests: XCTestCase {
 
     // MARK: In process (iOS, MAIL-052)
 
+    /// The product's 10 s timeout is for a hostile PDF on a warm device; these tests check what is
+    /// read, so they allow for PDFKit's first load on a cold simulator (CI).
+    static let generousTimeout: Duration = .seconds(120)
+
     func testInProcessExtractionReadsAPDFWithinTheStricterLimits() async throws {
-        let extractor = InProcessTextExtractor(timeout: .seconds(10))
+        let extractor = InProcessTextExtractor(timeout: Self.generousTimeout)
         let pdf = try Self.makePDF(lines: ["Quarterly numbers attached"])
         let text = await extractor.extract(pdf, mediaType: "application/pdf")
         XCTAssertTrue(text?.contains("Quarterly numbers attached") == true, text ?? "nil")
@@ -64,7 +68,7 @@ final class ExtractionTests: XCTestCase {
     func testBytesThatKilledAnEarlierParseAreNotParsedAgain() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("attempts-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        let extractor = InProcessTextExtractor(attemptsFolder: folder)
+        let extractor = InProcessTextExtractor(timeout: Self.generousTimeout, attemptsFolder: folder)
         let pdf = try Self.makePDF(lines: ["Survives a crash"])
         let first = await extractor.extract(pdf, mediaType: "application/pdf")
         XCTAssertTrue(first?.contains("Survives a crash") == true)
@@ -72,10 +76,10 @@ final class ExtractionTests: XCTestCase {
 
         let marker = folder.appendingPathComponent(InProcessTextExtractor.sha256Hex(pdf) + ".inflight")
         try Data().write(to: marker)
-        let afterCrash = await InProcessTextExtractor(attemptsFolder: folder).extract(pdf, mediaType: "application/pdf")
+        let afterCrash = await InProcessTextExtractor(timeout: Self.generousTimeout, attemptsFolder: folder).extract(pdf, mediaType: "application/pdf")
         XCTAssertNil(afterCrash, "bytes that were being parsed when the process died are skipped")
         XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path), "the record stays")
-        let other = await InProcessTextExtractor(attemptsFolder: folder).extract(Data("other notes".utf8), mediaType: "text/plain")
+        let other = await InProcessTextExtractor(timeout: Self.generousTimeout, attemptsFolder: folder).extract(Data("other notes".utf8), mediaType: "text/plain")
         XCTAssertEqual(other, "other notes", "other attachments are still read")
     }
 
