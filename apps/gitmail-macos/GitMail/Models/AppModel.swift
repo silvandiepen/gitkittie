@@ -21,11 +21,13 @@ enum SidebarSelection: Hashable {
     case space(MailSpaceID)
     /// Every attachment across accounts (GKM-023).
     case attachments
+    /// The cleanup dashboard (GKM-021).
+    case cleanup
 
     /// The mail the list shows for it (drafts and the outbox have their own views).
     var scope: MailScope {
         switch self {
-        case .allMail, .drafts, .outbox, .attachments: .allMail
+        case .allMail, .drafts, .outbox, .attachments, .cleanup: .allMail
         case .category(let category): .category(category)
         case .space(let id): .space(id)
         case .account(let id): .account(id)
@@ -72,6 +74,8 @@ final class AppModel {
     var exportReport: ExportReport?
     /// Everyday actions with Undo, sent through each account's action journal (GKM-015).
     let actions: MailActions
+    /// The cleanup dashboard: analysis and batch previews (GKM-021).
+    let cleanup: CleanupModel
 
     /// The message the reader is focused on (the newest expanded one in the open thread):
     /// what Reply, Reply All and Forward answer.
@@ -111,9 +115,11 @@ final class AppModel {
         self.sync = sync
         self.browser = browser
         self.actions = MailActions(sync: sync, browser: browser)
+        self.cleanup = CleanupModel(actions: actions, browser: browser)
         self.attention = MailAttention(poster: notifications)
         sync.onStoreChanged = { [weak self] in await self?.refreshAfterSync() }
         browser.onActionsQueued = { [weak self] accounts in await self?.sync.actionsQueued(for: accounts) }
+        cleanup.onClassificationChanged = { [weak self] in await self?.refreshAfterClassificationChange() }
     }
 
     /// The open store, for the account intents.
@@ -142,6 +148,7 @@ final class AppModel {
             store = opened
             browser.attach(opened)
             actions.attach(opened)
+            cleanup.attach(opened)
             spaces.attach(opened)
             library.attach(opened, browser: browser)
             await browser.setScope(selection.scope)
@@ -272,7 +279,7 @@ final class AppModel {
         folders = found
         await spaces.refresh(applyRules: true)
         let stillThere: Bool = switch selection {
-        case .allMail, .category, .drafts, .outbox, .attachments: true
+        case .allMail, .category, .drafts, .outbox, .attachments, .cleanup: true
         case .space(let id): spaces.space(id) != nil
         case .account(let id): accounts.contains { $0.id == id }
         case .folder(let id, let name):

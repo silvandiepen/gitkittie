@@ -35,12 +35,13 @@ struct MailWindow: View {
                 case .outbox: OutboxView()
                 case .attachments: AttachmentLibraryView(space: nil).navigationTitle("Attachments")
                 case .space(let id): SpaceView(space: id)
+                case .cleanup: CleanupDashboardView()
                 default: MessageListView()
                 }
             }
             .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
         } detail: {
-            ReaderView()
+            MailDetail()
         }
         .toolbar { ComposeToolbar(model: model) }
         // Undo for actions, the Delete Permanently confirmation and action notices (GKM-015).
@@ -95,6 +96,15 @@ struct MailWindow: View {
         } message: {
             Text(model.browser.actionError ?? "")
         }
+    }
+}
+
+/// The reader, or the cleanup preview while Clean Up is selected (GKM-021).
+private struct MailDetail: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if model.selection == .cleanup { CleanupDetailView() } else { ReaderView() }
     }
 }
 

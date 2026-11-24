@@ -241,6 +241,14 @@ final class MailActions {
         (sync.folders[account] ?? []).filter { $0.role.map(roles.contains) == true }.map(\.name)
     }
 
+    /// A batch written elsewhere (the cleanup dashboard, GKM-021): one Undo for all of it, sent
+    /// and shown like any action.
+    func didPerform(_ batch: MailActionBatch, name: String) async {
+        registerUndo(batch, name: name)
+        await sync.actionsQueued(for: batch.accounts)
+        await browser.reload()
+    }
+
     // MARK: Undo (MAIL-037)
 
     private func registerUndo(_ batch: MailActionBatch, name: String) {
