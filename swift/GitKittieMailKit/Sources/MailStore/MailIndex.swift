@@ -53,6 +53,8 @@ struct IndexRecord {
     var snippet: String
     var bodyText: String
     var attachmentText: String
+    /// The List-Id, for space rules (GKM-022).
+    var listID: String?
 
     init(front: MessageFrontMatter, message: ParsedMessage, path: String, attachmentText: String = "") {
         self.front = front
@@ -63,6 +65,7 @@ struct IndexRecord {
         let collapsed = body.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         self.snippet = String(collapsed.prefix(200))
         self.attachmentText = String(attachmentText.prefix(Self.maximumAttachmentText))
+        self.listID = message.listID
     }
 
     /// In-Reply-To first, then References, without repeats, capped.
@@ -94,10 +97,12 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
     public var hasAttachment: Bool
     public var unreadOnly: Bool
     public var flaggedOnly: Bool
+    /// Messages in this space (GKM-022), by its id.
+    public var space: MailSpaceID?
 
     public init(text: String = "", participant: String? = nil, account: MailAccountID? = nil, mailbox: String? = nil,
                 after: Date? = nil, before: Date? = nil, hasAttachment: Bool = false, unreadOnly: Bool = false,
-                flaggedOnly: Bool = false) {
+                flaggedOnly: Bool = false, space: MailSpaceID? = nil) {
         self.text = text
         self.participant = participant
         self.account = account
@@ -107,6 +112,7 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
         self.hasAttachment = hasAttachment
         self.unreadOnly = unreadOnly
         self.flaggedOnly = flaggedOnly
+        self.space = space
     }
 
     /// True when there is something to match in the full-text index.
@@ -185,9 +191,9 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
 /// is the smallest local id in the group, so building the threads incrementally and rebuilding
 /// them from scratch give the same ids.
 final class MailIndex {
-    static let schemaVersion = 2
+    static let schemaVersion = 3
 
-    private let database: SQLiteDatabase
+    let database: SQLiteDatabase
     /// True when the file was new, damaged, or from a version without a migration path; the
     /// store then rebuilds it from the folder.
     private(set) var needsRebuild = false
@@ -211,7 +217,8 @@ final class MailIndex {
     /// Migration hook: bring an index at `version` up to `schemaVersion`, one step at a time.
     /// Returns false when a step is missing; the index is then rebuilt, which is always safe
     /// because it holds nothing the folder and device state do not. 1 → 2 (threads, flags,
-    /// folders, attachment text) is a rebuild on purpose: every row gains derived columns.
+    /// folders, attachment text) is a rebuild on purpose: every row gains derived columns; so is
+    /// 2 → 3 (List-Id, attachment names and sizes for the library, space membership; GKM-022/023).
     private func migrate(from version: Int) throws -> Bool {
         for step in version..<Self.schemaVersion {
             switch step {
@@ -275,13 +282,13 @@ final class MailIndex {
         try database.prepare("""
             INSERT OR REPLACE INTO messages
               (local_id, account_id, path, message_id, fingerprint, subject, from_name, from_address,
-               sort_date, has_attachments, snippet, eml_sha256, thread_id, seen, flagged)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               sort_date, has_attachments, snippet, eml_sha256, thread_id, seen, flagged, list_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """).run([
                 id, .text(front.account.rawValue), .text(record.path), .optional(front.messageId), .text(record.fingerprint),
                 .optional(front.subject), .optional(front.from.first?.name), .optional(front.from.first?.address),
                 .double(front.sortDate.timeIntervalSince1970), .int(front.attachments.contains { !$0.inline } ? 1 : 0),
-                .text(record.snippet), .text(front.emlSha256), id, .int(Int64(seen)), .int(Int64(flagged)),
+                .text(record.snippet), .text(front.emlSha256), id, .int(Int64(seen)), .int(Int64(flagged)), .optional(record.listID),
             ])
         let row = database.lastInsertRowID
         let participants = (front.from + front.to + front.cc).map { [$0.name, $0.address].compactMap { $0 }.joined(separator: " ") }
@@ -293,8 +300,13 @@ final class MailIndex {
             ])
         let insertRef = try database.prepare("INSERT INTO message_refs (local_id, account_id, ref_id) VALUES (?, ?, ?)")
         for reference in record.references { try insertRef.run([id, .text(front.account.rawValue), .text(reference)]) }
-        let insertBlob = try database.prepare("INSERT OR IGNORE INTO message_blobs (local_id, blob, media_type) VALUES (?, ?, ?)")
-        for attachment in front.attachments { try insertBlob.run([id, .text(attachment.blob), .text(attachment.mediaType.lowercased())]) }
+        let insertBlob = try database.prepare("""
+            INSERT OR IGNORE INTO message_blobs (local_id, blob, media_type, file_name, size, inline, content_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """)
+        for attachment in front.attachments {
+            try insertBlob.run([id, .text(attachment.blob), .text(attachment.mediaType.lowercased()), .text(attachment.fileName),
+                                .int(Int64(attachment.size)), .int(attachment.inline ? 1 : 0), .optional(attachment.contentId)])
+        }
     }
 
     // MARK: Threads
@@ -650,15 +662,19 @@ final class MailIndex {
         if query.hasAttachment { clauses.append("m.has_attachments = 1") }
         if query.unreadOnly { clauses.append("m.seen = 0") }
         if query.flaggedOnly { clauses.append("m.flagged = 1") }
+        if let space = query.space {
+            clauses.append("EXISTS (SELECT 1 FROM space_members s WHERE s.local_id = m.local_id AND s.space_id = ?)")
+            values.append(.text(space.rawValue))
+        }
         return (clauses.joined(separator: " AND "), values)
     }
 
-    private static let summaryColumns = """
+    static let summaryColumns = """
         m.local_id, m.account_id, m.subject, m.from_name, m.from_address, m.sort_date, m.snippet, m.has_attachments, \
         m.thread_id, m.seen, m.flagged
         """
 
-    private static func summary(_ statement: SQLiteDatabase.Statement) -> MessageSummary? {
+    static func summary(_ statement: SQLiteDatabase.Statement) -> MessageSummary? {
         guard let raw = statement.text(0), let id = MailMessageID(raw), let account = statement.text(1) else { return nil }
         let from = statement.text(4).map { MailAddress(name: statement.text(3), address: $0) }
         return MessageSummary(id: id, account: MailAccountID(account), subject: statement.text(2), from: from,
@@ -667,7 +683,7 @@ final class MailIndex {
                               isUnread: statement.int(9) == 0, isFlagged: statement.int(10) != 0)
     }
 
-    private func readSummaries(_ statement: SQLiteDatabase.Statement) throws -> [MessageSummary] {
+    func readSummaries(_ statement: SQLiteDatabase.Statement) throws -> [MessageSummary] {
         var result: [MessageSummary] = []
         while try statement.step() { if let summary = Self.summary(statement) { result.append(summary) } }
         return result
@@ -679,6 +695,7 @@ final class MailIndex {
         DROP TABLE IF EXISTS message_refs;
         DROP TABLE IF EXISTS message_mailboxes;
         DROP TABLE IF EXISTS message_blobs;
+        DROP TABLE IF EXISTS space_members;
         """
 
     private static let createSQL = """
@@ -697,7 +714,8 @@ final class MailIndex {
           eml_sha256 TEXT NOT NULL,
           thread_id TEXT NOT NULL,
           seen INTEGER NOT NULL DEFAULT 0,
-          flagged INTEGER NOT NULL DEFAULT 0
+          flagged INTEGER NOT NULL DEFAULT 0,
+          list_id TEXT
         );
         CREATE INDEX messages_by_date ON messages (sort_date DESC);
         CREATE INDEX messages_by_account_date ON messages (account_id, sort_date DESC);
@@ -712,8 +730,15 @@ final class MailIndex {
           local_id TEXT NOT NULL, account_id TEXT NOT NULL, mailbox TEXT NOT NULL, PRIMARY KEY (local_id, mailbox)
         );
         CREATE INDEX message_mailboxes_by_mailbox ON message_mailboxes (account_id, mailbox);
-        CREATE TABLE message_blobs (local_id TEXT NOT NULL, blob TEXT NOT NULL, media_type TEXT NOT NULL, PRIMARY KEY (local_id, blob));
+        CREATE INDEX messages_by_list ON messages (list_id);
+        CREATE TABLE message_blobs (
+          local_id TEXT NOT NULL, blob TEXT NOT NULL, media_type TEXT NOT NULL,
+          file_name TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0, inline INTEGER NOT NULL DEFAULT 0, content_id TEXT,
+          PRIMARY KEY (local_id, blob)
+        );
         CREATE INDEX message_blobs_by_blob ON message_blobs (blob);
+        CREATE TABLE space_members (space_id TEXT NOT NULL, local_id TEXT NOT NULL, PRIMARY KEY (space_id, local_id));
+        CREATE INDEX space_members_by_message ON space_members (local_id);
         CREATE VIRTUAL TABLE message_text USING fts5(
           local_id UNINDEXED, subject, participants, body, attachments, attachment_text,
           tokenize = 'unicode61 remove_diacritics 2'
