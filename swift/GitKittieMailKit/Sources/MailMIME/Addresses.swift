@@ -99,7 +99,9 @@ public enum AddressParser {
     public static func format(_ address: MailAddress) -> String {
         guard let name = address.name, !name.isEmpty else { return address.address }
         let display: String
-        if name.unicodeScalars.contains(where: { !$0.isASCII }) {
+        // A control character (a line break above all) must never reach the header raw: it
+        // would start a new header field. Encoded words carry it as data.
+        if name.unicodeScalars.contains(where: { !$0.isASCII || $0.value < 0x20 || $0.value == 0x7F }) {
             display = EncodedWords.encodeIfNeeded(name)
         } else if name.rangeOfCharacter(from: CharacterSet(charactersIn: "()<>[]:;@\\,.\"")) != nil {
             display = "\"" + name.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
