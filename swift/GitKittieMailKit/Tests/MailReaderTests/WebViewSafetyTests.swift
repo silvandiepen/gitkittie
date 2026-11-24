@@ -200,7 +200,10 @@ final class WebViewSafetyTests: XCTestCase {
         var finished = false
         view.onContentHeight = { _ in finished = true }
         view.show(html, parts: parts)
-        for _ in 0..<200 where !finished { try await Task.sleep(for: .milliseconds(25)) }
+        // Usually well under a second; the first web view on a cold simulator (CI) starts its
+        // web content process first, which can take tens of seconds.
+        let deadline = ContinuousClock.now + .seconds(90)
+        while !finished, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(25)) }
         XCTAssertTrue(finished, "the document did not finish loading")
         try await Task.sleep(for: extra)
     }
