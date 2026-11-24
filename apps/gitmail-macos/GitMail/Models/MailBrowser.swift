@@ -9,12 +9,19 @@ enum MailScope: Hashable {
     case allMail
     case account(MailAccountID)
     case folder(MailAccountID, String)
+    /// A space's messages, across accounts (GKM-022).
+    case space(MailSpaceID)
 
     var account: MailAccountID? {
         switch self {
-        case .allMail: nil
+        case .allMail, .space: nil
         case .account(let id), .folder(let id, _): id
         }
+    }
+
+    var space: MailSpaceID? {
+        if case .space(let id) = self { return id }
+        return nil
     }
 
     var folder: String? {
@@ -139,9 +146,14 @@ final class MailBrowser {
     private(set) var rows: [ListRow] = []
     private(set) var canLoadMore = false
     private(set) var selectedRowID: String?
+    /// Rows picked with ⌘-click or ⇧-click besides the selected one, for acting on several
+    /// conversations at once (MailBrowser+Marking.swift).
+    var markedRowIDs: Set<String> = []
     private(set) var openThread: OpenThread?
     /// An error from the last action, shown once.
     var actionError: String?
+    /// Called when a read or flag change was queued for the provider (GKM-015).
+    @ObservationIgnored var onActionsQueued: (@MainActor ([MailAccountID]) async -> Void)?
 
     private var store: MailStore?
     private var preferences: RemoteContentPreferences?
@@ -187,6 +199,7 @@ final class MailBrowser {
         var query = SearchQuery.parse(searchText, calendar: calendar)
         query.account = filters.account ?? query.account ?? scope.account
         query.mailbox = filters.folder ?? query.mailbox ?? scope.folder
+        query.space = scope.space
         let participant = filters.participant.trimmingCharacters(in: .whitespaces)
         if !participant.isEmpty { query.participant = [query.participant, participant].compactMap { $0 }.joined(separator: " ") }
         if let start = filters.date.start(now: now(), calendar: calendar) { query.after = max(query.after ?? start, start) }
@@ -243,6 +256,23 @@ final class MailBrowser {
         selectedRowID = rowID
         guard let rowID, let row = rows.first(where: { $0.id == rowID }) else { openThread = nil; return }
         await open(row)
+    }
+
+    /// Opens a message's conversation in the reader without changing the list: the attachment
+    /// library's "Show Message" (GKM-023).
+    func show(_ message: MailMessageID, threadID: String) async {
+        guard let store else { return }
+        do {
+            let summaries = try await store.thread(threadID)
+            var thread = OpenThread(id: threadID, messages: summaries.map { ThreadMessage(summary: $0, isExpanded: $0.id == message) })
+            for index in thread.messages.indices where thread.messages[index].isExpanded {
+                thread.messages[index] = await loaded(thread.messages[index], store: store)
+            }
+            selectedRowID = rows.first { $0.threadID == threadID }?.id
+            openThread = thread
+        } catch {
+            actionError = String(describing: error)
+        }
     }
 
     func selectNext() async { await move(by: 1) }
@@ -365,9 +395,14 @@ final class MailBrowser {
     private func updateFlags(of id: MailMessageID, refresh: Bool = true, _ change: (inout MessageFlags) -> Void) async {
         guard let store else { return }
         do {
-            var flags = try await store.flags(of: id)
+            let before = try await store.flags(of: id)
+            var flags = before
             change(&flags)
-            try await store.setFlags(flags, for: id)
+            // Through the action journal, so the provider gets it too (GKM-015).
+            var changes: [MailChange] = []
+            if flags.seen != before.seen { changes.append(MailChange(id, .setSeen(flags.seen))) }
+            if flags.flagged != before.flagged { changes.append(MailChange(id, .setFlagged(flags.flagged))) }
+            if let batch = try await store.perform(changes) { await onActionsQueued?(batch.accounts) }
             if var thread = openThread, let index = thread.messages.firstIndex(where: { $0.id == id }) {
                 thread.messages[index].summary.isUnread = !flags.seen
                 thread.messages[index].summary.isFlagged = flags.flagged

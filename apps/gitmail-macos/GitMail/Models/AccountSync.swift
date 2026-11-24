@@ -35,9 +35,13 @@ final class AccountSync {
     private(set) var progress: [MailAccountID: SyncProgress] = [:]
     /// Each account's folders at the provider, in the provider's order.
     private(set) var folders: [MailAccountID: [SyncedFolder]] = [:]
+    /// Each account's action replay: what is waiting to reach the provider (GKM-015).
+    private(set) var replay: [MailAccountID: ReplayProgress] = [:]
 
     @ObservationIgnored private var coordinators: [MailAccountID: SyncCoordinator] = [:]
     @ObservationIgnored private var listeners: [MailAccountID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var replayers: [MailAccountID: ActionReplayer] = [:]
+    @ObservationIgnored private var replayListeners: [MailAccountID: Task<Void, Never>] = [:]
     @ObservationIgnored private var refreshPending = false
     @ObservationIgnored let services: AccountServices
     /// Called (coalesced) when synced mail changed what the window shows.
@@ -76,10 +80,22 @@ final class AccountSync {
             progress[account.id] = Self.signInNeeded("This Mac has no password for this account yet.")
             return
         }
-        let coordinator = SyncCoordinator(account: account.id, connector: services.connections.imap(connection, password: secret),
+        let connector = services.connections.imap(connection, password: secret)
+        let coordinator = SyncCoordinator(account: account.id, connector: connector,
                                           store: store, options: services.syncOptions, log: services.connections.log)
         coordinators[account.id] = coordinator
         let id = account.id
+        // Everyday actions go over their own connection, so a flag never waits for an import.
+        let replayer = ActionReplayer(account: id, connector: connector, store: store,
+                                      reconnect: services.syncOptions.reconnect, log: services.connections.log)
+        replayers[id] = replayer
+        replayListeners[id] = Task { [weak self] in
+            for await update in replayer.updates {
+                guard let self else { return }
+                self.receive(update, for: id)
+            }
+        }
+        await replayer.start()
         listeners[id] = Task { [weak self] in
             for await update in coordinator.updates {
                 guard let self else { return }
@@ -93,8 +109,23 @@ final class AccountSync {
     func stop(_ account: MailAccountID) async {
         if let coordinator = coordinators.removeValue(forKey: account) { await coordinator.stop() }
         listeners.removeValue(forKey: account)?.cancel()
+        if let replayer = replayers.removeValue(forKey: account) { await replayer.stop() }
+        replayListeners.removeValue(forKey: account)?.cancel()
         progress[account] = nil
+        replay[account] = nil
     }
+
+    /// Actions were queued for these accounts: send them now (GKM-015).
+    func actionsQueued(for accounts: [MailAccountID]) async {
+        for account in accounts {
+            guard let replayer = replayers[account] else { continue }
+            await replayer.refreshStatus()
+            await replayer.kick()
+        }
+    }
+
+    /// The replayer of an account, for tests.
+    func replayer(for account: MailAccountID) -> ActionReplayer? { replayers[account] }
 
     func stopAll() async {
         for id in Array(coordinators.keys) { await stop(id) }
@@ -113,6 +144,7 @@ final class AccountSync {
     func forget(_ account: MailAccountID) {
         folders[account] = nil
         progress[account] = nil
+        replay[account] = nil
     }
 
     // MARK: Updates
@@ -124,6 +156,24 @@ final class AccountSync {
         let changed = previous == nil || previous?.imported != update.imported || previous?.folders != update.folders
             || previous?.lastCompletedPass != update.lastCompletedPass
         if changed { scheduleRefresh() }
+        // The sync reached the provider: queued actions can go now instead of at their backoff.
+        if previous?.lastCompletedPass != update.lastCompletedPass || (previous.map(Self.isOffline) == true && !Self.isOffline(update)) {
+            if let replayer = replayers[account] { Task { await replayer.kick() } }
+        }
+    }
+
+    private func receive(_ update: ReplayProgress, for account: MailAccountID) {
+        let previous = replay[account]
+        replay[account] = update
+        // A row settled or was overtaken: the list shows the provider's state now.
+        if previous?.status.pending != update.status.pending || previous?.status.recentlySuperseded != update.status.recentlySuperseded {
+            scheduleRefresh()
+        }
+    }
+
+    private static func isOffline(_ progress: SyncProgress) -> Bool {
+        if case .waitingToRetry = progress.activity { return true }
+        return false
     }
 
     /// Coalesces refreshes: an import of a thousand messages refreshes the list a few times a

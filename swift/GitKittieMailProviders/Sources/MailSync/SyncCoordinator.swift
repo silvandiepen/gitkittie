@@ -175,7 +175,7 @@ public actor SyncCoordinator {
     /// New mail in every folder first, then flags and removals, then history.
     private func syncFolders(_ names: [String], _ session: any MailboxSession, includeHistory: Bool,
                              checkFlags: Bool) async throws {
-        var plans: [(folder: String, uidValidity: UInt32, plan: SyncPlanner.FolderPlan, serverCount: Int)] = []
+        var plans: [PreparedFolder] = []
         for name in names {
             try Task.checkCancellation()
             do {
@@ -199,8 +199,12 @@ public actor SyncCoordinator {
             updateRemaining()
         }
 
-        let folders = plans.map { (folder: $0.folder, uidValidity: $0.uidValidity) }
-        if checkFlags { try await syncFlags(of: folders, session, recordCheck: includeHistory) }
+        if checkFlags { try await syncFlags(of: plans, session, recordCheck: includeHistory) }
+        for entry in plans {
+            // Moves this device made that the provider did not report ids for are mapped by now
+            // (the folder was listed after them), or did not land there: either way they settle.
+            try await store.settleAwaitingActions(mailbox: entry.folder, listedAt: entry.listedAt, account: account)
+        }
 
         if includeHistory {
             var allowance = options.historyPerPass
@@ -224,14 +228,24 @@ public actor SyncCoordinator {
                 if progress.historyPausedForBudget { break }
             }
             // The history is done (or paused): bring flags up to date before waiting for changes.
-            if !checkFlags, !historyPending { try await syncFlags(of: folders, session, recordCheck: true) }
+            if !checkFlags, !historyPending { try await syncFlags(of: plans, session, recordCheck: true) }
         }
         progress.folders = try await store.syncedFolders(account: account)
     }
 
+    private struct PreparedFolder {
+        var folder: String
+        var uidValidity: UInt32
+        var plan: SyncPlanner.FolderPlan
+        var serverCount: Int
+        /// HIGHESTMODSEQ at the listing, when the server has CONDSTORE.
+        var highestModSeq: UInt64?
+        var listedAt: Date
+    }
+
     /// Lists a folder, handles a UIDVALIDITY reset and removals, and plans the imports.
-    private func prepare(_ name: String, _ session: any MailboxSession) async throws
-        -> (folder: String, uidValidity: UInt32, plan: SyncPlanner.FolderPlan, serverCount: Int)? {
+    private func prepare(_ name: String, _ session: any MailboxSession) async throws -> PreparedFolder? {
+        let listedAt = Date()
         let listing = try await session.listing(of: name)
         let uidValidity = listing.status.uidValidity
         // A changed UIDVALIDITY voids every UID on record for the folder (RFC 9051 2.3.1.1). The
@@ -252,7 +266,8 @@ public actor SyncCoordinator {
             try await store.forget(RemoteLocation(mailbox: name, uidValidity: uidValidity, uid: uid), account: account)
         }
         if !plan.gone.isEmpty { log.info("sync", "\(name): \(plan.gone.count) messages left the folder") }
-        return (name, uidValidity, plan, listing.uids.count)
+        return PreparedFolder(folder: name, uidValidity: uidValidity, plan: plan, serverCount: listing.uids.count,
+                              highestModSeq: listing.status.highestModSeq, listedAt: listedAt)
     }
 
     private struct ImportResult {
@@ -316,18 +331,59 @@ public actor SyncCoordinator {
     }
 
     /// Checks the flags in each folder; `recordCheck` when these are all the account's folders.
-    private func syncFlags(of folders: [(folder: String, uidValidity: UInt32)], _ session: any MailboxSession,
-                           recordCheck: Bool) async throws {
+    private func syncFlags(of folders: [PreparedFolder], _ session: any MailboxSession, recordCheck: Bool) async throws {
         for entry in folders {
             progress.activity = .checking(folder: displayName(entry.folder))
-            try await syncFlags(entry.folder, uidValidity: entry.uidValidity, session)
+            try await syncFlags(entry.folder, uidValidity: entry.uidValidity, highestModSeq: entry.highestModSeq, session)
         }
         if recordCheck { lastFlagCheck = ContinuousClock.now }
     }
 
     /// Brings stored flags in line with the provider's, for every stored message in the folder.
-    private func syncFlags(_ folder: String, uidValidity: UInt32, _ session: any MailboxSession) async throws {
+    ///
+    /// With CONDSTORE (RFC 7162) only what changed since the folder's checkpointed HIGHESTMODSEQ
+    /// is read — nothing at all when the folder is unchanged; the checkpoint is saved after the
+    /// flags it covers. Without CONDSTORE, or before the first checkpoint, every stored
+    /// message's flags are read (the fallback, which also sets the first checkpoint).
+    private func syncFlags(_ folder: String, uidValidity: UInt32, highestModSeq: UInt64?, _ session: any MailboxSession) async throws {
         let known = try await store.knownUIDs(mailbox: folder, uidValidity: uidValidity, account: account)
+        if session.capabilities.changeTracking, let highestModSeq,
+           let checkpoint = try await store.highestModSeq(folder: folder, uidValidity: uidValidity, account: account) {
+            if highestModSeq == checkpoint { return }
+            do {
+                let changes = try await session.flagChanges(in: folder, uidValidity: uidValidity, since: checkpoint)
+                try await applyFlags(changes.flags, known: known)
+                try await store.saveHighestModSeq(changes.highestModSeq, folder: folder, uidValidity: uidValidity, account: account)
+                log.debug("sync", "\(folder): \(changes.flags.count) flag changes since modseq \(checkpoint)")
+                return
+            } catch let error as MailProviderError where !error.isConnectionProblem && error.authenticationFailedReason == nil {
+                log.info("sync", "\(folder): CONDSTORE unavailable (\(error)); reading every flag")
+            }
+        }
+        try await syncAllFlags(folder, uidValidity: uidValidity, known: known, session)
+        if session.capabilities.changeTracking, let highestModSeq {
+            // The listing's value predates the reads, so nothing after it can be missed.
+            try await store.saveHighestModSeq(highestModSeq, folder: folder, uidValidity: uidValidity, account: account)
+        }
+    }
+
+    /// Stores the provider's flags for the stored messages among `remote`.
+    private func applyFlags(_ remote: [RemoteMessageID: MailProvider.MessageFlags], known: [UInt32: MailMessageID]) async throws {
+        let ids = remote.keys.compactMap { known[$0.uid] }
+        guard !ids.isEmpty else { return }
+        let local = try await store.flags(of: ids, account: account)
+        var changed: [MailMessageID: MailMessageFlags] = [:]
+        for (remoteID, remoteFlags) in remote {
+            guard let id = known[remoteID.uid] else { continue }
+            let flags = Self.flags(remoteFlags)
+            if local[id] != flags { changed[id] = flags }
+        }
+        if !changed.isEmpty { try await store.setFlags(changed, account: account) }
+    }
+
+    /// The fallback: every stored message's flags, in batches.
+    private func syncAllFlags(_ folder: String, uidValidity: UInt32, known: [UInt32: MailMessageID],
+                              _ session: any MailboxSession) async throws {
         guard !known.isEmpty else { return }
         for chunk in SyncPlanner.chunks(known.keys.sorted(), of: options.summaryBatch) {
             try Task.checkCancellation()

@@ -18,6 +18,14 @@ public enum MailStoreError: Error, Equatable, CustomStringConvertible {
     case io(operation: String, path: String, code: Int32)
     /// SQLite reported an error.
     case sqlite(code: Int32, message: String)
+    /// No space with this id in the folder (GKM-022).
+    case spaceNotFound(String)
+    /// A space change that cannot be saved: no name, a rule without conditions.
+    case invalidSpace(String)
+    /// The space file was written by a newer version of the app; it is shown, never rewritten.
+    case unsupportedSpaceFormat(Int)
+    /// An export destination that is not a folder this app may write to (GKM-023).
+    case exportDestinationUnavailable(String)
 
     public var description: String {
         switch self {
@@ -29,6 +37,10 @@ public enum MailStoreError: Error, Equatable, CustomStringConvertible {
         case .unsupportedLayoutVersion(let v): return "The mail folder uses layout version \(v), newer than this app understands."
         case .io(let op, let path, let code): return "\(op) failed for \(path): \(String(cString: strerror(code)))"
         case .sqlite(let code, let message): return "SQLite error \(code): \(message)"
+        case .spaceNotFound(let id): return "No space \(id)"
+        case .invalidSpace(let why): return why
+        case .unsupportedSpaceFormat(let v): return "This space was saved by a newer version of the app (format \(v)); it can be read but not changed here."
+        case .exportDestinationUnavailable(let path): return "Can’t write the export to \(path)."
         }
     }
 }

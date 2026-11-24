@@ -80,7 +80,7 @@ public actor MailStore {
 
     private func finishOpening() throws {
         let journalWasReadable = try recoverInterruptedWrites()
-        if index.needsRebuild || !journalWasReadable { try rebuildIndex() }
+        if index.needsRebuild || !journalWasReadable { try rebuildIndex() } else { try refreshSpaceIndex() }
     }
 
     // MARK: - Writing
@@ -251,7 +251,8 @@ public actor MailStore {
 
     public func flags(of id: MailMessageID) throws -> MessageFlags {
         guard let account = try index.account(of: id) else { throw MailStoreError.messageNotFound(id.rawValue) }
-        return try mapping(for: SafePath.component(account.rawValue)).flags(of: id)
+        // What the window shows: the provider's flags with open changes laid over (GKM-015).
+        return try effectiveState(of: id, mapping: mapping(for: SafePath.component(account.rawValue))).flags
     }
 
     /// Records the provider flags for a message (the sync calls this), or a local change such
@@ -303,6 +304,23 @@ public actor MailStore {
         return StoredMessage(front: try DerivedMarkdown.frontMatter(of: markdown), markdown: markdown, emlURL: emlURL,
                              markdownURL: markdownURL, textBody: parsed.textBody, htmlBody: parsed.htmlBody,
                              parseProblems: parsed.problems)
+    }
+
+    /// Several messages' summaries by id, in the order given; ids not stored are left out.
+    public func summaries(ids: [MailMessageID]) throws -> [MessageSummary] {
+        try index.summaries(ids: ids)
+    }
+
+    // MARK: Attachment library (GKM-023)
+
+    /// Attachments across accounts, newest message first (MAIL-045). Reads the index only.
+    public func attachments(_ query: AttachmentQuery = AttachmentQuery(), limit: Int = 200, offset: Int = 0) throws -> [AttachmentItem] {
+        try index.attachments(matching: query, limit: limit, offset: offset)
+    }
+
+    /// How many attachments match a library query, and their size in bytes.
+    public func attachmentTotals(_ query: AttachmentQuery = AttachmentQuery()) throws -> (count: Int, bytes: Int) {
+        try index.attachmentTotals(matching: query)
     }
 
     /// The original bytes, checked against the hash recorded when they were stored.
@@ -370,7 +388,7 @@ public actor MailStore {
     public func record(_ location: RemoteLocation, for id: MailMessageID, account: MailAccountID) throws {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         try mapping.record(location, for: id)
-        try index.setMailboxes(Set(mapping.locations(of: id).map(\.mailbox)), for: id, account: account)
+        try refreshIndex([id], account: account, mapping: mapping)
     }
 
     /// The message left `location` (moved or expunged at the provider). The local message stays.
@@ -378,7 +396,10 @@ public actor MailStore {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         let id = try mapping.localID(at: location)
         try mapping.forget(location)
-        if let id { try index.setMailboxes(Set(mapping.locations(of: id).map(\.mailbox)), for: id, account: account) }
+        guard let id else { return }
+        // Open moves out of that folder cannot happen any more and must not bring it back.
+        try supersedeLocationRows(of: id, leaving: location.mailbox, mapping: mapping, now: Date())
+        try refreshIndex([id], account: account, mapping: mapping)
     }
 
     /// The mailboxes this device has seen for the account.
@@ -392,6 +413,7 @@ public actor MailStore {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         let orphaned = try mapping.setUIDValidity(uidValidity, mailbox: mailbox)
         try index.setMembers(mapping.localIDs(inMailbox: mailbox), ofMailbox: mailbox, account: account)
+        try reapplyOverlay(account: account, mapping: mapping, touching: mailbox)
         return orphaned
     }
 
@@ -435,6 +457,8 @@ public actor MailStore {
             }
         }
         try restoreDeviceState()
+        // Space membership is folder content (`Mail/spaces/`); its copy in the index is rebuilt too.
+        try refreshSpaceIndex()
     }
 
     /// Folders and flags are device state (the sync's own database), not folder content: after
@@ -447,6 +471,8 @@ public actor MailStore {
                   FileManager.default.fileExists(atPath: folder.appendingPathComponent("sync.sqlite").path) else { continue }
             let mapping = try mapping(for: name)
             try index.restore(flags: mapping.allFlags(), locations: mapping.allMemberships(), account: MailAccountID(name))
+            // Changes not at the provider yet stay visible after a rebuild (GKM-015).
+            try reapplyOverlay(account: MailAccountID(name), mapping: mapping)
         }
     }
 
@@ -570,7 +596,7 @@ public actor MailStore {
         return calendar.date(from: DateComponents(year: year, month: month, day: 1))
     }
 
-    private func url(of id: MailMessageID) throws -> URL {
+    func url(of id: MailMessageID) throws -> URL {
         guard let path = try index.path(of: id), let url = safeFile(path) else { throw MailStoreError.messageNotFound(id.rawValue) }
         return url
     }

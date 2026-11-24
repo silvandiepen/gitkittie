@@ -1,3 +1,4 @@
+import AppKit
 import MailCore
 import MailStore
 import SwiftUI
@@ -28,6 +29,7 @@ struct MessageListView: View {
         .background(Theme.window)
         .navigationTitle(title)
         .searchable(text: searchText, placement: .toolbar, prompt: "Search mail")
+        .toolbar { MessageActionToolbar(model: model) }
         .toolbar {
             ToolbarItem {
                 Button {
@@ -51,13 +53,26 @@ struct MessageListView: View {
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         ForEach(browser.rows) { row in
-                            MessageRow(row: row, isSelected: row.id == browser.selectedRowID, showsAccount: model.accounts.count > 1,
-                                       accountName: model.accounts.first { $0.id == row.latest.account }?.displayName)
+                            MessageRow(row: row, isSelected: row.id == browser.selectedRowID || browser.isMarked(row.id),
+                                       showsAccount: model.accounts.count > 1,
+                                       accountName: model.accounts.first { $0.id == row.latest.account }?.displayName,
+                                       isPending: model.sync.replay[row.latest.account]?.status.pendingMessages.contains(row.latest.id) == true)
                                 .id(row.id)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     listFocused = true
+                                    // ⌘-click and ⇧-click mark several conversations (GKM-022).
+                                    let flags = NSEvent.modifierFlags
+                                    if flags.contains(.command) { browser.toggleMark(row.id); return }
+                                    if flags.contains(.shift) { browser.extendMark(to: row.id); return }
+                                    browser.clearMarks()
                                     Task { await browser.select(row.id) }
+                                }
+                                .draggable(SpaceLook.dragPayload(browser.threadIDs(actingOn: row.id)))
+                                .contextMenu {
+                                    MessageActionRowMenu(rowID: row.id)
+                                    Divider()
+                                    SpaceRowMenu(rowID: row.id)
                                 }
                                 .onAppear {
                                     if row.id == browser.rows.last?.id { Task { await browser.loadMore() } }
@@ -70,6 +85,7 @@ struct MessageListView: View {
                 .focusable()
                 .focusEffectDisabled()
                 .focused($listFocused)
+                .trashOnDelete(model)
                 .onMoveCommand { direction in
                     switch direction {
                     case .down: Task { await browser.selectNext() }
@@ -91,6 +107,8 @@ struct MessageListView: View {
         case .folder(_, let name): name
         case .drafts: "Drafts"
         case .outbox: "Outbox"
+        case .space(let id): model.spaces.space(id)?.name ?? "Space"
+        case .attachments: "Attachments"
         }
     }
 }
@@ -102,6 +120,8 @@ private struct MessageRow: View {
     let isSelected: Bool
     let showsAccount: Bool
     let accountName: String?
+    /// A change made here has not reached the provider yet (GKM-015).
+    var isPending = false
 
     private var summary: MessageSummary { row.latest }
 
@@ -123,6 +143,13 @@ private struct MessageRow: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 4)
+                    if isPending {
+                        Image(systemName: "icloud.and.arrow.up")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .help("Waiting to reach the provider")
+                            .accessibilityLabel("Change waiting to sync")
+                    }
                     if row.isFlagged {
                         Image(systemName: "flag.fill").font(.caption).foregroundStyle(.orange)
                     }

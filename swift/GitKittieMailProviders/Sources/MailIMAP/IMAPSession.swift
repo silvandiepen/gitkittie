@@ -15,6 +15,9 @@ public final class IMAPSession: MailboxSession {
     private var rawCapabilities: Set<String>
     private var selected: SelectedFolder?
     private var isClosed = false
+    /// Fault injection: behave as a server without MOVE, so the COPY + UID EXPUNGE path runs
+    /// against a real server that has MOVE.
+    private var moveDisabled = false
 
     struct SelectedFolder {
         var id: String
@@ -130,7 +133,10 @@ public final class IMAPSession: MailboxSession {
     func select(_ folder: String, refresh: Bool = false) async throws -> SelectedFolder {
         if !refresh, let selected, selected.id == folder { return selected }
         selected = nil
-        let result = try await wire.run(.select(Self.mailbox(folder), []), logAs: "SELECT \(folder)")
+        // With CONDSTORE, ask for it on SELECT so the server reports HIGHESTMODSEQ (RFC 7162 3.1.8).
+        let parameters: [SelectParameter] = hasCondStore ? [.condStore] : []
+        let result = try await wire.run(.select(Self.mailbox(folder), parameters),
+                                        logAs: "SELECT \(folder)\(hasCondStore ? " (CONDSTORE)" : "")")
         guard result.isOK else {
             if case .nonExistent = result.responseText.code { throw MailProviderError.folderNotFound(folder) }
             throw MailProviderError.commandFailed("SELECT \(folder): \(result.responseText.text)")
@@ -252,20 +258,79 @@ public final class IMAPSession: MailboxSession {
         let set = Self.uidSet(uids)
         let target = Self.mailbox(destination)
         let result: IMAPCommandResult
-        if rawCapabilities.contains("MOVE") {
+        if rawCapabilities.contains("MOVE"), !moveDisabled {
             result = try await wire.run(.uidMove(.set(set), target), logAs: "UID MOVE \(uids.count) → \(destination)")
-            try Self.check(result, "UID MOVE")
+            try Self.checkTarget(result, "UID MOVE", destination)
         } else if rawCapabilities.contains("UIDPLUS") {
             // COPY, then expunge exactly these UIDs (UID EXPUNGE never touches other messages
             // that happen to carry \Deleted).
             result = try await wire.run(.uidCopy(.set(set), target), logAs: "UID COPY \(uids.count) → \(destination)")
-            try Self.check(result, "UID COPY")
+            try Self.checkTarget(result, "UID COPY", destination)
             try Self.check(try await wire.run(.uidStore(.set(set), [], .flags(.add(silent: true, list: [.deleted]))), logAs: "UID STORE +FLAGS \\Deleted"), "UID STORE")
             try Self.check(try await wire.run(.uidExpunge(.set(set)), logAs: "UID EXPUNGE"), "UID EXPUNGE")
         } else {
             throw MailProviderError.unsupported("moving needs MOVE or UIDPLUS; a plain EXPUNGE could remove other messages")
         }
         _ = wire.takeUnsolicited()
+        _ = folder
+        // A UID MOVE reports COPYUID in an untagged OK before the tagged one; COPY in the tagged one.
+        return Self.copiedIDs(result, ids: ids, destination: destination)
+    }
+
+    public func copy(_ ids: [RemoteMessageID], to destination: String) async throws -> [RemoteMessageID: RemoteMessageID] {
+        guard !ids.isEmpty else { return [:] }
+        let (_, uids) = try await selectForMessages(ids)
+        let result = try await wire.run(.uidCopy(.set(Self.uidSet(uids)), Self.mailbox(destination)),
+                                        logAs: "UID COPY \(uids.count) → \(destination)")
+        try Self.checkTarget(result, "UID COPY", destination)
+        return Self.copiedIDs(result, ids: ids, destination: destination)
+    }
+
+    public func expunge(_ ids: [RemoteMessageID]) async throws {
+        guard !ids.isEmpty else { return }
+        guard rawCapabilities.contains("UIDPLUS") else {
+            // A plain EXPUNGE removes every \Deleted message in the folder, not just these.
+            throw MailProviderError.unsupported("deleting single messages needs UIDPLUS (UID EXPUNGE)")
+        }
+        let (folder, uids) = try await selectForMessages(ids)
+        let set = Self.uidSet(uids)
+        try Self.check(try await wire.run(.uidStore(.set(set), [], .flags(.add(silent: true, list: [.deleted]))),
+                                          logAs: "UID STORE +FLAGS \\Deleted (\(uids.count)) in \(folder)"), "UID STORE")
+        try Self.check(try await wire.run(.uidExpunge(.set(set)), logAs: "UID EXPUNGE (\(uids.count)) in \(folder)"), "UID EXPUNGE")
+        _ = wire.takeUnsolicited()
+    }
+
+    public func flagChanges(in folder: String, uidValidity: UInt32, since modSeq: UInt64) async throws -> FlagChanges {
+        guard hasCondStore else { throw MailProviderError.unsupported("the server has no CONDSTORE") }
+        let state = try await select(folder, refresh: true)
+        guard state.status.uidValidity == uidValidity else {
+            throw MailProviderError.commandFailed("\(folder): UIDVALIDITY changed")
+        }
+        // NOMODSEQ: this folder keeps no modification sequences.
+        guard let highest = state.status.highestModSeq else {
+            throw MailProviderError.unsupported("\(folder) has no mod-sequences")
+        }
+        guard highest > modSeq, state.status.messageCount > 0 else {
+            return FlagChanges(highestModSeq: highest, flags: [:])
+        }
+        let result = try await wire.run(
+            .uidFetch(.set(UIDSetNonEmpty(range: .all)), [.uid, .flags],
+                      [.changedSince(ChangedSinceModifier(modificationSequence: ModificationSequenceValue(modSeq)))]),
+            logAs: "UID FETCH 1:* (FLAGS) (CHANGEDSINCE \(modSeq)) in \(folder)")
+        try Self.check(result, "UID FETCH CHANGEDSINCE")
+        var flags: [RemoteMessageID: MessageFlags] = [:]
+        for fetch in result.fetches {
+            guard let summary = Self.summary(from: fetch, folder: folder, uidValidity: uidValidity) else { continue }
+            flags[summary.id] = summary.flags
+        }
+        _ = wire.takeUnsolicited()
+        return FlagChanges(highestModSeq: highest, flags: flags)
+    }
+
+    var hasCondStore: Bool { rawCapabilities.contains("CONDSTORE") || rawCapabilities.contains("QRESYNC") }
+
+    /// The new ids a COPYUID response code reports, keyed by old id.
+    static func copiedIDs(_ result: IMAPCommandResult, ids: [RemoteMessageID], destination: String) -> [RemoteMessageID: RemoteMessageID] {
         var mapping: [RemoteMessageID: RemoteMessageID] = [:]
         for case .uidCopy(let copy) in result.responseCodes {
             let sources = copy.sourceUIDs.flatMap { $0.range.lowerBound.rawValue...$0.range.upperBound.rawValue }
@@ -275,7 +340,6 @@ public final class IMAPSession: MailboxSession {
                 mapping[old] = RemoteMessageID(folder: destination, uidValidity: UInt32(copy.destinationUIDValidity), uid: target)
             }
         }
-        _ = folder
         return mapping
     }
 
@@ -358,12 +422,26 @@ public final class IMAPSession: MailboxSession {
         wire.dropForTesting()
     }
 
+    /// Makes the session move with COPY + UID EXPUNGE, as on a server without MOVE.
+    @_spi(FaultInjection) public func disableMoveForTesting() {
+        moveDisabled = true
+        capabilities.atomicMove = false
+    }
+
     // MARK: - Helpers
 
     private static func isChange(_ payload: ResponsePayload) -> Bool {
         switch payload {
         case .mailboxData(.exists), .messageData(.expunge), .messageData(.vanished): true
         default: false
+        }
+    }
+
+    /// A NO [TRYCREATE] means the target folder does not exist.
+    static func checkTarget(_ result: IMAPCommandResult, _ what: String, _ destination: String) throws {
+        guard result.isOK else {
+            if case .tryCreate = result.responseText.code { throw MailProviderError.folderNotFound(destination) }
+            throw MailProviderError.commandFailed("\(what): \(result.responseText.text)")
         }
     }
 

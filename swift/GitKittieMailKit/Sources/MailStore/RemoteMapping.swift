@@ -10,8 +10,10 @@ import MailCore
 final class RemoteMapping {
     /// 1: mailboxes and locations (GKM-005). 2: the provider flags this device last saw
     /// (GKM-012). 3: the sync's folder list with a cursor per folder, the rest of the flags
-    /// (answered, draft, keywords) and counters (GKM-011; RemoteMapping+Sync.swift).
-    static let schemaVersion = 3
+    /// (answered, draft, keywords) and counters (GKM-011; RemoteMapping+Sync.swift). 4: the
+    /// offline action journal and a CONDSTORE checkpoint per folder (GKM-015;
+    /// RemoteMapping+Actions.swift).
+    static let schemaVersion = 4
     let database: SQLiteDatabase
 
     init(url: URL) throws {
@@ -42,6 +44,10 @@ final class RemoteMapping {
             if version < 3 {
                 // 2 → 3: the sync's folders, cursors and counters, and the remaining flags (GKM-011).
                 try migrateToSyncState()
+            }
+            if version < 4 {
+                // 3 → 4: the action journal (GKM-015).
+                try migrateToActionJournal()
             }
             try database.setUserVersion(Self.schemaVersion)
         }

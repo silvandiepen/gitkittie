@@ -40,8 +40,22 @@ public struct MIMEMessageParser: MessageParsing {
             textBody: message.textBody.map(normaliseLineEndings),
             htmlBody: message.htmlBody,
             attachments: attachments,
-            problems: message.problems
+            problems: message.problems,
+            listID: listIdentifier(message.headers["List-Id"])
         )
+    }
+
+    /// `List-Id: Weekly news <news.example.org>` → `news.example.org` (RFC 2919: the identifier
+    /// is the part in angle brackets; a header without them is taken whole). Lowercased; nil
+    /// when empty or implausibly long.
+    static func listIdentifier(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let open = value.lastIndex(of: "<"), let close = value[open...].firstIndex(of: ">") {
+            value = String(value[value.index(after: open)..<close])
+        }
+        value = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return value.isEmpty || value.count > 255 ? nil : value
     }
 
     static func normaliseLineEndings(_ text: String) -> String {

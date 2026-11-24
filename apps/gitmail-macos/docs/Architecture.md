@@ -40,6 +40,8 @@ Private CloudKit proposed for spaces, tags, memberships, rules, corrections, not
 
 Idempotent durable operations, record revisions, change tokens and tombstones. Merge independent memberships; deterministic scalar conflicts; preserve conflicting notes/drafts. Manual classification overrides automation. Persist offline action journal and visible retry state. Reconcile provider changes before destructive operations; never resurrect deleted messages from stale cache. Avoid syncing whole SQLite database or mailbox Git repository.
 
+**What exists for everyday actions (GKM-015).** Read, flag, move, archive, trash and delete-from-Trash apply in the store at once (`MailStore+Actions.swift`) as rows of the account's action journal in `state/<account-id>/sync.sqlite` (MAIL-034). The index shows the provider's state with the open rows laid over it, so a sync pass, an index rebuild or a UIDVALIDITY reset never undoes a change that has not reached the provider. `ActionReplayer` (MailSync) sends the journal over its own connection, kicked by every action and by every sync pass, backing off while offline; rows that cancel out (Undo before reconnecting) send nothing, flags go as one STORE per folder and value, moves as one MOVE per folder pair. Conflicts follow MAIL-035 (the provider wins; a message that left its folder is never brought back); archive and trash folders follow MAIL-036; Undo, and the CONDSTORE flag sync, MAIL-037. Verified against the real local server (`MailActionsIntegrationTests`): offline actions show at once, survive a sync, and reach the server once on reconnect; a replay stopped after the server acted does not act twice; COPY + UID EXPUNGE without MOVE; Undo before and after the server has it; delete permanently keeps the local file and Undo restores exactly one copy; a flag changed elsewhere is not overwritten; a message moved or deleted elsewhere is not brought back.
+
 Archive is third layer: preserved messages survive provider deletion. Local-only archives do not automatically appear elsewhere. Portable encrypted export first, encrypted archive sync or user-selected shared storage later, with integrity, key recovery, quota, deletion and restore tests. Distinguish provider deletion, archive deletion and cache eviction. Account disconnect offers keep/export or remove local files with consequences.
 
 ## Sending and drafts
@@ -53,6 +55,27 @@ Durable outbox, operation ID, stable outgoing Message-ID, recipient/account snap
 *The outbox* (`MailOutbox` in GitKittieMailProviders). Each send is `<Application Support>/Mail/state/outbox/<operation-id>/` with `message.eml` (the exact bytes, written first) and `entry.json` (state, attempts, the envelope and recipient snapshot, the draft for Cancel). `sending` is on disk before the connection opens. Only `notSent` (the server certainly lacks the message) is retried automatically, with the same bytes and backoff, five times, then `failed`. `uncertain` (the end of the message went out and no answer came back, or the app stopped mid-send) is looked for by Message-ID in Sent, All Mail and, when the message went to the account itself, the inbox; found means sent, not found leaves it uncertain and visible, and Send Again looks once more before queuing it. The Sent copy follows the account's `SentCopyPolicy`: `providerFiles` (Gmail) never appends, `append` (generic IMAP) appends after a search finds none, `detect` (iCloud until GKM-004 confirms) waits two minutes for the provider's copy first. An exclusive lock lets one process own the outbox. Accounts reach it through `SendingAccount` (identity, SMTP and IMAP endpoints, a Keychain `CredentialReference`, the Sent policy), which account setup (GKM-010) registers.
 
 *Verified* against the real local server with real TCP cuts (`swift/GitKittieMailProviders`, `OutboxIntegrationTests`): a cut before the greeting, at EHLO, AUTH, MAIL FROM, RCPT TO, DATA, in the body, at the end-of-data marker, after acceptance and at QUIT each end with exactly one copy at every recipient and in Sent; the outbox stopped after marking `sending`, after the SMTP outcome, after marking `sent` and after the Sent append each resume without a second copy; no Bcc in any stored or delivered header.
+
+## Spaces and export
+
+**What exists (GKM-022, GKM-023).**
+
+*Spaces* (`MailStore+Spaces.swift`, MAIL-042, MAIL-043). One file per space in `Mail/spaces/<space-id>.json`, pretty-printed JSON with sorted keys, dates ISO 8601 in whole seconds. This is the stable format GKM-026 maps to CloudKit records:
+
+    {
+      "format": 1,                          // a file with a higher number is shown, never rewritten
+      "id": "<uuid>", "name": "Garden", "icon": "leaf.fill", "color": "green", "order": 0,
+      "created": "…Z", "modified": "…Z",
+      "rules": [{ "id": "<uuid>", "sender": "…", "domain": "…", "list": "…", "subjectWords": "…", "account": "<account-id>" }],
+      "members":  [{ "message": "<local-id>", "account": "<account-id>", "messageId": "…", "emlSha256": "…", "added": "…Z", "source": "manual" | "rule:<rule-id>" }],
+      "excluded": [ same shape: taken out by hand, never re-added by a rule ]
+    }
+
+Rule fields that are absent are not checked; `color` is one of the Tasks board names. `members` and `excluded` merge as sets keyed by `message` (independent memberships, Multi-device sync above); scalar fields take the newer `modified`. The index holds a copy in `space_members`, refilled from the folder on open and after a rebuild, so a space filters the list, search, unread counts and the attachment library in SQL. A file that cannot be read is listed in the sidebar's notice and left alone. Nothing in spaces reaches a provider: deleting a space removes its file only.
+
+*Attachment library* (`AttachmentLibrary.swift`, MAIL-045): every non-inline attachment across accounts from `message_blobs` (index schema 3), filtered by kind (media type or extension), file name, sender, date, account, space and size.
+
+*Export* (`MailStore+Export.swift`, MAIL-044): a message, conversations, a space or an account into a new folder the person picks, in the mail-folder layout, originals byte for byte. Tested by export → import into a fresh store → byte comparison, and by opening the export as a mail folder.
 
 ## Background processing
 

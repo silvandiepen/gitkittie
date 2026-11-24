@@ -29,15 +29,30 @@ struct GitMailApp: App {
             }
             CommandMenu("Message") {
                 let selected = model.browser.selectedMessage
-                Button(selected?.isUnread == true ? "Mark as Read" : "Mark as Unread") {
-                    if let selected { Task { await model.browser.setUnread(!selected.isUnread, for: selected.id) } }
+                // Read, flag, archive, trash, move: the marked or selected conversations, with Undo (GKM-015).
+                MessageActionCommands(model: model)
+                Divider()
+                // Spaces and export (GKM-022, GKM-023): the marked conversations, or the selected one.
+                Menu("Add to Space") {
+                    ForEach(model.spaces.spaces) { space in
+                        Button(space.name) {
+                            Task {
+                                await model.spaces.add(threads: model.browser.threadIDs(actingOn: nil), to: space.id)
+                                model.browser.clearMarks()
+                                await model.browser.reload()
+                            }
+                        }
+                    }
                 }
-                .keyboardShortcut("u", modifiers: [.command, .shift])
-                .disabled(selected == nil)
-                Button(selected?.isFlagged == true ? "Unflag" : "Flag") {
-                    if let selected { Task { await model.browser.setFlagged(!selected.isFlagged, for: selected.id) } }
+                .disabled(model.spaces.spaces.isEmpty || model.browser.threadIDs(actingOn: nil).isEmpty)
+                Button("Export Conversation…") {
+                    let threads = model.browser.threadIDs(actingOn: nil)
+                    Task { await Platform.export(.threads(threads), what: "Conversation", model: model) }
                 }
-                .keyboardShortcut("l", modifiers: [.command, .shift])
+                .disabled(model.browser.threadIDs(actingOn: nil).isEmpty)
+                Button("Export Message…") {
+                    if let selected { Task { await Platform.export(.messages([selected.id]), what: "Message", model: model) } }
+                }
                 .disabled(selected == nil)
                 Divider()
                 Button("Next Conversation") { Task { await model.browser.selectNext() } }

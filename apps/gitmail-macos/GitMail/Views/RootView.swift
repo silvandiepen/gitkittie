@@ -33,6 +33,8 @@ struct MailWindow: View {
                 switch model.selection {
                 case .drafts: DraftsView()
                 case .outbox: OutboxView()
+                case .attachments: AttachmentLibraryView(space: nil).navigationTitle("Attachments")
+                case .space(let id): SpaceView(space: id)
                 default: MessageListView()
                 }
             }
@@ -41,6 +43,8 @@ struct MailWindow: View {
             ReaderView()
         }
         .toolbar { ComposeToolbar(model: model) }
+        // Undo for actions, the Delete Permanently confirmation and action notices (GKM-015).
+        .mailActionChrome(model)
         .alert("Couldn’t do that", isPresented: Binding(
             get: { model.sending?.lastError != nil },
             set: { if !$0 { model.sending?.lastError = nil } }
@@ -64,6 +68,23 @@ struct MailWindow: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(model.importReport?.summary ?? "")
+        }
+        .alert("Export finished", isPresented: Binding(
+            get: { model.exportReport != nil },
+            set: { if !$0 { model.exportReport = nil } }
+        ), presenting: model.exportReport) { report in
+            Button("Show in Finder") { Platform.reveal(report.folder) }
+            Button("OK", role: .cancel) {}
+        } message: { report in
+            Text(report.summary)
+        }
+        .alert("Something went wrong", isPresented: Binding(
+            get: { model.spaces.actionError != nil },
+            set: { if !$0 { model.spaces.actionError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.spaces.actionError ?? "")
         }
         .alert("Something went wrong", isPresented: Binding(
             get: { model.browser.actionError != nil },

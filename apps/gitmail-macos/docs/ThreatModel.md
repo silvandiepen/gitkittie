@@ -190,9 +190,9 @@ An agent reading mail is reading text written by strangers. Any instruction in a
 | A bulk action affects more than the preview showed | Preview is the exact set; revalidate against current provider state before executing; protected items (starred, pinned, linked, uncertain) excluded | GKM-021, GKM-031 |
 | Automatic permanent purge | None in the MVP; retention is opt-in per account, category or rule, uses Trash first, and is audited | GKM-031 |
 | Two devices running the same retention rule | One coordinating device; destructive operations pause offline until reconciled | GKM-031, GKM-028 |
-| Stale cache resurrecting deleted mail | Reconcile provider changes before destructive operations; tombstones in metadata sync | GKM-011, GKM-026 |
+| Stale cache resurrecting deleted mail | Reconcile provider changes before destructive operations; tombstones in metadata sync. Built for actions: a queued move or delete of a message that left its folder at the provider is superseded, never replayed (MAIL-035) | GKM-011, GKM-015, GKM-026 |
 | Account disconnect wiping local files | Offer keep / export / remove with plain consequences | GKM-010 |
-| Ordinary trash and move mistakes | Undo for every everyday action; explain provider Trash limits | GKM-015 |
+| Ordinary trash and move mistakes | Undo for every everyday action; explain provider Trash limits. Built: Undo/Redo for every action (MAIL-037); delete permanently only in Trash, after a confirmation that says the local copy stays; nothing ever expunged from All Mail (MAIL-036) | GKM-015 |
 
 ## Status (GKM-012, GKM-016, 2026-11-24)
 
@@ -202,6 +202,8 @@ Built and tested in `swift/GitKittieMailKit` and the app:
 - §2 Link warnings (text vs target, lookalike of the sender's domain, mixed scripts shown as `xn--`, IP hosts, user-info, blocked schemes); links open only from a sheet that shows the real destination (`ReaderContentTests`).
 - §3 The address is always shown beside the name; warnings for a name carrying another address or domain and a Reply-To elsewhere; no positive trust badge. Authentication-Results are not used yet (GKM-011/017).
 - §4 Attachment names are displayed sanitized; Quick Look opens a quarantined private copy only on click; text extraction runs in the sandboxed `GitMailExtractor.xpc` (MAIL-031). The XPC round trip is tested in process over an anonymous listener; the bundled service's isolation is configured (sandbox, no entitlements) and built, not exercised by a test, because that needs the app running.
+
+- §4 Attachment library and export (GKM-023, MAIL-044, MAIL-045): the library lists from the index and never decodes or previews while listing; Quick Look uses the reader's quarantined copy; Save As writes hash-checked bytes with the quarantine attribute; file names are display text and only go into a save panel's suggestion. §7: exports copy mail-folder files only (no index, sync state, flags or extracted text) and strip server settings from `account.json`; a tampered original is reported, not exported. Decompression-bomb limits stay with GKM-015 (nothing here decompresses).
 
 ## Open points
 
