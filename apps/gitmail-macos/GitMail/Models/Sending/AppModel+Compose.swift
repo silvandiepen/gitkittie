@@ -27,7 +27,12 @@ extension AppModel {
         let id = message.front.id
         let account = message.front.account
         do {
-            let original = try await originalData(of: id)
+            // A partial message (GKM-036): a reply needs its header and text, which it has; a
+            // forward carries the attachments, so they are downloaded first (offline: it says so).
+            if action == .forward, try await mailStore?.isPartial(id) == true {
+                await completePartialMessages([(id, account)])
+            }
+            let original = action == .forward ? try await originalData(of: id) : try await replySource(of: id)
             let identities = await sending.identities(accounts: accounts)
             switch action {
             case .reply:

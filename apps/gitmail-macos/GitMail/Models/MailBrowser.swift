@@ -168,6 +168,11 @@ final class MailBrowser {
     @ObservationIgnored var onActionsQueued: (@MainActor ([MailAccountID]) async -> Void)?
     /// Messages shown expanded in the reader: the sender's local open history (GKM-019).
     @ObservationIgnored var onMessagesOpened: (@MainActor ([MailMessageID]) async -> Void)?
+    /// Fetches an attachment a partial message left at the provider (GKM-036): the account's
+    /// on-demand fetcher, set by the app model.
+    @ObservationIgnored var onFetchAttachment: (@MainActor (AttachmentReference, MailMessageID) async throws -> AttachmentReference)?
+    /// Attachments downloading now, by ``downloadKey(_:of:)``, for the reader's progress.
+    private(set) var downloading: Set<String> = []
 
     private var store: MailStore?
     private var preferences: RemoteContentPreferences?
@@ -464,6 +469,37 @@ final class MailBrowser {
     }
 
     // MARK: Attachments
+
+    static func downloadKey(_ attachment: AttachmentReference, of message: MailMessageID) -> String {
+        "\(message.rawValue)#\(attachment.section ?? attachment.blob)"
+    }
+
+    /// The attachment ready to read: as it is when downloaded; otherwise fetched once from the
+    /// provider (progress in ``downloading``), and the open message re-read so the reader lists
+    /// it as downloaded. Offline, it throws what the fetcher says ("You're offline…").
+    func downloaded(_ attachment: AttachmentReference, of message: MailMessageID) async throws -> AttachmentReference {
+        guard !attachment.isDownloaded else { return attachment }
+        guard let onFetchAttachment else { throw MailStoreError.attachmentNotDownloaded(attachment.fileName) }
+        let key = Self.downloadKey(attachment, of: message)
+        downloading.insert(key)
+        defer { downloading.remove(key) }
+        let fetched = try await onFetchAttachment(attachment, message)
+        await reloadMessage(message)
+        return fetched
+    }
+
+    /// Re-reads one message of the open conversation (after a part was fetched or it was completed).
+    func reloadMessage(_ id: MailMessageID) async {
+        guard let store, var thread = openThread, let index = thread.messages.firstIndex(where: { $0.id == id }),
+              thread.messages[index].content != nil else { return }
+        thread.messages[index] = await loaded(thread.messages[index], store: store)
+        if openThread?.id == thread.id { openThread = thread }
+    }
+
+    /// Quick Look for an attachment of a message: fetched first when still at the provider.
+    func previewFile(for attachment: AttachmentReference, of message: MailMessageID) async throws -> URL {
+        try await previewFile(for: downloaded(attachment, of: message))
+    }
 
     /// An attachment's or inline part's bytes, hash-checked by the store.
     func attachmentData(_ attachment: AttachmentReference) async throws -> Data {

@@ -17,11 +17,17 @@ struct AccountServices {
     var defaults: UserDefaults
 
     static var live: AccountServices {
-        AccountServices(
+        var options = SyncOptions()
+        // Attachments above this stay at the provider until opened or pinned (GKM-036); 1 MB
+        // unless set (`defaults write app.hakobs.gitmail onDemandThresholdBytes <bytes>`, 0 = off).
+        if let threshold = UserDefaults.standard.object(forKey: "onDemandThresholdBytes") as? Int {
+            options.onDemandThreshold = threshold > 0 ? threshold : nil
+        }
+        return AccountServices(
             credentials: KeychainCredentialStore(),
             connections: AccountConnections(),
             verifier: AccountVerifier(),
-            syncOptions: SyncOptions(),
+            syncOptions: options,
             defaults: .standard)
     }
 }
@@ -42,6 +48,8 @@ final class AccountSync {
     @ObservationIgnored private var listeners: [MailAccountID: Task<Void, Never>] = [:]
     @ObservationIgnored private var replayers: [MailAccountID: ActionReplayer] = [:]
     @ObservationIgnored private var replayListeners: [MailAccountID: Task<Void, Never>] = [:]
+    /// Each account's on-demand fetcher: attachments left at the provider, pins (GKM-036).
+    @ObservationIgnored private var fetchers: [MailAccountID: OnDemandFetcher] = [:]
     @ObservationIgnored private var refreshPending = false
     @ObservationIgnored let services: AccountServices
     /// Called (coalesced) when synced mail changed what the window shows.
@@ -89,6 +97,8 @@ final class AccountSync {
         let replayer = ActionReplayer(account: id, connector: connector, store: store,
                                       reconnect: services.syncOptions.reconnect, log: services.connections.log)
         replayers[id] = replayer
+        // Attachments on demand use a connection of their own too.
+        fetchers[id] = OnDemandFetcher(account: id, connector: connector, store: store, log: services.connections.log)
         replayListeners[id] = Task { [weak self] in
             for await update in replayer.updates {
                 guard let self else { return }
@@ -110,6 +120,7 @@ final class AccountSync {
         if let coordinator = coordinators.removeValue(forKey: account) { await coordinator.stop() }
         listeners.removeValue(forKey: account)?.cancel()
         if let replayer = replayers.removeValue(forKey: account) { await replayer.stop() }
+        fetchers[account] = nil
         replayListeners.removeValue(forKey: account)?.cancel()
         progress[account] = nil
         replay[account] = nil
@@ -123,6 +134,9 @@ final class AccountSync {
             await replayer.kick()
         }
     }
+
+    /// The on-demand fetcher of a syncing account; nil when it does not sync on this Mac.
+    func fetcher(for account: MailAccountID) -> OnDemandFetcher? { fetchers[account] }
 
     /// The replayer of an account, for tests.
     func replayer(for account: MailAccountID) -> ActionReplayer? { replayers[account] }
