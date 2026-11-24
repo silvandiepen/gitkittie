@@ -19,8 +19,8 @@ final class WebViewSafetyTests: XCTestCase {
     private var ruleStoreFolder: URL!
     private var ruleLists: MailWebView.RuleLists!
 
-    /// Whether a web content process has started in this test process yet.
-    private static var webKitIsWarm = false
+    /// Whether WebKit has been started (or tried) in this test process yet.
+    private static var warmUp: Result<Void, Error>?
 
     override func setUp() async throws {
         try await Self.warmUpWebKit()
@@ -31,7 +31,7 @@ final class WebViewSafetyTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        server.stop()
+        server?.stop()
         try? FileManager.default.removeItem(at: ruleStoreFolder)
     }
 
@@ -94,6 +94,11 @@ final class WebViewSafetyTests: XCTestCase {
             let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 800, height: 600), configuration: configuration)
             view.loadHTMLString(try pointedAtServer(name), baseURL: nil)
             try await settle(view, extra: .seconds(2))
+            if name == "hostile-script-variants.eml" {
+                // The refresh is a second navigation; on a slow simulator it can come later.
+                let deadline = ContinuousClock.now + .seconds(30)
+                while !server.paths.contains("/meta"), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(100)) }
+            }
             XCTAssertGreaterThan(server.connections, 0, "\(name): the control made no request, so the zero above would prove nothing")
             if name == "hostile-script-variants.eml" {
                 XCTAssertTrue(server.paths.contains("/meta"), "control: the meta refresh navigated the page: \(server.paths)")
@@ -220,7 +225,18 @@ final class WebViewSafetyTests: XCTestCase {
     /// On a freshly booted simulator (CI) the first web content process takes over a minute to
     /// launch, and the first navigation made meanwhile can be lost; every later one is fast.
     private static func warmUpWebKit() async throws {
-        guard !webKitIsWarm else { return }
+        if warmUp == nil {
+            do {
+                try await startWebKit()
+                warmUp = .success(())
+            } catch {
+                warmUp = .failure(error)
+            }
+        }
+        try warmUp?.get()
+    }
+
+    private static func startWebKit() async throws {
         for _ in 0..<2 {
             let configuration = WKWebViewConfiguration()
             configuration.websiteDataStore = .nonPersistent()
@@ -229,10 +245,7 @@ final class WebViewSafetyTests: XCTestCase {
             let deadline = ContinuousClock.now + .seconds(150)
             while ContinuousClock.now < deadline {
                 try await Task.sleep(for: .milliseconds(100))
-                if !view.isLoading, view.url != nil {
-                    webKitIsWarm = true
-                    return
-                }
+                if !view.isLoading, view.url != nil { return }
             }
         }
         throw WarmUpFailed()

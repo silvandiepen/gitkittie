@@ -42,8 +42,10 @@ enum ProcessMetrics {
         }
     }
 
-    /// CPU and disk use of a process (this one by default) since it started.
+    /// CPU and disk use of a process (this one by default) since it started. Nil on iOS:
+    /// `proc_pid_rusage` (libproc) is macOS-only, and a simulator test cannot inspect the server.
     static func usage(of pid: pid_t = getpid()) -> Usage? {
+        #if os(macOS)
         var info = rusage_info_v4()
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V4, $0) }
@@ -55,6 +57,9 @@ enum ProcessMetrics {
         let seconds = ticks * Double(timebase.numer) / Double(timebase.denom) / 1e9
         return Usage(cpuSeconds: seconds, diskBytesRead: Int64(info.ri_diskio_bytesread),
                      diskBytesWritten: Int64(info.ri_diskio_byteswritten), logicalBytesWritten: Int64(info.ri_logical_writes))
+        #else
+        return nil
+        #endif
     }
 
     /// Bytes the files under `folder` occupy on disk.
