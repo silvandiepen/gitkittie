@@ -19,6 +19,7 @@ struct CategorySidebarSection: View {
                         count: model.totalCount > 0 ? .init(text: "\(model.totalCount)", label: "\(model.totalCount) messages", emphasis: .quiet) : nil)
                 .tag(SidebarSelection.allMail)
             AttachmentsSidebarRow()
+            SendersSidebarRow()
             if let error = model.attention.lastError {
                 Button {
                     model.attention.clearError()

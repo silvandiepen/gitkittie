@@ -182,6 +182,16 @@ final class MailSending {
         Task { await outboxActor.processDue() }
     }
 
+    /// A `mailto:` unsubscribe you previewed (GKM-020): straight into the outbox, no draft kept.
+    /// Returns its operation, so the unsubscribe can follow it to sent or failed.
+    func queueUnsubscribe(_ draft: ComposeDraft) async throws -> OperationID {
+        guard let outboxActor else { throw OutboxError.ownedByAnotherProcess }
+        guard let account = draft.account else { throw ComposeError.noSender }
+        let entry = try await outboxActor.enqueue(MessageComposer.compose(draft, attachments: []), account: account, draft: nil)
+        Task { await outboxActor.processDue() }
+        return entry.id
+    }
+
     // MARK: - Outbox intents
 
     func retry(_ id: OperationID) async {

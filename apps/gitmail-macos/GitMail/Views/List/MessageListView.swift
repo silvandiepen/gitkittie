@@ -111,6 +111,7 @@ struct MessageListView: View {
         case .outbox: "Outbox"
         case .space(let id): model.spaces.space(id)?.name ?? "Space"
         case .attachments: "Attachments"
+        case .senders: "Senders"
         }
     }
 }

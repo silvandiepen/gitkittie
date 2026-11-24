@@ -86,3 +86,12 @@ Accuracy: 63/63 on the corpus (56 GKM-003 fixtures plus 7 for the weaknesses), b
 
 **Not yet:** a local model (step 5); spaces in notification settings (GKM-022); opening a message from its notification; verified `authserv-id`s (GKM-004 for iCloud, GKM-029 for Gmail), so in the app authentication is "no evidence" and the trusted-sender list stays empty, which leaves lookalike checks to the sender warnings in the reader.
 
+## What exists (GKM-019, GKM-020)
+
+**Senders view** (sidebar, under All Mail). Every sender and mailing list per account: messages, the last 30 days, unread, first and last seen, where its mail lands, how much your rules silenced, opens in this app on this Mac (incomplete by design), suggested retention (nothing is deleted). Lists are grouped with the organisation that sends them, so a copied List-ID shows separately; the organisation line is for reference only.
+
+**Rules** (MAIL-054, MAIL-055): Always in Focused, Archive Silently, Always in a category, Mute, Keep Receipts Only, Keep Latest Only; one ordered list, first match wins. Every change opens a dry run listing what moves, what stays and why (risky, corrected by you, account security, kept receipt, newest digest), with checkboxes to keep messages out; Apply saves exactly that, Edit ▸ Undo takes it back. The reader's "Why?" names the rule that won and the others that also matched. Rules are virtual unless one is set to also archive at the provider (through the action journal).
+
+**Unsubscribe** (MAIL-056, MAIL-057): in the sender's page. One-click after a sheet that names the host and says what is sent; mailto as a previewed message through the outbox; anything else opens the list's page only after a warning. Spam, phishing and doubtful senders get Report as Junk and Mute instead. Each request shows Requested, Pending, Unsubscribed or Didn't Work, with "It Stopped" and "Still Getting Mail". Proven by `UnsubscribeTests` and `SendersAppTests` against a local HTTP server that records every request.
+
+**Not yet:** rules by sender domain or company (deliberately not offered: a domain is no proof of one company); retention per sender (GKM-031); the cleanup dashboard's batch view of these rules (GKM-021); DKIM-verified list identity (needs verified Authentication-Results, GKM-004/GKM-029).

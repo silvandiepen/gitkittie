@@ -171,8 +171,14 @@ private struct MailActionChrome: ViewModifier {
     func body(content: Content) -> some View {
         @Bindable var actions = model.actions
         content
-            .onAppear { model.actions.undoManager = undoManager }
-            .onChange(of: undoManager) { _, manager in model.actions.undoManager = manager }
+            .onAppear {
+                model.actions.undoManager = undoManager
+                model.senders.undoManager = undoManager
+            }
+            .onChange(of: undoManager) { _, manager in
+                model.actions.undoManager = manager
+                model.senders.undoManager = manager
+            }
             .confirmationDialog(
                 deletionTitle,
                 isPresented: Binding(get: { actions.deletionToConfirm != nil }, set: { if !$0 { actions.deletionToConfirm = nil } }),

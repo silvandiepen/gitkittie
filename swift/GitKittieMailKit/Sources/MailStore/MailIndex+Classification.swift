@@ -19,6 +19,26 @@ public struct StoredVerdict: Sendable, Equatable {
     public var fromAddress: String?
     /// The List-ID, without angle brackets, lowercased.
     public var listID: String?
+    /// The sender rule that won for this message (GKM-019), if any matched.
+    public var senderRule: String?
+    /// Where that rule put it, besides its category: in Focused, silently archived or muted.
+    public var disposition: SenderDisposition?
+
+    public init(id: MailMessageID, account: MailAccountID, classification: Classification, home: MailCategory, isCorrected: Bool,
+                fromAddress: String?, listID: String?, senderRule: String? = nil, disposition: SenderDisposition? = nil) {
+        self.id = id
+        self.account = account
+        self.classification = classification
+        self.home = home
+        self.isCorrected = isCorrected
+        self.fromAddress = fromAddress
+        self.listID = listID
+        self.senderRule = senderRule
+        self.disposition = disposition
+    }
+
+    /// Muted and silently archived mail never asks for attention.
+    public var isSilenced: Bool { disposition == .muted || disposition == .archived }
 }
 
 /// Messages and unread messages in a category view.
@@ -44,6 +64,11 @@ public struct MailArrival: Sendable, Equatable {
     public var subject: String?
     public var received: Date
     public var isUnread: Bool
+    /// The sender rule that won, and where it put the message (GKM-019).
+    public var senderRule: String?
+    public var disposition: SenderDisposition?
+    /// Muted and silently archived mail never notifies.
+    public var isSilenced: Bool { disposition == .muted || disposition == .archived }
 }
 
 extension MailCategory {
@@ -92,17 +117,28 @@ extension MailIndex {
         );
         """
 
+    /// Schema 5 (GKM-019): the sender rule that won and where it put the message. A muted or
+    /// silently archived message leaves Focused; a muted one leaves the category views too.
+    static let senderRuleColumnsSQL = """
+        ALTER TABLE message_classes ADD COLUMN sender_rule TEXT;
+        ALTER TABLE message_classes ADD COLUMN disposition TEXT;
+        CREATE INDEX IF NOT EXISTS message_classes_by_rule ON message_classes (sender_rule) WHERE sender_rule IS NOT NULL;
+        """
+
     /// The category filter over `messages m`. A message without a verdict is in Focused.
     static func categoryClause(_ category: MailCategory) -> (String, [SQLiteValue]) {
         switch category {
         case .focused:
-            return ("NOT EXISTS (SELECT 1 FROM message_classes c WHERE c.local_id = m.local_id AND c.home != 'focused')", [])
+            return ("""
+                NOT EXISTS (SELECT 1 FROM message_classes c WHERE c.local_id = m.local_id
+                  AND (c.home != 'focused' OR c.disposition IN ('muted', 'archived')))
+                """, [])
         case .quarantine:
             return ("EXISTS (SELECT 1 FROM message_classes c WHERE c.local_id = m.local_id AND c.home = 'quarantine')", [])
         case .transactions, .updates, .subscriptions, .promotions:
             return ("""
                 EXISTS (SELECT 1 FROM message_classes c WHERE c.local_id = m.local_id
-                  AND (c.home = ? OR (c.purpose = ? AND c.home != 'quarantine')))
+                  AND (c.home = ? OR (c.purpose = ? AND c.home != 'quarantine')) AND c.disposition IS NOT 'muted')
                 """, [.text(category.rawValue), .text(category.purpose?.rawValue ?? "")])
         }
     }
@@ -121,18 +157,20 @@ extension MailIndex {
         }
         try database.prepare("""
             INSERT INTO message_classes (local_id, account_id, home, purpose, risk, urgency, verdict, rule_version, corrected,
-                                         from_address, from_domain, list_id, arrival)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                         from_address, from_domain, list_id, arrival, sender_rule, disposition)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(local_id) DO UPDATE SET
               account_id = excluded.account_id, home = excluded.home, purpose = excluded.purpose, risk = excluded.risk,
               urgency = excluded.urgency, verdict = excluded.verdict, rule_version = excluded.rule_version,
               corrected = excluded.corrected, from_address = excluded.from_address, from_domain = excluded.from_domain,
-              list_id = excluded.list_id, arrival = COALESCE(message_classes.arrival, excluded.arrival)
+              list_id = excluded.list_id, arrival = COALESCE(message_classes.arrival, excluded.arrival),
+              sender_rule = excluded.sender_rule, disposition = excluded.disposition
             """).run([
                 .text(verdict.id.rawValue), .text(verdict.account.rawValue), .text(verdict.home.rawValue),
                 .text(c.purpose.rawValue), .text(c.risk.rawValue), .text(c.urgency.rawValue), .text(json),
                 .text(c.ruleSetVersion), .int(verdict.isCorrected ? 1 : 0), .optional(verdict.fromAddress),
                 .optional(fromDomain), .optional(verdict.listID), next.map { .int($0) } ?? .null,
+                .optional(verdict.senderRule), .optional(verdict.disposition?.rawValue),
             ])
     }
 
@@ -179,13 +217,15 @@ extension MailIndex {
 
     func verdict(of id: MailMessageID) throws -> StoredVerdict? {
         let statement = try database.prepare("""
-            SELECT local_id, account_id, verdict, home, corrected, from_address, list_id FROM message_classes WHERE local_id = ?
+            SELECT local_id, account_id, verdict, home, corrected, from_address, list_id, sender_rule, disposition
+            FROM message_classes WHERE local_id = ?
             """).bind([.text(id.rawValue)])
         guard try statement.step(), let json = statement.text(2), let home = statement.text(3).flatMap(MailCategory.init(rawValue:)),
               let account = statement.text(1),
               let classification = try? JSONCoding.decoder.decode(Classification.self, from: Data(json.utf8)) else { return nil }
         return StoredVerdict(id: id, account: MailAccountID(account), classification: classification, home: home,
-                             isCorrected: statement.int(4) != 0, fromAddress: statement.text(5), listID: statement.text(6))
+                             isCorrected: statement.int(4) != 0, fromAddress: statement.text(5), listID: statement.text(6),
+                             senderRule: statement.text(7), disposition: statement.text(8).flatMap(SenderDisposition.init(rawValue:)))
     }
 
     /// Messages with no verdict, or one from another rule set, oldest local id first.
@@ -238,23 +278,35 @@ extension MailIndex {
     /// Messages and unread messages per category view, for one account or all.
     func categoryCounts(account: MailAccountID?) throws -> [MailCategory: CategoryCount] {
         var sql = """
-            SELECT COALESCE(c.home, 'focused'), c.purpose, count(*), sum(1 - m.seen) FROM messages m
+            SELECT COALESCE(c.home, 'focused'), c.purpose, c.disposition, count(*), sum(1 - m.seen) FROM messages m
             LEFT JOIN message_classes c ON c.local_id = m.local_id
             """
         var values: [SQLiteValue] = []
         if let account { sql += " WHERE m.account_id = ?"; values.append(.text(account.rawValue)) }
-        let statement = try database.prepare(sql + " GROUP BY 1, 2").bind(values)
+        let statement = try database.prepare(sql + " GROUP BY 1, 2, 3").bind(values)
         var counts: [MailCategory: CategoryCount] = [:]
         while try statement.step() {
             guard let home = statement.text(0).flatMap(MailCategory.init(rawValue:)) else { continue }
             let purpose = statement.text(1).flatMap(MailPurpose.init(rawValue:))
-            let total = statement.int(2), unread = statement.int(3)
-            for category in MailCategory.allCases where category == home || (category.purpose != nil && category.purpose == purpose && home != .quarantine) {
+            let disposition = statement.text(2).flatMap(SenderDisposition.init(rawValue:))
+            let total = statement.int(3), unread = statement.int(4)
+            for category in MailCategory.allCases where Self.isListed(home: home, purpose: purpose, disposition: disposition, in: category) {
                 counts[category, default: CategoryCount()].total += total
                 counts[category, default: CategoryCount()].unread += unread
             }
         }
         return counts
+    }
+
+    /// The same membership as `categoryClause`, for counting.
+    static func isListed(home: MailCategory, purpose: MailPurpose?, disposition: SenderDisposition?, in category: MailCategory) -> Bool {
+        switch category {
+        case .focused: return home == .focused && disposition != .muted && disposition != .archived
+        case .quarantine: return home == .quarantine
+        default:
+            guard disposition != .muted else { return false }
+            return home == category || (category.purpose != nil && category.purpose == purpose && home != .quarantine)
+        }
     }
 
     func latestArrival() throws -> Int64 {
@@ -264,7 +316,8 @@ extension MailIndex {
 
     func arrivals(after sequence: Int64, limit: Int) throws -> [MailArrival] {
         let statement = try database.prepare("""
-            SELECT c.arrival, c.local_id, c.account_id, c.home, c.list_id, m.from_name, m.from_address, m.subject, m.sort_date, m.seen
+            SELECT c.arrival, c.local_id, c.account_id, c.home, c.list_id, m.from_name, m.from_address, m.subject, m.sort_date, m.seen,
+                   c.sender_rule, c.disposition
             FROM message_classes c JOIN messages m ON m.local_id = c.local_id
             WHERE c.arrival > ? ORDER BY c.arrival LIMIT ?
             """).bind([.int(sequence), .int(Int64(limit))])
@@ -275,7 +328,8 @@ extension MailIndex {
             result.append(MailArrival(sequence: Int64(statement.int(0)), id: id, account: MailAccountID(account), home: home,
                                       listID: statement.text(4), fromName: statement.text(5), fromAddress: statement.text(6),
                                       subject: statement.text(7), received: Date(timeIntervalSince1970: statement.double(8)),
-                                      isUnread: statement.int(9) == 0))
+                                      isUnread: statement.int(9) == 0, senderRule: statement.text(10),
+                                      disposition: statement.text(11).flatMap(SenderDisposition.init(rawValue:))))
         }
         return result
     }

@@ -60,6 +60,9 @@ targets:
         product: MailAccounts
       - package: GitKittieMailProviders
         product: MailSync
+      # Which unsubscribe to offer, and the one approved RFC 8058 request (GKM-020).
+      - package: GitKittieMailKit
+        product: MailUnsubscribe
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail
@@ -142,6 +145,8 @@ targets:
     sources:
       - path: GitMail/Models
       - path: Tests
+      # The recording HTTP server the unsubscribe tests share with the mail core's.
+      - path: ../../swift/GitKittieMailKit/Tests/MailUnsubscribeTests/RecordingHTTPServer.swift
     dependencies:
       - package: GitKittieMailKit
         product: MailCore
@@ -168,6 +173,8 @@ targets:
         product: MailAccounts
       - package: GitKittieMailProviders
         product: MailSync
+      - package: GitKittieMailKit
+        product: MailUnsubscribe
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail.tests

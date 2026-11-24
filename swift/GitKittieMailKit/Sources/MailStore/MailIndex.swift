@@ -198,7 +198,7 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
 /// is the smallest local id in the group, so building the threads incrementally and rebuilding
 /// them from scratch give the same ids.
 final class MailIndex {
-    static let schemaVersion = 4
+    static let schemaVersion = 5
 
     let database: SQLiteDatabase
     /// True when the file was new, damaged, or from a version without a migration path; the
@@ -228,11 +228,14 @@ final class MailIndex {
     /// folders, attachment text) is a rebuild on purpose: every row gains derived columns; so is
     /// 2 → 3 (List-Id, attachment names and sizes for the library, space membership; GKM-022/023).
     /// 3 → 4 adds the classification tables (GKM-017); the messages are classified afterwards,
-    /// in the background, and count as Focused until then.
+    /// in the background, and count as Focused until then. 4 → 5 adds the winning sender rule and
+    /// its disposition to each verdict (GKM-019); until a rule changes they are empty, as they
+    /// were.
     private func migrate(from version: Int) throws -> Bool {
         for step in version..<Self.schemaVersion {
             switch step {
             case 3: try database.execute(Self.classificationSQL)
+            case 4: try database.execute(Self.senderRuleColumnsSQL)
             default: return false
             }
         }
@@ -787,7 +790,7 @@ final class MailIndex {
           local_id UNINDEXED, subject, participants, body, attachments, attachment_text,
           tokenize = 'unicode61 remove_diacritics 2'
         );
-        """ + classificationSQL
+        """ + classificationSQL + senderRuleColumnsSQL
 }
 
 /// A content fingerprint: the same message seen twice (in two mailboxes, after a UIDVALIDITY
