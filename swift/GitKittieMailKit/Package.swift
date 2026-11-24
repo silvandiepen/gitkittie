@@ -14,7 +14,8 @@ import PackageDescription
 // - MailHTML         hostile-HTML sanitizer and HTML-to-text, Foundation only (GKM-012)
 // - MailReader       what the reader shows: thread, sender and link checks, inline parts (GKM-012)
 // - MailReaderWeb    the locked-down WKWebView the reader renders HTML in (GKM-012)
-// - MailExtraction   attachment text for search, PDF and plain text; run it isolated (GKM-016)
+// - MailExtraction   attachment text for search, PDF and plain text; isolated in XPC on macOS,
+//                    in process with strict limits on iOS (GKM-016, MAIL-031, MAIL-052)
 //
 // The provider adapters (IMAP, SMTP) live in swift/GitKittieMailProviders: they need
 // swift-nio-imap, which needs Swift 6.2 and macOS 15 / iOS 18 (MAIL-017).

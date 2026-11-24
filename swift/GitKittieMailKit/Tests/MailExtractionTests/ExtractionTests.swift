@@ -35,6 +35,53 @@ final class ExtractionTests: XCTestCase {
         XCTAssertNil(AttachmentTextExtractor.extract(garbage, mediaType: "application/pdf"))
     }
 
+    // MARK: In process (iOS, MAIL-052)
+
+    func testInProcessExtractionReadsAPDFWithinTheStricterLimits() async throws {
+        let extractor = InProcessTextExtractor(timeout: .seconds(10))
+        let pdf = try Self.makePDF(lines: ["Quarterly numbers attached"])
+        let text = await extractor.extract(pdf, mediaType: "application/pdf")
+        XCTAssertTrue(text?.contains("Quarterly numbers attached") == true, text ?? "nil")
+        let none = await extractor.extract(Data("x".utf8), mediaType: "application/zip")
+        XCTAssertNil(none, "unsupported types are not read")
+        let tooLarge = Data(count: AttachmentTextExtractor.Limits.inProcess.maximumInputBytes + 1)
+        let large = await extractor.extract(tooLarge, mediaType: "text/plain")
+        XCTAssertNil(large, "inputs over the in-process limit are not read")
+    }
+
+    func testTheInProcessTimeBudgetStopsReadingPages() throws {
+        let pdf = try Self.makePDF(pages: 3, lines: ["Page text"])
+        var limits = AttachmentTextExtractor.Limits.inProcess
+        limits.maximumDuration = .zero
+        XCTAssertNil(AttachmentTextExtractor.extract(pdf, mediaType: "application/pdf", limits: limits), "no page is read once the budget is spent")
+        limits.maximumDuration = .seconds(5)
+        let text = try XCTUnwrap(AttachmentTextExtractor.extract(pdf, mediaType: "application/pdf", limits: limits))
+        XCTAssertEqual(text.components(separatedBy: "Page text").count - 1, 3)
+    }
+
+    /// A marker left by a parse that never finished (the process died) means those bytes are
+    /// never parsed again; a finished parse leaves no marker.
+    func testBytesThatKilledAnEarlierParseAreNotParsedAgain() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("attempts-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let extractor = InProcessTextExtractor(attemptsFolder: folder)
+        let pdf = try Self.makePDF(lines: ["Survives a crash"])
+        let first = await extractor.extract(pdf, mediaType: "application/pdf")
+        XCTAssertTrue(first?.contains("Survives a crash") == true)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path), [], "a finished parse leaves no marker")
+
+        let marker = folder.appendingPathComponent(InProcessTextExtractor.sha256Hex(pdf) + ".inflight")
+        try Data().write(to: marker)
+        let afterCrash = await InProcessTextExtractor(attemptsFolder: folder).extract(pdf, mediaType: "application/pdf")
+        XCTAssertNil(afterCrash, "bytes that were being parsed when the process died are skipped")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path), "the record stays")
+        let other = await InProcessTextExtractor(attemptsFolder: folder).extract(Data("other notes".utf8), mediaType: "text/plain")
+        XCTAssertEqual(other, "other notes", "other attachments are still read")
+    }
+
+    #if os(macOS)
+    // MARK: XPC (macOS, MAIL-031)
+
     /// The same XPC interface, client and service object the app uses, over an anonymous
     /// listener in this process (the bundled service itself only exists inside GitMail.app).
     func testTheXPCRoundTrip() async throws {
@@ -80,21 +127,24 @@ final class ExtractionTests: XCTestCase {
     final class SilentService: NSObject, AttachmentTextExtractionXPC {
         func extractText(_ data: Data, mediaType: String, reply: @escaping (String?) -> Void) {}
     }
+    #endif
 
-    /// A one-page PDF with real text runs, drawn with Core Graphics and Core Text.
-    static func makePDF(lines: [String]) throws -> Data {
+    /// A PDF with real text runs on each page, drawn with Core Graphics and Core Text.
+    static func makePDF(pages: Int = 1, lines: [String]) throws -> Data {
         let data = NSMutableData()
         var box = CGRect(x: 0, y: 0, width: 595, height: 842)
         guard let consumer = CGDataConsumer(data: data as CFMutableData),
               let context = CGContext(consumer: consumer, mediaBox: &box, nil) else { throw CocoaError(.fileWriteUnknown) }
-        context.beginPDFPage(nil)
         let font = CTFontCreateWithName("Helvetica" as CFString, 14, nil)
-        for (offset, line) in lines.enumerated() {
-            let attributed = NSAttributedString(string: line, attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font])
-            context.textPosition = CGPoint(x: 72, y: 760 - CGFloat(offset) * 24)
-            CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
+        for _ in 0..<pages {
+            context.beginPDFPage(nil)
+            for (offset, line) in lines.enumerated() {
+                let attributed = NSAttributedString(string: line, attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font])
+                context.textPosition = CGPoint(x: 72, y: 760 - CGFloat(offset) * 24)
+                CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
+            }
+            context.endPDFPage()
         }
-        context.endPDFPage()
         context.closePDF()
         return data as Data
     }

@@ -143,6 +143,7 @@ final class WebViewSafetyTests: XCTestCase {
         XCTAssertEqual(server.connections, 0)
     }
 
+    #if os(macOS)
     func testClickingALinkReportsItAndNavigatesNowhere() async throws {
         let view = MailWebView(ruleLists: ruleLists, allowRemoteImages: false)
         var clicked: [Int] = []
@@ -166,6 +167,22 @@ final class WebViewSafetyTests: XCTestCase {
         XCTAssertEqual(server.connections, 0)
         window.contentView = nil
     }
+    #else
+    /// iOS has no public way to post a touch, so the link is activated by a click event from the
+    /// app's own script world (content scripts stay off). WebKit treats it as a link activation,
+    /// the same navigation a tap makes, and the guard must report it and navigate nowhere.
+    func testActivatingALinkReportsItAndNavigatesNowhere() async throws {
+        let view = MailWebView(ruleLists: ruleLists, allowRemoteImages: false)
+        var clicked: [Int] = []
+        view.onLinkActivated = { clicked.append($0) }
+        try await show(HTMLSanitizer.sanitize(#"<p><a href="http://127.0.0.1:\#(server.port)/clicked">Go</a></p>"#), in: view)
+        _ = try await view.evaluateJavaScript("document.links[0].click(); true", in: nil, contentWorld: .defaultClient)
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertEqual(clicked, [0])
+        XCTAssertEqual(view.url?.absoluteString, ReaderURLs.document)
+        XCTAssertEqual(server.connections, 0)
+    }
+    #endif
 
     // MARK: Helpers
 
