@@ -90,7 +90,8 @@ final class MailActionsTests: XCTestCase {
         XCTAssertEqual(subjects(model), ["Lunch"], "both messages of the conversation left the inbox")
         await model.select(.folder(work, "Archive"))
         XCTAssertEqual(subjects(model), ["Re: Plan"])
-        let pending = try await XCTUnwrapAsync(await model.mailStore?.actionStatus(account: work)).pending
+        let store = try XCTUnwrap(model.mailStore)
+        let pending = try await store.actionStatus(account: work).pending
         XCTAssertEqual(pending, 2, "queued for the provider")
         XCTAssertEqual(undo.undoActionName, "Archive")
 
@@ -166,7 +167,8 @@ final class MailActionsTests: XCTestCase {
         // A move to a folder of another account does nothing to these messages.
         await model.actions.perform(.move(to: "Archive", account: MailAccountID("other")), threads: model.browser.rows.map(\.threadID),
                                     in: model.browser.scope)
-        let pending = try await XCTUnwrapAsync(await model.mailStore?.actionStatus(account: work)).pending
+        let store = try XCTUnwrap(model.mailStore)
+        let pending = try await store.actionStatus(account: work).pending
         XCTAssertEqual(pending, 0)
     }
 
@@ -243,9 +245,4 @@ final class MailActionsTests: XCTestCase {
         }
         XCTFail("timed out waiting for \(what)")
     }
-}
-
-private func XCTUnwrapAsync<T>(_ value: @autoclosure () async throws -> T?, file: StaticString = #filePath, line: UInt = #line) async throws -> T {
-    let result = try await value()
-    return try XCTUnwrap(result, file: file, line: line)
 }
