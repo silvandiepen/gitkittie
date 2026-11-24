@@ -36,6 +36,40 @@ struct ReplayTransport: OutboxTransport {
     func mailbox(for account: any SendingAccount) async throws -> (any MailboxConnector)? { nil }
 }
 
+/// Holds a submission open until the test releases it, so a test can act while a send is in progress.
+final class GatedSubmitter: MailSubmitter, Sendable {
+    private let outcome: SubmissionOutcome
+    private let started: AsyncStream<Void>.Continuation
+    let startedStream: AsyncStream<Void>
+    private let gate = NIOLockedValueBox<CheckedContinuation<Void, Never>?>(nil)
+    private let opened = NIOLockedValueBox(false)
+
+    init(outcome: SubmissionOutcome) {
+        self.outcome = outcome
+        (startedStream, started) = AsyncStream.makeStream(of: Void.self)
+    }
+
+    func submit(_ message: OutgoingMessage) async -> SubmissionOutcome {
+        await withCheckedContinuation { continuation in
+            let alreadyOpen = opened.withLockedValue { $0 }
+            if alreadyOpen { continuation.resume() } else { gate.withLockedValue { $0 = continuation } }
+            started.yield()
+        }
+        return outcome
+    }
+
+    func release() {
+        opened.withLockedValue { $0 = true }
+        gate.withLockedValue { $0?.resume(); $0 = nil }
+    }
+}
+
+struct GatedTransport: OutboxTransport {
+    let submitter: GatedSubmitter
+    func submitter(for account: any SendingAccount) async throws -> any MailSubmitter { submitter }
+    func mailbox(for account: any SendingAccount) async throws -> (any MailboxConnector)? { nil }
+}
+
 struct FixedDirectory: SendingAccountDirectory {
     let account: SendingAccountSettings?
     func sendingAccount(_ id: MailAccountID) async throws -> (any SendingAccount)? {
@@ -302,5 +336,33 @@ final class OutboxStateTests: XCTestCase {
             XCTAssertEqual(state, .sent)
         }
         await sending.close()
+    }
+
+    /// Cancel used to be refused while the send loop happened to be working on the message, so it
+    /// failed at random. It now waits for that step and decides on the state the step left.
+    func testCancelWaitsForAStepInProgressInsteadOfRefusing() async throws {
+        let (message, draft) = try composed()
+        let gate = GatedSubmitter(outcome: .notSent(reason: "421 Try again later", permanent: false))
+        var configuration = Outbox.Configuration()
+        configuration.clock = clock
+        configuration.random = { 0 }
+        let outbox = try Outbox.open(folder: folder, accounts: FixedDirectory(account: account()),
+                                     transport: GatedTransport(submitter: gate), configuration: configuration, faults: .none)
+        let entry = try await outbox.enqueue(message, account: accountID, draft: draft)
+
+        let step = Task { await outbox.processDue() }
+        var started = gate.startedStream.makeAsyncIterator()
+        _ = await started.next()                       // the send is now in progress
+        let cancelling = Task { try await outbox.cancel(entry.id) }
+        try await Task.sleep(for: .milliseconds(50))   // let Cancel reach the outbox mid-send
+        gate.release()                                 // the attempt ends: not sent, may retry
+        await step.value
+
+        let cancelled = try await cancelling.value
+        XCTAssertEqual(cancelled.entry.draft, draft)
+        XCTAssertEqual(cancelled.rawMessage, message.rawMessage)
+        let left = await outbox.entries()
+        XCTAssertEqual(left, [])
+        await outbox.close()
     }
 }
