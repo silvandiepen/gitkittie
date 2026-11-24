@@ -1,4 +1,5 @@
 import XCTest
+import MailClassifier
 import MailCore
 import MailHTML
 import MailTestSupport

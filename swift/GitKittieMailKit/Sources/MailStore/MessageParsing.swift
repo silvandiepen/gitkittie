@@ -33,13 +33,19 @@ public struct ParsedMessage: Equatable, Sendable {
     public var attachments: [ParsedAttachment]
     /// What was malformed and how the parser recovered; empty for a clean message.
     public var problems: [String]
+    /// The top-level header fields in order, unfolded and RFC 2047 decoded: what the classifier
+    /// reads (List-ID, Authentication-Results, …). Attacker-written; signals, never proof.
+    public var headers: [ParsedHeader]
+    /// True when an attachment's name had to be rewritten to be safe (a path, control characters).
+    public var hasUnsafeAttachmentNames: Bool
 
     public var hasHTMLBody: Bool { htmlBody != nil }
 
     public init(messageID: String? = nil, inReplyTo: [String] = [], references: [String] = [],
                 from: [MailAddress] = [], to: [MailAddress] = [], cc: [MailAddress] = [], replyTo: [MailAddress] = [],
                 subject: String? = nil, date: Date? = nil, textBody: String? = nil, htmlBody: String? = nil,
-                attachments: [ParsedAttachment] = [], problems: [String] = []) {
+                attachments: [ParsedAttachment] = [], problems: [String] = [], headers: [ParsedHeader] = [],
+                hasUnsafeAttachmentNames: Bool = false) {
         self.messageID = messageID
         self.inReplyTo = inReplyTo
         self.references = references
@@ -53,6 +59,18 @@ public struct ParsedMessage: Equatable, Sendable {
         self.htmlBody = htmlBody
         self.attachments = attachments
         self.problems = problems
+        self.headers = headers
+        self.hasUnsafeAttachmentNames = hasUnsafeAttachmentNames
+    }
+}
+
+/// One header field of a parsed message.
+public struct ParsedHeader: Equatable, Sendable {
+    public var name: String
+    public var value: String
+    public init(name: String, value: String) {
+        self.name = name
+        self.value = value
     }
 }
 
