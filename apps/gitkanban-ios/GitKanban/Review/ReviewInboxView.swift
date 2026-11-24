@@ -37,7 +37,7 @@ struct ReviewInboxView: View {
                     }
                     .accessibilityIdentifier("reviewAllButton")
                 } footer: {
-                    Text("\(model.pendingReviewTotal) item\(model.pendingReviewTotal == 1 ? "" : "s") waiting in \(model.openReviewRequests.count) request\(model.openReviewRequests.count == 1 ? "" : "s").")
+                    Text("\(model.pendingReviewTotal) waiting in \(model.openReviewRequests.count) request\(model.openReviewRequests.count == 1 ? "" : "s").")
                 }
             }
             ForEach(model.reviewInbox) { board in
@@ -95,6 +95,8 @@ struct ReviewRunView: View {
     private enum Leaving { case close, next }
 
     private var pendingHere: Int { model.reviewRequest(refs[index])?.summary.pending ?? 0 }
+    /// What is still waiting here, in words: "2 items and 1 question".
+    private var waitingHere: String { model.reviewRequest(refs[index])?.summary.waitingDescription ?? "Nothing" }
     private var isLast: Bool { index >= refs.count - 1 }
 
     private func leave(_ how: Leaving) {
@@ -137,7 +139,7 @@ struct ReviewRunView: View {
                     .background(.bar)
                 }
                 .confirmationDialog(
-                    "\(pendingHere) item\(pendingHere == 1 ? " has" : "s have") no answer yet",
+                    "\(waitingHere) \(pendingHere == 1 ? "has" : "have") no answer yet",
                     isPresented: Binding(get: { leaving != nil }, set: { if !$0 { leaving = nil } }), titleVisibility: .visible
                 ) {
                     Button("Continue Reviewing") { jump += 1 }

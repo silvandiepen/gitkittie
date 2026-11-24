@@ -9,7 +9,8 @@ import UIKit
 // Asset review. A board has review requests when its review folder (its `review_path`,
 // or `review/` inside the board) holds `<request>/review.md` folders. They are reached
 // from the open board, from a card, and from the home screen for all boards at once.
-// Decisions and comments are written back into `review.md` through the board source.
+// Decisions, answers to questions and comments are written back into `review.md` through
+// the board source.
 
 /// All review requests for the open board, open ones first.
 struct ReviewListView: View {
@@ -49,20 +50,25 @@ struct ReviewListView: View {
 
 /// What can be done with a whole request without opening it: long-press its row for every
 /// answer, or swipe — right to approve everything waiting, left to reject or ask for changes.
-/// Each decides every item still waiting, in one write.
+/// Each decides every file still waiting, in one write. Questions are never answered this
+/// way: each needs its own answer, in the request.
 private struct ReviewRequestActions: ViewModifier {
     @Environment(AppModel.self) private var model
     let request: ReviewRequest
 
     func body(content: Content) -> some View {
-        let waiting = request.summary.pending
+        let waiting = request.summary.pendingItems
+        let questions = request.summary.unanswered
         content
             .contextMenu {
                 if waiting > 0 {
-                    Button("Approve All Waiting (\(waiting))", systemImage: "checkmark") { decide(.approved) }
-                    Button("Ask Changes on All Waiting", systemImage: "pencil") { decide(.changesRequested) }
-                    Button("Reject All Waiting", systemImage: "xmark", role: .destructive) { decide(.rejected) }
-                } else {
+                    Button("Approve All Waiting Files (\(waiting))", systemImage: "checkmark") { decide(.approved) }
+                    Button("Ask Changes on All Waiting Files", systemImage: "pencil") { decide(.changesRequested) }
+                    Button("Reject All Waiting Files", systemImage: "xmark", role: .destructive) { decide(.rejected) }
+                }
+                if questions > 0 {
+                    Text("Open the request to answer \(questions == 1 ? "its question" : "its \(questions) questions")")
+                } else if waiting == 0 {
                     Text("Nothing is waiting in this request")
                 }
             }
@@ -121,27 +127,68 @@ struct ReviewRequestRow: View {
         let s = request.summary
         var parts: [String] = []
         if let card = request.card { parts.append(card) }
-        if s.pending > 0 { parts.append("\(s.pending) pending") }
+        if s.pendingItems > 0 { parts.append("\(s.pendingItems) pending") }
         if s.approved > 0 { parts.append("\(s.approved) approved") }
         if s.changesRequested > 0 { parts.append("\(s.changesRequested) changes") }
         if s.rejected > 0 { parts.append("\(s.rejected) rejected") }
-        if parts.isEmpty { parts.append("\(s.total) item\(s.total == 1 ? "" : "s")") }
+        if let questions = s.questionsDescription { parts.append(questions) }
+        if parts.isEmpty || (parts.count == 1 && request.card != nil) { parts.append("\(s.items) item\(s.items == 1 ? "" : "s")") }
         return parts.joined(separator: " · ")
     }
 }
 
-/// One request as slides: one item per page, swiped through. Opening a request shows
-/// the items that have no answer yet; closing with some left asks first.
+/// One page of a request: a question to answer or a file to judge.
+private enum ReviewPage: Identifiable {
+    case question(ReviewQuestion)
+    case item(ReviewItem)
+
+    var id: String {
+        switch self {
+        case .question(let question): return "question:\(question.id)"
+        case .item(let item): return "item:\(item.id)"
+        }
+    }
+
+    /// Still waiting for the reviewer.
+    var isWaiting: Bool {
+        switch self {
+        case .question(let question): return !question.isAnswered
+        case .item(let item): return item.status == .pending
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .question(let question): return question.isAnswered ? Theme.accent : .secondary
+        case .item(let item): return ReviewColor.status(item.status)
+        }
+    }
+
+    /// Questions first: they are what the agent is waiting on to go on.
+    static func all(_ request: ReviewRequest) -> [ReviewPage] {
+        request.questions.map(ReviewPage.question) + request.items.map(ReviewPage.item)
+    }
+
+    /// "2 items and 1 question have no answer yet".
+    static func noAnswerTitle(_ pages: [ReviewPage]) -> String {
+        let questions = pages.filter { if case .question = $0 { return true } else { return false } }.count
+        let total = pages.count
+        return "\(ReviewSummary.describe(items: total - questions, questions: questions)) \(total == 1 ? "has" : "have") no answer yet"
+    }
+}
+
+/// One request as slides: one question or item per page, swiped through. Opening a request
+/// shows what has no answer yet; closing with some left asks first.
 struct ReviewDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let ref: ReviewRef
     /// Inside a run the surrounding view has its own way out, and asks before leaving.
     var embedded = false
-    /// Counted up from outside to jump to the first item without an answer.
+    /// Counted up from outside to jump to the first page without an answer.
     var jumpToUnanswered = 0
 
-    /// The items on show, fixed when the request opens so an answered slide does not
+    /// The pages on show, fixed when the request opens so an answered slide does not
     /// vanish under your thumb.
     @State private var slideIDs: [String] = []
     @State private var selection = ""
@@ -150,31 +197,38 @@ struct ReviewDetailView: View {
 
     private var request: ReviewRequest? { model.reviewRequest(ref) }
 
-    private func slides(_ request: ReviewRequest) -> [ReviewItem] {
-        request.items.filter { slideIDs.contains($0.id) }
+    private func slides(_ request: ReviewRequest) -> [ReviewPage] {
+        ReviewPage.all(request).filter { slideIDs.contains($0.id) }
     }
 
-    private func unanswered(_ request: ReviewRequest) -> [ReviewItem] {
-        slides(request).filter { $0.status == .pending }
+    private func unanswered(_ request: ReviewRequest) -> [ReviewPage] {
+        slides(request).filter(\.isWaiting)
     }
 
     var body: some View {
         Group {
             if let request {
-                let items = slides(request)
+                let pages = slides(request)
                 VStack(spacing: 0) {
-                    header(request, items: items)
-                    if items.isEmpty {
+                    header(request, pages: pages)
+                    if pages.isEmpty {
                         ContentUnavailableView("Nothing to review", systemImage: "checkmark.seal")
                     } else {
                         TabView(selection: $selection) {
-                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                                // Only the slide on screen and its neighbours hold their
-                                // picture: a request can have dozens of large images.
-                                ReviewSlide(request: request, item: item,
-                                            isNear: abs(index - (items.firstIndex { $0.id == selection } ?? 0)) <= 1,
-                                            onDecided: { advance(after: item.id) })
-                                    .tag(item.id)
+                            ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
+                                Group {
+                                    switch page {
+                                    case .question(let question):
+                                        QuestionSlide(request: request, question: question, onAnswered: { advance(after: page.id) })
+                                    case .item(let item):
+                                        // Only the slide on screen and its neighbours hold their
+                                        // picture: a request can have dozens of large images.
+                                        ReviewSlide(request: request, item: item,
+                                                    isNear: abs(index - (pages.firstIndex { $0.id == selection } ?? 0)) <= 1,
+                                                    onDecided: { advance(after: page.id) })
+                                    }
+                                }
+                                .tag(page.id)
                             }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
@@ -185,7 +239,7 @@ struct ReviewDetailView: View {
                 .onChange(of: showsAnswered) { _, _ in load(request) }
                 .onChange(of: jumpToUnanswered) { _, _ in goToUnanswered(request) }
                 .confirmationDialog(
-                    "\(unanswered(request).count) item\(unanswered(request).count == 1 ? " has" : "s have") no answer yet",
+                    ReviewPage.noAnswerTitle(unanswered(request)),
                     isPresented: $confirmClose, titleVisibility: .visible
                 ) {
                     Button("Continue Reviewing") { goToUnanswered(request) }
@@ -198,6 +252,7 @@ struct ReviewDetailView: View {
                 ContentUnavailableView("Review not found", systemImage: "questionmark.folder")
             }
         }
+        .background(Theme.window.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(!embedded)
         .toolbar {
@@ -211,7 +266,7 @@ struct ReviewDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Toggle("Show Answered Items", isOn: $showsAnswered)
+                    Toggle("Show Answered", isOn: $showsAnswered)
                     Button("Reload", systemImage: "arrow.clockwise") { Task { await model.refreshReviews() } }
                 } label: { Image(systemName: "ellipsis.circle") }
             }
@@ -225,18 +280,22 @@ struct ReviewDetailView: View {
         }
     }
 
-    /// What is on show: the items without an answer, with the other options of a pick-one
-    /// group that is still open. A request with nothing waiting shows everything.
+    /// What is on show: the questions and items without an answer, with the other options
+    /// of a pick-one group that is still open. A request with nothing waiting shows everything.
     private func load(_ request: ReviewRequest) {
-        let waiting = request.items.filter { $0.status == .pending }
-        let all = showsAnswered || waiting.isEmpty
-        let openGroups = Set(waiting.compactMap(\.group))
-        let shown = all ? request.items : request.items.filter { item in
-            item.status == .pending || (item.group.map(openGroups.contains) ?? false)
+        let all = ReviewPage.all(request)
+        let waitingItems = request.items.filter { $0.status == .pending }
+        let everything = showsAnswered || !all.contains(where: \.isWaiting)
+        let openGroups = Set(waitingItems.compactMap(\.group))
+        let shown = everything ? all : all.filter { page in
+            switch page {
+            case .question(let question): return !question.isAnswered
+            case .item(let item): return item.status == .pending || (item.group.map(openGroups.contains) ?? false)
+            }
         }
         slideIDs = shown.map(\.id)
         if !slideIDs.contains(selection) {
-            selection = shown.first { $0.status == .pending }?.id ?? shown.first?.id ?? ""
+            selection = shown.first(where: \.isWaiting)?.id ?? shown.first?.id ?? ""
         }
     }
 
@@ -244,44 +303,67 @@ struct ReviewDetailView: View {
         if let next = unanswered(request).first { withAnimation { selection = next.id } }
     }
 
-    /// After an answer: on to the next item that has none, when there is one.
+    /// After an answer: on to the next page that has none, when there is one.
     private func advance(after id: String) {
         guard let request = model.reviewRequest(ref) else { return }
-        let items = slides(request)
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        let later = items[(index + 1)...].first { $0.status == .pending } ?? items[..<index].first { $0.status == .pending }
+        let pages = slides(request)
+        guard let index = pages.firstIndex(where: { $0.id == id }) else { return }
+        let later = pages[(index + 1)...].first(where: \.isWaiting) ?? pages[..<index].first(where: \.isWaiting)
         if let later { withAnimation { selection = later.id } }
     }
 
-    private func header(_ request: ReviewRequest, items: [ReviewItem]) -> some View {
-        let answered = items.filter { $0.status != .pending }.count
-        let position = (items.firstIndex { $0.id == selection } ?? 0) + 1
+    private func header(_ request: ReviewRequest, pages: [ReviewPage]) -> some View {
+        let answered = pages.filter { !$0.isWaiting }.count
+        let position = (pages.firstIndex { $0.id == selection } ?? 0) + 1
         return VStack(alignment: .leading, spacing: 8) {
             if let question = request.question {
                 Text(question).font(.headline).lineLimit(3)
             }
             // One segment per slide, coloured by its answer; tap to go there.
             HStack(spacing: 3) {
-                ForEach(items) { item in
+                ForEach(pages) { page in
                     Capsule()
-                        .fill(ReviewColor.status(item.status).opacity(item.status == .pending ? 0.3 : 1))
-                        .frame(height: item.id == selection ? 7 : 4)
+                        .fill(page.color.opacity(page.isWaiting ? 0.3 : 1))
+                        .frame(height: page.id == selection ? 7 : 4)
                         .frame(maxWidth: .infinity)
                         .contentShape(Rectangle().inset(by: -8))
-                        .onTapGesture { withAnimation { selection = item.id } }
+                        .onTapGesture { withAnimation { selection = page.id } }
                 }
             }
             .frame(height: 8)
             .accessibilityHidden(true)
             HStack {
-                Text("\(position) of \(items.count)").monospacedDigit()
+                Text("\(position) of \(pages.count)").monospacedDigit()
                 Spacer()
-                Text("\(answered) of \(items.count) answered").monospacedDigit()
+                Text("\(answered) of \(pages.count) answered").monospacedDigit()
                     .accessibilityIdentifier("reviewAnsweredCount")
             }
             .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.horizontal).padding(.top, 8).padding(.bottom, 6)
+    }
+}
+
+/// One question, filling a page: answered in place, then on to the next page.
+private struct QuestionSlide: View {
+    @Environment(AppModel.self) private var model
+    let request: ReviewRequest
+    let question: ReviewQuestion
+    let onAnswered: () -> Void
+
+    var body: some View {
+        ScrollView {
+            ReviewQuestionView(question: question, isSaving: model.isSaving, onAnswer: { choices, other, comment in
+                await model.answer(request, question: question, choices: choices, other: other, comment: comment)
+            }, onAnswered: {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                onAnswered()
+            })
+            .padding(.horizontal).padding(.top, 8).padding(.bottom, 24)
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollDismissesKeyboard(.interactively)
     }
 }
 
