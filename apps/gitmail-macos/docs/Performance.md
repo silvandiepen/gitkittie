@@ -185,6 +185,33 @@ below half of `GKM_SYNC_BENCHMARK_KEEP_FREE_GB`. What the 10,000 run shows about
 message a batch writes, after the batch is durable, in one index transaction for the batch. The
 numbers above were measured without it; re-measure with GKM-038.
 
+## GKM-036 and GKM-038: what changed since, not yet measured
+
+Two changes aimed at the costs above (MAIL-065, MAIL-066), and one that changes what a first sync
+downloads (MAIL-062):
+
+- **History slices end after 20 s or 10,000 messages** (were 500 messages), so at 50,000 a first
+  sync makes a handful of passes instead of about 100, each listing every folder. New mail still
+  waits at most a slice plus a listing.
+- **Fetch and store overlap**: while the store writes one batch, the next downloads. Aimed at the
+  half of the 66 s at 50 ms that was waiting.
+- **Attachments over 1 MB stay at the provider** until opened or pinned (0.1 % of the synthetic
+  mix, 1–3 MB each): fewer bytes downloaded and stored on a first sync; messages at or below the
+  threshold take exactly the old path.
+
+The numbers above predate these and classification (GKM-017). They were **not re-measured** on
+2026-11-24: the shared disk stayed between 1.3 and 3.1 GB free all day, and the benchmark's own
+guard (3 GB kept free, plus about 2½ times the mail) refuses below that, as it should; the 50,000
+run needs at least 5 GB. To compare old and new on one build, run the benchmark twice, the second
+time with `GKM_SYNC_BENCHMARK_LEGACY=1` (500-message slices, whole messages, no overlap); the
+output now also prints how many messages were stored partially:
+
+    GKM_SYNC_BENCHMARK=1 GKM_SYNC_BENCHMARK_MESSAGES=10000 \
+      swift test -c release -Xswiftc -enable-testing --filter SyncBenchmarkTests
+    GKM_SYNC_BENCHMARK=1 GKM_SYNC_BENCHMARK_LEGACY=1 GKM_SYNC_BENCHMARK_MESSAGES=10000 \
+      swift test -c release -Xswiftc -enable-testing --filter SyncBenchmarkTests
+    # and each again with GKM_SYNC_BENCHMARK_RTT_MS=50; 50,000 with the reduced mix below
+
 ## What is left
 
 - **Pipelining.** Each body fetch waits for the previous batch to be stored; fetching the next
