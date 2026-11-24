@@ -21,7 +21,7 @@ rm -rf "$RESULT_BUNDLE"
 
 # TEST_RUNNER_ variables reach the test processes in the simulator without the prefix.
 # Keep going after a failing test: the screenshots and the failure reasons matter most then.
-status=0
+test_status=0
 TEST_RUNNER_GKM_REQUIRE_TEST_MAIL_SERVER="${GKM_REQUIRE_TEST_MAIL_SERVER:-}" \
 xcodebuild test \
   -quiet \
@@ -29,14 +29,14 @@ xcodebuild test \
   -scheme GitMail \
   -destination "$DESTINATION" \
   -derivedDataPath "$DERIVED_DATA_PATH" \
-  -resultBundlePath "$RESULT_BUNDLE" || status=$?
+  -resultBundlePath "$RESULT_BUNDLE" || test_status=$?
 
 if [[ -d "$RESULT_BUNDLE" ]]; then
   if [[ -n "$SCREENSHOTS" ]]; then
     mkdir -p "$SCREENSHOTS"
     xcrun xcresulttool export attachments --path "$RESULT_BUNDLE" --output-path "$SCREENSHOTS" || true
   fi
-  if (( status != 0 )); then
+  if (( test_status != 0 )); then
     echo "--- why tests failed ---"
     xcrun xcresulttool get test-results tests --path "$RESULT_BUNDLE" 2>/dev/null \
       | python3 -c '
@@ -53,4 +53,4 @@ for root in data.get("testNodes", []):
 ' || true
   fi
 fi
-exit $status
+exit $test_status
