@@ -50,7 +50,8 @@ struct NotificationSettings: Codable, Equatable {
     /// Whether a message that just arrived may notify. Uncertain mail lives in Focused, so it
     /// notifies like the rest of Focused; promotions, newsletters and routine updates are silent.
     func notifies(_ arrival: MailArrival) -> Bool {
-        guard arrival.isUnread, arrival.home != .quarantine, level(arrival.account) == .focused else { return false }
+        // Muted and silently archived by your sender rule (GKM-019): never, whatever else says so.
+        guard arrival.isUnread, arrival.home != .quarantine, !arrival.isSilenced, level(arrival.account) == .focused else { return false }
         switch level(list: arrival.listID, account: arrival.account) {
         case .muted: return false
         case .always: return true

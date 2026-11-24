@@ -118,6 +118,9 @@ extension MailStore {
         return try ids.compactMap { try index.summary(of: $0) }
     }
 
+    /// One message as the list shows it.
+    public func summary(of id: MailMessageID) throws -> MessageSummary? { try index.summary(of: id) }
+
     /// Counts an open of this message in its sender's local open history (this Mac only).
     public func recordOpen(of id: MailMessageID, at date: Date = Date()) throws {
         guard let verdict = try index.verdict(of: id) else { return }

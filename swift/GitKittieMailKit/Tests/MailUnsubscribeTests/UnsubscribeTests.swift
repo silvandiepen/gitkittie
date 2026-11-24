@@ -210,7 +210,8 @@ final class UnsubscribeTests: XCTestCase {
         let senders = try await store.senders(account: account)
         let list = try XCTUnwrap(senders.first { $0.scope.listID == "offers.shop.example" })
         _ = try await store.previewSenderRules([SenderRule(account: account, scope: list.scope, action: .mute)])
-        let source = try await XCTUnwrapAsync(try await store.listHeaders(of: list.scope, account: account))
+        let sourceValue = try await store.listHeaders(of: list.scope, account: account)
+        let source = try XCTUnwrap(sourceValue)
         let assessment = UnsubscribeAssessor.assess(headers: source.headers, risk: source.verdict?.classification.risk ?? .none,
                                                     reasons: source.verdict?.classification.reasons ?? [],
                                                     senderAddress: source.verdict?.fromAddress, policy: testPolicy)
@@ -223,5 +224,4 @@ final class UnsubscribeTests: XCTestCase {
         XCTAssertEqual(server.requests.map(\.path), ["/u/scan"])
     }
 
-    private func XCTUnwrapAsync<T>(_ value: T?) async throws -> T { try XCTUnwrap(value) }
 }

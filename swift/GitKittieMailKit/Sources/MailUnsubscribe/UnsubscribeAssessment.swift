@@ -138,6 +138,11 @@ public struct UnsubscribeAssessment: Sendable, Equatable {
     /// service), the list's identity doesn't match the sender, a link was refused.
     public var notes: [String]
 
+    public init(outcome: Outcome, notes: [String]) {
+        self.outcome = outcome
+        self.notes = notes
+    }
+
     public var method: UnsubscribeMethod? {
         if case .offer(let method, _) = outcome { return method }
         return nil
