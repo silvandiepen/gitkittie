@@ -152,7 +152,7 @@ final class ExportAndLibraryTests: XCTestCase {
         XCTAssertEqual(single.folder.lastPathComponent, "Photo")
 
         let threadID = try await store.search(SearchQuery(text: "invoice")).first!.threadID
-        let thread = try await store.export(.thread(threadID), to: destination)
+        let thread = try await store.export(.threads([threadID]), to: destination)
         XCTAssertEqual(thread.messages, 2)
         XCTAssertFalse(thread.folder.lastPathComponent.contains(":"), "named after the newest subject, made safe")
         XCTAssertTrue(thread.folder.lastPathComponent.hasSuffix("Invoice 7"))

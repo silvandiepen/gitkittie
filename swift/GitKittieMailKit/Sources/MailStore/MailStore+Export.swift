@@ -13,8 +13,8 @@ import MailCore
 /// What to export.
 public enum ExportSelection: Hashable, Sendable {
     case messages([MailMessageID])
-    /// Every message of a conversation.
-    case thread(String)
+    /// Every message of these conversations.
+    case threads([String])
     /// Every stored message in a space, and the space's own file.
     case space(MailSpaceID)
     /// Every stored message in an account.
@@ -119,8 +119,9 @@ extension MailStore {
         case .messages(let ids):
             var seen = Set<MailMessageID>()
             return try index.identities(of: ids).map(\.id).filter { seen.insert($0).inserted }
-        case .thread(let threadID):
-            return try index.ids(inThread: threadID)
+        case .threads(let threadIDs):
+            var seen = Set<MailMessageID>()
+            return try threadIDs.flatMap { try index.ids(inThread: $0) }.filter { seen.insert($0).inserted }
         case .space(let spaceID):
             let space = try self.space(spaceID)
             return try index.identities(of: space.members.map(\.message)).map(\.id)
@@ -137,7 +138,7 @@ extension MailStore {
 
     private func defaultExportName(_ selection: ExportSelection, ids: [MailMessageID]) throws -> String {
         switch selection {
-        case .messages, .thread:
+        case .messages, .threads:
             let subject = try index.summaries(ids: Array(ids.suffix(1))).first?.subject?.trimmingCharacters(in: .whitespaces)
             return subject?.isEmpty == false ? subject! : "Exported Mail"
         case .space(let id):
