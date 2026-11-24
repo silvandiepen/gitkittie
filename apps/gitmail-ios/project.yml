@@ -147,6 +147,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail.tests
         GENERATE_INFOPLIST_FILE: true
+        # The app's product is Mail.app (PRODUCT_NAME), not the target's name.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Mail.app/Mail"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 
   # The flows on a simulator: adding an account against the local test mail server, reading,
   # swiping, composing; and the screenshots of the main screens.
