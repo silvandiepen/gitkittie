@@ -86,14 +86,21 @@ make_tls() {
   )
 }
 
+# Seconds to wait for each port. A cold CI runner can need longer than a warm Mac
+# (GKM_TEST_MAIL_SERVER_START_TIMEOUT, default 30).
+START_TIMEOUT="${GKM_TEST_MAIL_SERVER_START_TIMEOUT:-30}"
+
 wait_for_port() {
   local port=$1
-  for _ in $(seq 1 60); do
+  for _ in $(seq 1 $(( START_TIMEOUT * 2 ))); do
     nc -z 127.0.0.1 "$port" 2>/dev/null && return 0
     is_running || { tail -20 "$LOG_FILE" >&2; die "GreenMail exited during startup"; }
     sleep 0.5
   done
-  die "port $port did not open within 30 s (log: $LOG_FILE)"
+  # Say why: GreenMail's own log, and whether something else already holds the port.
+  echo "--- last lines of $LOG_FILE ---" >&2; tail -30 "$LOG_FILE" >&2 || true
+  echo "--- listeners on port $port ---" >&2; lsof -nP -iTCP:"$port" -sTCP:LISTEN >&2 || true
+  die "port $port did not open within ${START_TIMEOUT} s (log: $LOG_FILE)"
 }
 
 start() {

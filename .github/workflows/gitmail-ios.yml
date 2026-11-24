@@ -52,6 +52,8 @@ jobs:
       - name: Boot the simulator and wait until it is ready
         run: xcrun simctl bootstatus "${DESTINATION##*id=}" -b
       - name: Start the local test mail server (GreenMail, loopback only)
+        env:
+          GKM_TEST_MAIL_SERVER_START_TIMEOUT: "120"
         run: swift/GitKittieMailProviders/scripts/test-mail-server.sh start
       - name: Build and test
         env:
