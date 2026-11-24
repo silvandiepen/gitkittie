@@ -41,7 +41,12 @@ public struct MIMEMessageParser: MessageParsing {
             htmlBody: message.htmlBody,
             attachments: attachments,
             problems: message.problems,
-            listID: listIdentifier(message.headers["List-Id"])
+            listID: listIdentifier(message.headers["List-Id"]),
+            headers: message.headers.fields.map { ParsedHeader(name: $0.name, value: EncodedWords.decode($0.rawValue)) },
+            hasUnsafeAttachmentNames: leaves.contains { part in
+                guard let raw = part.disposition?.parameters["filename"] ?? part.contentType.parameters["name"] else { return false }
+                return isUnsafeFilename(raw)
+            }
         )
     }
 
@@ -56,6 +61,15 @@ public struct MIMEMessageParser: MessageParsing {
         }
         value = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return value.isEmpty || value.count > 255 ? nil : value
+    }
+
+    /// A name that tries to be a path or to hide its extension: separators, a leading dot,
+    /// control characters or bidi overrides. A colon or a space is just a name.
+    static func isUnsafeFilename(_ name: String) -> Bool {
+        name.hasPrefix(".") || name.unicodeScalars.contains { scalar in
+            scalar == "/" || scalar == "\\" || scalar.properties.generalCategory == .control
+                || [0x202E, 0x202D, 0x202A, 0x202B, 0x2066, 0x2067, 0x2068, 0x2069].contains(scalar.value)
+        }
     }
 
     static func normaliseLineEndings(_ text: String) -> String {

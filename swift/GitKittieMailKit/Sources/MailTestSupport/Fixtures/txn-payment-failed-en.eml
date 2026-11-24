@@ -1,0 +1,12 @@
+From: Notely Billing <billing@notely.example.org>
+To: alex.morgan@example.net
+Subject: Payment failed - update your card to keep Notely Pro
+Date: Sat, 21 Nov 2026 06:30:00 +0000
+Message-ID: <billing-retry-3319@notely.example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+We couldn't charge your card for Notely Pro (USD 48.00, annual plan).
+Update your payment details in the app under Settings > Billing within 7 days to keep Pro.
+
+Notely Billing

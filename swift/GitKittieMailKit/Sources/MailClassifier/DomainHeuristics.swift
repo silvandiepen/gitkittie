@@ -1,14 +1,9 @@
 import Foundation
 
-/// Organisation domains and lookalikes.
-///
-/// PROVISIONAL: the organisation domain should come from the Public Suffix List. Until a PSL
-/// is bundled this keeps the last two labels, and treats the reserved `example.com/.org/.net`
-/// domains as public suffixes, so synthetic senders such as `shop.example.com` behave like
-/// separate organisations in the fixtures.
+/// Organisation domains and lookalikes. The organisation domain is the registrable domain from
+/// the bundled Public Suffix List (`PublicSuffixList`), so `login.bank.example.co.uk` belongs to
+/// `bank.example.co.uk`'s organisation and a user site on a shared host is its own.
 enum DomainHeuristics {
-    private static let reservedSuffixes = ["example.com", "example.org", "example.net"]
-
     static func domain(of address: String) -> String? {
         guard let at = address.lastIndex(of: "@") else { return nil }
         let domain = address[address.index(after: at)...].lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ". >"))
@@ -21,11 +16,11 @@ enum DomainHeuristics {
     }
 
     static func organisationDomain(_ host: String) -> String {
-        let labels = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")).split(separator: ".").map(String.init)
-        guard labels.count > 2 else { return labels.joined(separator: ".") }
-        let lastTwo = labels.suffix(2).joined(separator: ".")
-        if reservedSuffixes.contains(lastTwo) { return labels.suffix(3).joined(separator: ".") }
-        return lastTwo
+        PublicSuffixList.shared.registrableDomain(of: host)
+    }
+
+    static func isPublicSuffix(_ domain: String) -> Bool {
+        PublicSuffixList.shared.publicSuffix(of: domain) == PublicSuffixList.labels(domain).joined(separator: ".")
     }
 
     /// The distinctive label of an organisation domain: `cloudvault` in `cloudvault.example.com`.
@@ -34,10 +29,12 @@ enum DomainHeuristics {
     }
 
     /// The trusted organisation `organisation` imitates, if any. An exact match is not a lookalike.
+    /// A bare public suffix (`co.uk`, or an address directly at a reserved `example.org`) is
+    /// nobody's organisation: it is never a lookalike, nor something to imitate.
     static func lookalikeTarget(of organisation: String, trusted: Set<String>) -> String? {
-        guard !trusted.contains(organisation) else { return nil }
+        guard !trusted.contains(organisation), !isPublicSuffix(organisation) else { return nil }
         let label = organisationLabel(organisation)
-        for target in trusted.sorted() {
+        for target in trusted.sorted() where !isPublicSuffix(target) {
             let targetLabel = organisationLabel(target)
             guard targetLabel.count >= 4 else { continue }
             if label == targetLabel { return target }                                   // same name, other suffix

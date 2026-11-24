@@ -1,4 +1,5 @@
 import Foundation
+import MailClassifier
 import MailCore
 import MailHTML
 
@@ -99,10 +100,13 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
     public var flaggedOnly: Bool
     /// Messages in this space (GKM-022), by its id.
     public var space: MailSpaceID?
+    /// A category view (GKM-018): Focused, Transactions, … Messages not classified yet count
+    /// as Focused, so nothing is hidden while the classifier catches up.
+    public var category: MailCategory?
 
     public init(text: String = "", participant: String? = nil, account: MailAccountID? = nil, mailbox: String? = nil,
                 after: Date? = nil, before: Date? = nil, hasAttachment: Bool = false, unreadOnly: Bool = false,
-                flaggedOnly: Bool = false, space: MailSpaceID? = nil) {
+                flaggedOnly: Bool = false, space: MailSpaceID? = nil, category: MailCategory? = nil) {
         self.text = text
         self.participant = participant
         self.account = account
@@ -113,6 +117,7 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
         self.unreadOnly = unreadOnly
         self.flaggedOnly = flaggedOnly
         self.space = space
+        self.category = category
     }
 
     /// True when there is something to match in the full-text index.
@@ -122,7 +127,8 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
 
     /// Reads the search field's syntax: `from:` / `to:` / `with:` (participant), `has:attachment`,
     /// `is:unread`, `is:flagged`, `in:<folder>`, `after:` / `before:` (`yyyy-mm-dd`, local
-    /// midnight in `calendar`). Everything else is text. Unknown `key:value` stays text.
+    /// midnight in `calendar`), `category:<focused|transactions|updates|subscriptions|promotions|
+    /// quarantine>` (singular works too). Everything else is text. Unknown `key:value` stays text.
     public static func parse(_ input: String, calendar: Calendar = .current) -> SearchQuery {
         var query = SearchQuery()
         var words: [String] = []
@@ -142,6 +148,7 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
             case ("is", "unread"): query.unreadOnly = true
             case ("is", "flagged"), ("is", "starred"): query.flaggedOnly = true
             case ("in", _) where !value.isEmpty: query.mailbox = value
+            case ("category", let name) where MailCategory(searchName: name) != nil: query.category = MailCategory(searchName: name)
             case ("after", _): if let date = day(value, calendar: calendar) { query.after = date } else { words.append(token) }
             case ("before", _): if let date = day(value, calendar: calendar) { query.before = date } else { words.append(token) }
             default: words.append(token)
@@ -191,7 +198,7 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
 /// is the smallest local id in the group, so building the threads incrementally and rebuilding
 /// them from scratch give the same ids.
 final class MailIndex {
-    static let schemaVersion = 3
+    static let schemaVersion = 4
 
     let database: SQLiteDatabase
     /// True when the file was new, damaged, or from a version without a migration path; the
@@ -220,9 +227,12 @@ final class MailIndex {
     /// because it holds nothing the folder and device state do not. 1 → 2 (threads, flags,
     /// folders, attachment text) is a rebuild on purpose: every row gains derived columns; so is
     /// 2 → 3 (List-Id, attachment names and sizes for the library, space membership; GKM-022/023).
+    /// 3 → 4 adds the classification tables (GKM-017); the messages are classified afterwards,
+    /// in the background, and count as Focused until then.
     private func migrate(from version: Int) throws -> Bool {
         for step in version..<Self.schemaVersion {
             switch step {
+            case 3: try database.execute(Self.classificationSQL)
             default: return false
             }
         }
@@ -237,7 +247,7 @@ final class MailIndex {
         try database.transaction {
             try database.execute("""
                 DELETE FROM messages; DELETE FROM message_text; DELETE FROM message_refs;
-                DELETE FROM message_mailboxes; DELETE FROM message_blobs;
+                DELETE FROM message_mailboxes; DELETE FROM message_blobs; DELETE FROM message_classes;
                 """)
             try produce { try insertRow($0) }
             try assignAllThreads()
@@ -266,7 +276,7 @@ final class MailIndex {
             let thread = try database.prepare("SELECT thread_id FROM messages WHERE local_id = ?").bind([.text(id.rawValue)])
             let threadID = try thread.step() ? thread.text(0) : nil
             if let row = try rowID(of: id) { try database.prepare("DELETE FROM message_text WHERE rowid = ?").run([.int(row)]) }
-            for table in ["messages", "message_refs", "message_mailboxes", "message_blobs"] {
+            for table in ["messages", "message_refs", "message_mailboxes", "message_blobs", "message_classes"] {
                 try database.prepare("DELETE FROM \(table) WHERE local_id = ?").run([.text(id.rawValue)])
             }
             if let threadID { try assignThreads(seeds: Set(try members(ofThread: threadID))) }
@@ -692,6 +702,11 @@ final class MailIndex {
             clauses.append("EXISTS (SELECT 1 FROM space_members s WHERE s.local_id = m.local_id AND s.space_id = ?)")
             values.append(.text(space.rawValue))
         }
+        if let category = query.category {
+            let (clause, categoryValues) = categoryClause(category)
+            clauses.append(clause)
+            values += categoryValues
+        }
         return (clauses.joined(separator: " AND "), values)
     }
 
@@ -722,6 +737,9 @@ final class MailIndex {
         DROP TABLE IF EXISTS message_mailboxes;
         DROP TABLE IF EXISTS message_blobs;
         DROP TABLE IF EXISTS space_members;
+        DROP TABLE IF EXISTS message_classes;
+        DROP TABLE IF EXISTS correspondents;
+        DROP TABLE IF EXISTS authenticated_domains;
         """
 
     private static let createSQL = """
@@ -769,7 +787,7 @@ final class MailIndex {
           local_id UNINDEXED, subject, participants, body, attachments, attachment_text,
           tokenize = 'unicode61 remove_diacritics 2'
         );
-        """
+        """ + classificationSQL
 }
 
 /// A content fingerprint: the same message seen twice (in two mailboxes, after a UIDVALIDITY

@@ -197,7 +197,13 @@ private struct Corpus {
             headers: message.headers.map { .init(name: $0.name, value: $0.value) },
             textBody: message.textBody ?? "", htmlBody: message.htmlBody,
             attachmentFilenames: message.attachments.map(\.safeFilename), structureFlags: flags,
-            provider: fixture.providerVerdict.flatMap(ProviderSignals.Verdict.init(rawValue:)).map { ProviderSignals(verdict: $0) })
+            provider: Self.provider(fixture))
+    }
+
+    static func provider(_ fixture: FixtureExpectations.Fixture) -> ProviderSignals? {
+        let verdict = fixture.providerVerdict.flatMap(ProviderSignals.Verdict.init(rawValue:))
+        guard verdict != nil || fixture.providerFolders != nil else { return nil }
+        return ProviderSignals(verdict: verdict, folders: fixture.providerFolders ?? [])
     }
 }
 

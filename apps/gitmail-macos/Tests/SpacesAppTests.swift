@@ -65,6 +65,7 @@ final class SpacesAppTests: XCTestCase {
         try await seed()
         let model = AppModel(locations: locations)
         await model.open()
+        await model.select(.allMail) // the window opens on Focused (GKM-018); these tests are about All Mail
         let created = await model.spaces.create(name: "Studio", icon: "paintbrush.fill", color: "purple",
                                                 rules: [SpaceRule(domain: "studio.example.com")])
         let space = try XCTUnwrap(created)
@@ -100,6 +101,7 @@ final class SpacesAppTests: XCTestCase {
         try await seed()
         let model = AppModel(locations: locations)
         await model.open()
+        await model.select(.allMail) // the window opens on Focused (GKM-018); these tests are about All Mail
         let browser = model.browser
         XCTAssertEqual(subjects(model), ["Re: Site plan", "Studio newsletter", "Dinner"])
         await browser.select(browser.rows[0].id)

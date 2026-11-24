@@ -28,15 +28,33 @@ enum Templates {
         "発送しました", "配達", "η αποστολή σας",
     ]
 
-    /// Receipts, orders, invoices, payments, travel. Subject only.
+    /// Receipts, orders, invoices, payments, travel. Subject only. Which list a term is on sets
+    /// the urgency: something to do now (`transactionAction`, high), something to pay or attend
+    /// (`transactionDue`, normal), or a record to keep (`transaction`, low).
     static let transaction = [
-        "receipt", "order confirmation", "your order", "order #", "order no", "invoice", "payment received", "payment confirmation",
-        "payment failed", "booking confirmed", "booking confirmation", "e-ticket", "itinerary", "refund",
-        "bestelling", "bestelbevestiging", "factuur", "betaling", "ontvangstbewijs", "boekingsbevestiging",
-        "bestellbestätigung", "bestellung", "rechnung", "zahlungsbestätigung", "buchungsbestätigung",
-        "ご注文", "注文番号", "領収書", "請求書", "予約確認",
-        "απόδειξη", "παραγγελία", "τιμολόγιο", "κράτηση",
+        "receipt", "order confirmation", "your order", "order #", "order no", "payment received", "payment confirmation",
+        "refund", "bestelling", "bestelbevestiging", "betaling ontvangen", "ontvangstbewijs", "terugbetaling",
+        "bestellbestätigung", "bestellung", "zahlungsbestätigung", "zahlungseingang", "erstattung",
+        "ご注文", "注文番号", "領収書", "απόδειξη", "παραγγελία",
     ]
+
+    /// Bills to pay and bookings to attend.
+    static let transactionDue = [
+        "invoice", "booking confirmed", "booking confirmation", "e-ticket", "itinerary", "reservation",
+        "factuur", "boekingsbevestiging", "reservering", "rechnung", "buchungsbestätigung", "reservierung",
+        "請求書", "予約確認", "τιμολόγιο", "κράτηση",
+    ]
+
+    /// Transactions that need doing now.
+    static let transactionAction = [
+        "payment failed", "payment declined", "overdue", "payment due", "action required", "card expired",
+        "betaling mislukt", "achterstallig", "verlopen kaart", "zahlung fehlgeschlagen", "überfällig", "zahlungserinnerung",
+        "支払いに失敗", "期限切れ", "αποτυχία πληρωμής", "ληξιπρόθεσμ",
+    ]
+
+    /// Order words that marketing also uses ("free shipping on your order"). With an offer in the
+    /// subject and no order reference in the body, the offer wins.
+    static let weakTransaction: Set<String> = ["your order", "bestelling", "bestellung", "ご注文", "παραγγελία"]
 
     /// Offers and campaigns. Subject only; a percentage in the subject also counts.
     static let promotion = [
@@ -79,6 +97,9 @@ enum Templates {
         "exe", "scr", "com", "bat", "cmd", "pif", "js", "jse", "vbs", "vbe", "wsf", "hta", "msi", "jar", "ps1", "lnk",
         "iso", "img", "html", "htm", "svg", "app", "pkg", "dmg",
     ]
+
+    /// Provider folder and label names for junk (`\\Junk` is the IMAP special-use attribute).
+    static let junkLabels: Set<String> = ["junk", "spam", "\\junk", "junk e-mail", "junk email", "bulk mail", "ongewenst", "spam-verdacht"]
 
     static func firstMatch(_ terms: [String], in text: String) -> String? {
         terms.first { text.contains($0) }

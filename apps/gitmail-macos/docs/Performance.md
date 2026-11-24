@@ -181,6 +181,10 @@ below half of `GKM_SYNC_BENCHMARK_KEEP_FREE_GB`. What the 10,000 run shows about
   (fitted from the falling rate), so 50,000 would have taken over an hour, and a single folder of
   that size never finished at all.
 
+**Classification (GKM-017, #33) came after these numbers.** Since the merge it runs on every
+message a batch writes, after the batch is durable, in one index transaction for the batch. The
+numbers above were measured without it; re-measure with GKM-038.
+
 ## What is left
 
 - **Pipelining.** Each body fetch waits for the previous batch to be stored; fetching the next

@@ -36,6 +36,7 @@ extension MailStore {
             if fileManager.fileExists(atPath: accountFolder.path) { try fileManager.removeItem(at: accountFolder) }
             try index.removeAccount(id)
             try removeUnreferencedBlobs()
+            invalidateClassificationContext()
         }
     }
 

@@ -55,6 +55,8 @@ public actor MailStore {
     private let faults: WriteFaults
     var index: MailIndex
     var mappings: [String: RemoteMapping] = [:]
+    /// Classifier context, your corrections and rules (GKM-017, MailStore+Classification.swift).
+    var classification = ClassificationState()
 
     private init(locations: StoreLocations, parser: any MessageParsing, faults: WriteFaults, index: MailIndex) {
         self.locations = locations
@@ -67,16 +69,19 @@ public actor MailStore {
     /// Opens (or creates) the store, finishes or undoes any write a crash interrupted, and
     /// rebuilds the index from the folder when it is missing, damaged or from another schema.
     public static func open(_ locations: StoreLocations, parser: any MessageParsing = MIMEMessageParser(),
-                            faults: WriteFaults = .none) async throws -> MailStore {
+                            faults: WriteFaults = .none, classification: ClassificationOptions = ClassificationOptions()) async throws -> MailStore {
         try locations.validate()
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: locations.mailFolder, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: locations.deviceFolder, withIntermediateDirectories: true)
         try checkLayout(locations)
         let store = MailStore(locations: locations, parser: parser, faults: faults, index: try openIndex(at: locations.indexURL))
+        await store.setClassificationOptions(classification)
         try await store.finishOpening()
         return store
     }
+
+    private func setClassificationOptions(_ options: ClassificationOptions) { classification.options = options }
 
     private func finishOpening() throws {
         let journalWasReadable = try recoverInterruptedWrites()
@@ -171,6 +176,16 @@ public actor MailStore {
             for message in planned { if let remote = message.remote { try mapping.record(remote, for: message.id) } }
         }
         try FileManager.default.removeItem(at: journalURL)
+        // Read-only classification of the now durable messages (GKM-017): index only, one
+        // commit for the batch. A failure never undoes a stored message: it is recorded, and
+        // the message waits, unclassified (Focused), for `classifyPending`.
+        do {
+            try index.batch {
+                for message in planned { classifyAfterIngest(message.id, account: account, parsed: message.derived.message) }
+            }
+        } catch {
+            classification.lastError = String(describing: error)
+        }
         return planned.map(\.id)
     }
 
@@ -180,6 +195,7 @@ public actor MailStore {
         let name = try SafePath.component(account.id.rawValue)
         let url = locations.accountsFolder.appendingPathComponent(name, isDirectory: true).appendingPathComponent("account.json")
         try writer.write(JSONCoding.prettyEncoder.encode(account), to: url)
+        invalidateClassificationContext()
     }
 
     // MARK: - Reading
@@ -389,6 +405,7 @@ public actor MailStore {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         try mapping.record(location, for: id)
         try refreshIndex([id], account: account, mapping: mapping)
+        reclassifyIfClassified(id) // a move into or out of Junk is the provider's verdict
     }
 
     /// The message left `location` (moved or expunged at the provider). The local message stays.
@@ -400,6 +417,7 @@ public actor MailStore {
         // Open moves out of that folder cannot happen any more and must not bring it back.
         try supersedeLocationRows(of: id, leaving: location.mailbox, mapping: mapping, now: Date())
         try refreshIndex([id], account: account, mapping: mapping)
+        reclassifyIfClassified(id)
     }
 
     /// The mailboxes this device has seen for the account.
