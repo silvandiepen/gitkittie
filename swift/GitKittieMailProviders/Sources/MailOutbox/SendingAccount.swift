@@ -9,12 +9,15 @@ import MailSMTP
 public struct CredentialReference: Codable, Sendable, Hashable {
     /// The Keychain item's service.
     public var service: String
-    /// The Keychain item's account (usually the sign-in user name).
+    /// The Keychain item's account (GKM-010 keys items by the local account id).
     public var account: String
+    /// The name to sign in with (for iCloud and most providers, the full address).
+    public var username: String
 
-    public init(service: String, account: String) {
+    public init(service: String, account: String, username: String) {
         self.service = service
         self.account = account
+        self.username = username
     }
 }
 

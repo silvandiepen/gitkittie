@@ -60,7 +60,7 @@ final class OutboxStateTests: XCTestCase {
         SendingAccountSettings(
             accountID: accountID, identities: [MailAddress(address: "alex.morgan@example.net")],
             smtp: ServerEndpoint(host: "127.0.0.1", port: 1, security: .plaintextLoopbackOnly), imap: nil,
-            credential: CredentialReference(service: "test", account: "alex"), sentCopy: policy)
+            credential: CredentialReference(service: "test", account: "acct-1", username: "alex.morgan@example.net"), sentCopy: policy)
     }
 
     private func open(_ submitter: ReplayingSubmitter, withoutAccount: Bool = false,

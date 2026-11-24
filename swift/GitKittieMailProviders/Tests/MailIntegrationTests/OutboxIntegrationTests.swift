@@ -50,7 +50,7 @@ final class OutboxIntegrationTests: XCTestCase {
         SendingAccountSettings(
             accountID: MailAccountID("acct-it"), identities: [MailAddress(name: "Sender", address: sender.address)],
             smtp: smtp, imap: server.imaps,
-            credential: CredentialReference(service: "gitkittie-mail-test", account: sender.address), sentCopy: policy)
+            credential: CredentialReference(service: "gitkittie-mail-test", account: "acct-it", username: sender.address), sentCopy: policy)
     }
 
     private func open(_ directory: SwitchableDirectory, faults: OutboxFaults = .none) throws -> Outbox {
