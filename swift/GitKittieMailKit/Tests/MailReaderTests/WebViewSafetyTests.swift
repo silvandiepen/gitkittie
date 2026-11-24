@@ -32,7 +32,7 @@ final class WebViewSafetyTests: XCTestCase {
 
     override func tearDown() async throws {
         server?.stop()
-        try? FileManager.default.removeItem(at: ruleStoreFolder)
+        if let ruleStoreFolder { try? FileManager.default.removeItem(at: ruleStoreFolder) }
     }
 
     // MARK: The reader
@@ -222,8 +222,8 @@ final class WebViewSafetyTests: XCTestCase {
     }
 
     /// Starts WebKit's processes once, with a plain web view, before any test measures anything.
-    /// On a freshly booted simulator (CI) the first web content process takes over a minute to
-    /// launch, and the first navigation made meanwhile can be lost; every later one is fast.
+    /// On the CI runner's simulator WebKit's first loads in a test process stall for several
+    /// minutes (seen: 5-8) and then every load is fast; locally the first load takes a second.
     private static func warmUpWebKit() async throws {
         if warmUp == nil {
             do {
@@ -237,13 +237,16 @@ final class WebViewSafetyTests: XCTestCase {
     }
 
     private static func startWebKit() async throws {
-        for _ in 0..<2 {
+        let deadline = ContinuousClock.now + .seconds(15 * 60)
+        while ContinuousClock.now < deadline {
+            // A fresh view each minute: a navigation made while the processes were starting can
+            // be lost, and waiting on that view would wait forever.
             let configuration = WKWebViewConfiguration()
             configuration.websiteDataStore = .nonPersistent()
             let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 100, height: 100), configuration: configuration)
             view.loadHTMLString("<p id=warm>warm</p>", baseURL: nil)
-            let deadline = ContinuousClock.now + .seconds(150)
-            while ContinuousClock.now < deadline {
+            let attempt = min(ContinuousClock.now + .seconds(60), deadline)
+            while ContinuousClock.now < attempt {
                 try await Task.sleep(for: .milliseconds(100))
                 if !view.isLoading, view.url != nil { return }
             }
@@ -252,7 +255,7 @@ final class WebViewSafetyTests: XCTestCase {
     }
 
     private struct WarmUpFailed: Error, CustomStringConvertible {
-        var description: String { "WebKit did not load a plain page within 5 minutes" }
+        var description: String { "WebKit did not load a plain page within 15 minutes" }
     }
 
     private func settle(_ view: WKWebView, extra: Duration = .milliseconds(1_200)) async throws {
