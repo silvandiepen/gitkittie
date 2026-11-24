@@ -20,13 +20,17 @@ struct TestMailServer {
     let apiPort = 3080
 
     static func require() async throws -> TestMailServer {
-        let state = ProcessInfo.processInfo.environment["GKM_TEST_MAIL_SERVER_DIR"].map { URL(fileURLWithPath: $0) }
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Caches/GitKittieMail/test-mail-server")
+        let environment = ProcessInfo.processInfo.environment
+        // In the iOS Simulator the home directory is the test's own container; the server and its
+        // state are on the Mac, whose home the simulator passes in. Loopback is the Mac's.
+        let home = environment["SIMULATOR_HOST_HOME"] ?? NSHomeDirectory()
+        let state = environment["GKM_TEST_MAIL_SERVER_DIR"].map { URL(fileURLWithPath: $0) }
+            ?? URL(fileURLWithPath: home).appendingPathComponent("Library/Caches/GitKittieMail/test-mail-server")
         guard let ca = try? Data(contentsOf: state.appendingPathComponent("tls/ca.pem")),
               await isListening(port: 3993), await isListening(port: 3080)
         else {
             // CI starts the server and sets this, so a broken server fails instead of skipping.
-            if ProcessInfo.processInfo.environment["GKM_REQUIRE_TEST_MAIL_SERVER"] == "1" {
+            if environment["GKM_REQUIRE_TEST_MAIL_SERVER"] == "1" {
                 throw MissingServer()
             }
             throw XCTSkip(skipMessage)

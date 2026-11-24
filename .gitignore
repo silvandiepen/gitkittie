@@ -50,6 +50,7 @@ apps/gitbud-ios/build/
 apps/gitbud-ios/*.xcuserdata/
 apps/gitbud-ios/GitBud/Info.plist
 swift/*/.build/
+swift/*/TestHost/*.xcodeproj/
 .swiftpm/
 # Capture output from @sil/app-release (screenshots, promo videos, Deliver payloads).
 artifacts/

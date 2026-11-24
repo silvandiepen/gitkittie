@@ -27,8 +27,8 @@ final class WebViewSafetyTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        server.stop()
-        try? FileManager.default.removeItem(at: ruleStoreFolder)
+        server?.stop()
+        if let ruleStoreFolder { try? FileManager.default.removeItem(at: ruleStoreFolder) }
     }
 
     // MARK: The reader
@@ -90,6 +90,11 @@ final class WebViewSafetyTests: XCTestCase {
             let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 800, height: 600), configuration: configuration)
             view.loadHTMLString(try pointedAtServer(name), baseURL: nil)
             try await settle(view, extra: .seconds(2))
+            if name == "hostile-script-variants.eml" {
+                // The refresh is a second navigation; on a slow simulator it can come later.
+                let deadline = ContinuousClock.now + .seconds(30)
+                while !server.paths.contains("/meta"), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(100)) }
+            }
             XCTAssertGreaterThan(server.connections, 0, "\(name): the control made no request, so the zero above would prove nothing")
             if name == "hostile-script-variants.eml" {
                 XCTAssertTrue(server.paths.contains("/meta"), "control: the meta refresh navigated the page: \(server.paths)")
@@ -143,6 +148,7 @@ final class WebViewSafetyTests: XCTestCase {
         XCTAssertEqual(server.connections, 0)
     }
 
+    #if os(macOS)
     func testClickingALinkReportsItAndNavigatesNowhere() async throws {
         let view = MailWebView(ruleLists: ruleLists, allowRemoteImages: false)
         var clicked: [Int] = []
@@ -166,6 +172,22 @@ final class WebViewSafetyTests: XCTestCase {
         XCTAssertEqual(server.connections, 0)
         window.contentView = nil
     }
+    #else
+    /// iOS has no public way to post a touch, so the link is activated by a click event from the
+    /// app's own script world (content scripts stay off). WebKit treats it as a link activation,
+    /// the same navigation a tap makes, and the guard must report it and navigate nowhere.
+    func testActivatingALinkReportsItAndNavigatesNowhere() async throws {
+        let view = MailWebView(ruleLists: ruleLists, allowRemoteImages: false)
+        var clicked: [Int] = []
+        view.onLinkActivated = { clicked.append($0) }
+        try await show(HTMLSanitizer.sanitize(#"<p><a href="http://127.0.0.1:\#(server.port)/clicked">Go</a></p>"#), in: view)
+        _ = try await view.evaluateJavaScript("document.links[0].click(); true", in: nil, contentWorld: .defaultClient)
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertEqual(clicked, [0])
+        XCTAssertEqual(view.url?.absoluteString, ReaderURLs.document)
+        XCTAssertEqual(server.connections, 0)
+    }
+    #endif
 
     // MARK: Helpers
 
@@ -183,9 +205,16 @@ final class WebViewSafetyTests: XCTestCase {
         var finished = false
         view.onContentHeight = { _ in finished = true }
         view.show(html, parts: parts)
-        for _ in 0..<200 where !finished { try await Task.sleep(for: .milliseconds(25)) }
-        XCTAssertTrue(finished, "the document did not finish loading")
+        // Usually well under a second; the first web view on a cold simulator (CI) starts its
+        // web content process first, which can take tens of seconds.
+        let deadline = ContinuousClock.now + .seconds(90)
+        while !finished, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(25)) }
+        guard finished else { throw LoadTimedOut() }
         try await Task.sleep(for: extra)
+    }
+
+    private struct LoadTimedOut: Error, CustomStringConvertible {
+        var description: String { "the document did not finish loading" }
     }
 
     private func settle(_ view: WKWebView, extra: Duration = .milliseconds(1_200)) async throws {

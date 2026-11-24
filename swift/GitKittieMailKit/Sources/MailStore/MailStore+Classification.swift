@@ -264,7 +264,7 @@ extension MailStore {
         classification.contexts = [:]
     }
 
-    private func accountAddresses() throws -> [MailAccountID: Set<String>] {
+    func accountAddresses() throws -> [MailAccountID: Set<String>] {
         if let known = classification.accountAddresses { return known }
         var result: [MailAccountID: Set<String>] = [:]
         for account in try accounts() where !account.address.isEmpty { result[account.id] = [account.address.lowercased()] }

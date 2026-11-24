@@ -14,7 +14,8 @@ import PackageDescription
 // - MailHTML         hostile-HTML sanitizer and HTML-to-text, Foundation only (GKM-012)
 // - MailReader       what the reader shows: thread, sender and link checks, inline parts (GKM-012)
 // - MailReaderWeb    the locked-down WKWebView the reader renders HTML in (GKM-012)
-// - MailExtraction   attachment text for search, PDF and plain text; run it isolated (GKM-016)
+// - MailExtraction   attachment text for search, PDF and plain text; isolated in XPC on macOS,
+//                    in process with strict limits on iOS (GKM-016, MAIL-031, MAIL-052)
 // - MailUnsubscribe  which unsubscribe to offer, and the one approved RFC 8058 request (GKM-020)
 //
 // The provider adapters (IMAP, SMTP) live in swift/GitKittieMailProviders: they need
@@ -32,6 +33,8 @@ let package = Package(
         .library(name: "MailReader", targets: ["MailReader"]),
         .library(name: "MailReaderWeb", targets: ["MailReaderWeb"]),
         .library(name: "MailExtraction", targets: ["MailExtraction"]),
+        // Test-only: the fixture corpus, for the iOS test host (TestHost/); never linked by an app.
+        .library(name: "MailTestSupport", targets: ["MailTestSupport"]),
         .library(name: "MailUnsubscribe", targets: ["MailUnsubscribe"]),
     ],
     targets: [

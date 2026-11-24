@@ -5,9 +5,11 @@ import PDFKit
 #endif
 
 /// Text out of attachments, for search (GKM-016): PDF and plain text. Parsing a PDF is parsing
-/// attacker-controlled input with a large engine, so the app never calls this in its own
+/// attacker-controlled input with a large engine, so the macOS app never calls this in its own
 /// process: it runs in `GitMailExtractor.xpc`, a sandboxed XPC service with no network, no file
-/// access and a watchdog (ThreatModel §4). This type is the code that runs there.
+/// access and a watchdog (ThreatModel §4). This type is the code that runs there. iOS has no
+/// XPC services for apps, so there `InProcessTextExtractor` runs it with stricter limits
+/// (MAIL-052).
 public enum AttachmentTextExtractor {
     public static let supportedMediaTypes: Set<String> = [
         "application/pdf", "text/plain", "text/csv", "text/markdown", "text/x-markdown", "text/calendar",
@@ -18,7 +20,21 @@ public enum AttachmentTextExtractor {
         public var maximumInputBytes = 25 * 1024 * 1024
         public var maximumPages = 300
         public var maximumOutputCharacters = 500_000
+        /// Stop reading further PDF pages once this much time has passed (checked between
+        /// pages). `nil`: no limit — the XPC service has a watchdog that ends the process.
+        public var maximumDuration: Duration?
         public init() {}
+
+        /// For extraction inside the app's own process (iOS, MAIL-052): a hostile or huge PDF
+        /// there costs the app's memory and time, so less of it is read.
+        public static var inProcess: Limits {
+            var limits = Limits()
+            limits.maximumInputBytes = 10 * 1024 * 1024
+            limits.maximumPages = 100
+            limits.maximumOutputCharacters = 200_000
+            limits.maximumDuration = .seconds(5)
+            return limits
+        }
     }
 
     /// The text, or nil when the type is unsupported, the input is over the limits, the PDF is
@@ -47,7 +63,9 @@ public enum AttachmentTextExtractor {
               let document = PDFDocument(data: data), !document.isLocked else { return nil }
         var pages: [String] = []
         var length = 0
+        let deadline = limits.maximumDuration.map { ContinuousClock.now + $0 }
         for index in 0..<min(document.pageCount, limits.maximumPages) {
+            if let deadline, ContinuousClock.now >= deadline { break }
             guard let text = document.page(at: index)?.string else { continue }
             pages.append(text)
             length += text.count
@@ -58,6 +76,12 @@ public enum AttachmentTextExtractor {
         return nil
         #endif
     }
+}
+
+/// Something that turns attachment bytes into text for search: `IsolatedTextExtractor` (the XPC
+/// service, macOS) or `InProcessTextExtractor` (iOS). Any failure is "no text", never an error.
+public protocol AttachmentTextExtracting: Sendable {
+    func extract(_ data: Data, mediaType: String) async -> String?
 }
 
 /// The XPC interface between the app and `GitMailExtractor.xpc`. Bytes in, text out: the
@@ -95,7 +119,7 @@ public final class ExtractionService: NSObject, AttachmentTextExtractionXPC {
 /// The app's side: sends attachment bytes to the extraction service and waits, at most
 /// `timeout`, for text. Any failure — the service crashed, timed out, or is missing — is
 /// "no text", never an error in the app.
-public actor IsolatedTextExtractor {
+public actor IsolatedTextExtractor: AttachmentTextExtracting {
     private let makeConnection: @Sendable () -> NSXPCConnection
     private let timeout: Duration
     private var connection: NSXPCConnection?

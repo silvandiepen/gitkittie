@@ -1,3 +1,4 @@
+import Security
 import XCTest
 import MailCore
 import MailProvider
@@ -67,12 +68,26 @@ final class MailAccountsTests: XCTestCase {
 
     /// The real Keychain. Unsigned test runs cannot use the data protection keychain, so this
     /// uses the login keychain with a test-only service; the item is removed afterwards.
+    ///
+    /// iOS has only the data protection keychain, and it needs the app's keychain entitlement.
+    /// Package tests in the iOS Simulator run in an unhosted `xctest` process that has none, so
+    /// there this skips; the iOS app's hosted tests (GKM-027) run it with the entitlement.
     func testPasswordsGoToTheKeychainAndBackAsSecrets() throws {
         let store = KeychainCredentialStore(service: "app.hakobs.gitmail.tests.\(UUID().uuidString)", useDataProtectionKeychain: false)
         let account = MailAccountID()
         defer { try? store.delete(for: account) }
 
-        XCTAssertNil(try store.secret(for: account))
+        let initial: Secret?
+        do {
+            initial = try store.secret(for: account)
+        } catch let error as CredentialStoreError where error.status == errSecMissingEntitlement {
+            #if os(iOS)
+            throw XCTSkip("The iOS keychain needs an entitled test host; unhosted simulator tests have none (\(error))")
+            #else
+            throw error
+            #endif
+        }
+        XCTAssertNil(initial)
         try store.save(Secret("first pass word"), for: account)
         try store.save(Secret(" second-pass word "), for: account)
         let read = try XCTUnwrap(try store.secret(for: account))

@@ -187,7 +187,7 @@ An agent reading mail is reading text written by strangers. Any instruction in a
 | Threat | Protection | Owner |
 | --- | --- | --- |
 | Classification moves or deletes provider mail | Virtual mode by default (MAIL-007): classification never changes provider folders or flags | GKM-017 |
-| A bulk action affects more than the preview showed | Preview is the exact set; revalidate against current provider state before executing; protected items (starred, pinned, linked, uncertain) excluded | GKM-021, GKM-031 |
+| A bulk action affects more than the preview showed | Preview is the exact set; revalidate against current provider state before executing; protected items (starred, pinned, linked, uncertain) excluded. Built for cleanup (MAIL-059, MAIL-060): the run re-makes the preview in the store step that writes the journal and refuses on any difference; `CleanupTests` prove preview = execution, protected survive, one Undo, and a provider change between preview and run is refused | GKM-021, GKM-031 |
 | Automatic permanent purge | None in the MVP; retention is opt-in per account, category or rule, uses Trash first, and is audited | GKM-031 |
 | Two devices running the same retention rule | One coordinating device; destructive operations pause offline until reconciled | GKM-031, GKM-028 |
 | Stale cache resurrecting deleted mail | Reconcile provider changes before destructive operations; tombstones in metadata sync. Built for actions: a queued move or delete of a message that left its folder at the provider is superseded, never replayed (MAIL-035) | GKM-011, GKM-015, GKM-026 |
