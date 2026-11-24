@@ -19,11 +19,7 @@ final class WebViewSafetyTests: XCTestCase {
     private var ruleStoreFolder: URL!
     private var ruleLists: MailWebView.RuleLists!
 
-    /// Whether WebKit has been started (or tried) in this test process yet.
-    private static var warmUp: Result<Void, Error>?
-
     override func setUp() async throws {
-        try await Self.warmUpWebKit()
         server = try await CountingServer.start()
         ruleStoreFolder = FileManager.default.temporaryDirectory.appendingPathComponent("rules-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: ruleStoreFolder, withIntermediateDirectories: true)
@@ -219,43 +215,6 @@ final class WebViewSafetyTests: XCTestCase {
 
     private struct LoadTimedOut: Error, CustomStringConvertible {
         var description: String { "the document did not finish loading" }
-    }
-
-    /// Starts WebKit's processes once, with a plain web view, before any test measures anything.
-    /// On the CI runner's simulator WebKit's first loads in a test process stall for several
-    /// minutes (seen: 5-8) and then every load is fast; locally the first load takes a second.
-    private static func warmUpWebKit() async throws {
-        if warmUp == nil {
-            do {
-                try await startWebKit()
-                warmUp = .success(())
-            } catch {
-                warmUp = .failure(error)
-            }
-        }
-        try warmUp?.get()
-    }
-
-    private static func startWebKit() async throws {
-        let deadline = ContinuousClock.now + .seconds(15 * 60)
-        while ContinuousClock.now < deadline {
-            // A fresh view each minute: a navigation made while the processes were starting can
-            // be lost, and waiting on that view would wait forever.
-            let configuration = WKWebViewConfiguration()
-            configuration.websiteDataStore = .nonPersistent()
-            let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 100, height: 100), configuration: configuration)
-            view.loadHTMLString("<p id=warm>warm</p>", baseURL: nil)
-            let attempt = min(ContinuousClock.now + .seconds(60), deadline)
-            while ContinuousClock.now < attempt {
-                try await Task.sleep(for: .milliseconds(100))
-                if !view.isLoading, view.url != nil { return }
-            }
-        }
-        throw WarmUpFailed()
-    }
-
-    private struct WarmUpFailed: Error, CustomStringConvertible {
-        var description: String { "WebKit did not load a plain page within 15 minutes" }
     }
 
     private func settle(_ view: WKWebView, extra: Duration = .milliseconds(1_200)) async throws {
