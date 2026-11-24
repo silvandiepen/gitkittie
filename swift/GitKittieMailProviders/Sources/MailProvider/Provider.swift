@@ -21,6 +21,21 @@ public protocol MailboxSession: AnyObject {
     func flags(in folder: String) async throws -> [RemoteMessageID: MessageFlags]
     func fetchMessage(_ id: RemoteMessageID) async throws -> FetchedMessage
 
+    // Batched reads for the sync coordinator (GKM-011). Each call is one command; callers pick
+    // the batch sizes, so no single response holds a whole folder. All ids in one call are in
+    // one folder at one UIDVALIDITY; messages that are gone are left out of the result.
+
+    /// Selects the folder and lists every UID in it, ascending.
+    func listing(of folder: String) async throws -> FolderListing
+    /// Flags, size, dates and envelope for these messages.
+    func summaries(of ids: [RemoteMessageID]) async throws -> [RemoteMessageSummary]
+    /// The raw messages.
+    func fetchMessages(_ ids: [RemoteMessageID]) async throws -> [FetchedMessage]
+    /// Current flags of these messages.
+    func flags(of ids: [RemoteMessageID]) async throws -> [RemoteMessageID: MessageFlags]
+    /// The largest message the session can fetch; the sync skips and reports bigger ones.
+    var maximumMessageSize: Int { get }
+
     func setFlags(_ flags: MessageFlags, _ change: FlagChange, on ids: [RemoteMessageID]) async throws
     /// Moves messages. Returns the new ids when the server reports them (UIDPLUS), keyed by old id.
     func move(_ ids: [RemoteMessageID], to folder: String) async throws -> [RemoteMessageID: RemoteMessageID]
