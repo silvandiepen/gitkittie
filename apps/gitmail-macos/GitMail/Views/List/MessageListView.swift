@@ -28,6 +28,7 @@ struct MessageListView: View {
         .background(Theme.window)
         .navigationTitle(title)
         .searchable(text: searchText, placement: .toolbar, prompt: "Search mail")
+        .toolbar { MessageActionToolbar(model: model) }
         .toolbar {
             ToolbarItem {
                 Button {
@@ -52,13 +53,15 @@ struct MessageListView: View {
                     LazyVStack(spacing: 2) {
                         ForEach(browser.rows) { row in
                             MessageRow(row: row, isSelected: row.id == browser.selectedRowID, showsAccount: model.accounts.count > 1,
-                                       accountName: model.accounts.first { $0.id == row.latest.account }?.displayName)
+                                       accountName: model.accounts.first { $0.id == row.latest.account }?.displayName,
+                                       isPending: model.sync.replay[row.latest.account]?.status.pendingMessages.contains(row.latest.id) == true)
                                 .id(row.id)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     listFocused = true
                                     Task { await browser.select(row.id) }
                                 }
+                                .contextMenu { MessageActionRowMenu(rowID: row.id) }
                                 .onAppear {
                                     if row.id == browser.rows.last?.id { Task { await browser.loadMore() } }
                                 }
@@ -70,6 +73,7 @@ struct MessageListView: View {
                 .focusable()
                 .focusEffectDisabled()
                 .focused($listFocused)
+                .trashOnDelete(model)
                 .onMoveCommand { direction in
                     switch direction {
                     case .down: Task { await browser.selectNext() }
@@ -102,6 +106,8 @@ private struct MessageRow: View {
     let isSelected: Bool
     let showsAccount: Bool
     let accountName: String?
+    /// A change made here has not reached the provider yet (GKM-015).
+    var isPending = false
 
     private var summary: MessageSummary { row.latest }
 
@@ -123,6 +129,13 @@ private struct MessageRow: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 4)
+                    if isPending {
+                        Image(systemName: "icloud.and.arrow.up")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .help("Waiting to reach the provider")
+                            .accessibilityLabel("Change waiting to sync")
+                    }
                     if row.isFlagged {
                         Image(systemName: "flag.fill").font(.caption).foregroundStyle(.orange)
                     }

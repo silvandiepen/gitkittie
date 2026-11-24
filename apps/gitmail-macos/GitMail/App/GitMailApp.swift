@@ -29,16 +29,8 @@ struct GitMailApp: App {
             }
             CommandMenu("Message") {
                 let selected = model.browser.selectedMessage
-                Button(selected?.isUnread == true ? "Mark as Read" : "Mark as Unread") {
-                    if let selected { Task { await model.browser.setUnread(!selected.isUnread, for: selected.id) } }
-                }
-                .keyboardShortcut("u", modifiers: [.command, .shift])
-                .disabled(selected == nil)
-                Button(selected?.isFlagged == true ? "Unflag" : "Flag") {
-                    if let selected { Task { await model.browser.setFlagged(!selected.isFlagged, for: selected.id) } }
-                }
-                .keyboardShortcut("l", modifiers: [.command, .shift])
-                .disabled(selected == nil)
+                // Read, flag, archive, trash, move: the marked or selected conversations, with Undo (GKM-015).
+                MessageActionCommands(model: model)
                 Divider()
                 Button("Next Conversation") { Task { await model.browser.selectNext() } }
                     .keyboardShortcut(.downArrow, modifiers: [.command, .option])
