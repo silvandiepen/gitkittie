@@ -91,9 +91,7 @@ extension MailStore {
             try record(messages[offset].remote, for: id, account: account)
             outcomes[offset] = .matched(id)
         }
-        if !flags.isEmpty {
-            try index.batch { try setFlags(flags, account: account) }
-        }
+        if !flags.isEmpty { try setFlags(flags, account: account) }
         let bytes = fresh.reduce(Int64(0)) { $0 + Int64($1.message.eml.count) }
         if bytes > 0 { try addImportedBytes(bytes, account: account) }
         return outcomes.map { $0! }

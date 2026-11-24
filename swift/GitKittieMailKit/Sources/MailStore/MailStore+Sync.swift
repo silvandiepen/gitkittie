@@ -54,8 +54,11 @@ extension MailStore {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         try mapping.setSyncFlags(flags)
         try reconcileFlagRows(with: flags, mapping: mapping, now: Date())
-        for id in flags.keys.sorted() {
-            try index.setFlags(effectiveState(of: id, mapping: mapping).flags, for: id)
+        // One commit for the lot, not one per message (GKM-035).
+        try index.batch {
+            for id in flags.keys.sorted() {
+                try index.setFlags(effectiveState(of: id, mapping: mapping).flags, for: id)
+            }
         }
     }
 
