@@ -37,7 +37,7 @@ struct IndexRecord {
 final class MailIndex {
     static let schemaVersion = 1
 
-    private let database: SQLiteDatabase
+    let database: SQLiteDatabase
     /// True when the file was new, damaged, or from a version without a migration path; the
     /// store then rebuilds it from the folder.
     private(set) var needsRebuild = false
@@ -172,9 +172,9 @@ final class MailIndex {
         return words.map { "\"\($0)\"*" }.joined(separator: " ")
     }
 
-    private static let summaryColumns = "m.local_id, m.account_id, m.subject, m.from_name, m.from_address, m.sort_date, m.snippet, m.has_attachments"
+    static let summaryColumns = "m.local_id, m.account_id, m.subject, m.from_name, m.from_address, m.sort_date, m.snippet, m.has_attachments"
 
-    private func readSummaries(_ statement: SQLiteDatabase.Statement) throws -> [MessageSummary] {
+    func readSummaries(_ statement: SQLiteDatabase.Statement) throws -> [MessageSummary] {
         var result: [MessageSummary] = []
         while try statement.step() {
             guard let raw = statement.text(0), let id = MailMessageID(raw), let account = statement.text(1) else { continue }

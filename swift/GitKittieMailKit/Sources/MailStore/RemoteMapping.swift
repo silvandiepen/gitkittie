@@ -8,27 +8,32 @@ import MailCore
 /// Losing it costs a reconciliation pass (Message-ID and fingerprint candidates from the
 /// index), not mail.
 final class RemoteMapping {
-    static let schemaVersion = 1
-    private let database: SQLiteDatabase
+    /// 1: mailboxes and locations (GKM-005). 2: folder list with sync cursors, provider flags,
+    /// counters (GKM-011; RemoteMapping+Sync.swift).
+    static let schemaVersion = 2
+    let database: SQLiteDatabase
 
     init(url: URL) throws {
         database = try SQLiteDatabase(url: url)
         try database.execute("PRAGMA journal_mode = WAL")
         let version = try database.userVersion
         guard version != Self.schemaVersion else { return }
-        guard version == 0 else {
+        guard version < Self.schemaVersion else {
             // Not a cache: never drop it silently. A newer layout needs a newer app.
             throw MailStoreError.unsupportedLayoutVersion(version)
         }
         try database.transaction {
-            try database.execute("""
-                CREATE TABLE mailboxes (name TEXT PRIMARY KEY, uid_validity INTEGER NOT NULL);
-                CREATE TABLE locations (
-                  mailbox TEXT NOT NULL, uid_validity INTEGER NOT NULL, uid INTEGER NOT NULL, local_id TEXT NOT NULL,
-                  PRIMARY KEY (mailbox, uid_validity, uid)
-                );
-                CREATE INDEX locations_by_local_id ON locations (local_id);
-                """)
+            if version < 1 {
+                try database.execute("""
+                    CREATE TABLE mailboxes (name TEXT PRIMARY KEY, uid_validity INTEGER NOT NULL);
+                    CREATE TABLE locations (
+                      mailbox TEXT NOT NULL, uid_validity INTEGER NOT NULL, uid INTEGER NOT NULL, local_id TEXT NOT NULL,
+                      PRIMARY KEY (mailbox, uid_validity, uid)
+                    );
+                    CREATE INDEX locations_by_local_id ON locations (local_id);
+                    """)
+            }
+            if version < 2 { try database.execute(Self.syncTablesSQL) }
             try database.setUserVersion(Self.schemaVersion)
         }
     }

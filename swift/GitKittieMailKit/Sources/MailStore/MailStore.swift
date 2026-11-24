@@ -46,10 +46,10 @@ public actor MailStore {
 
     public nonisolated let locations: StoreLocations
     private let parser: any MessageParsing
-    private let writer: AtomicWriter
+    let writer: AtomicWriter
     private let faults: WriteFaults
-    private var index: MailIndex
-    private var mappings: [String: RemoteMapping] = [:]
+    var index: MailIndex
+    var mappings: [String: RemoteMapping] = [:]
 
     private init(locations: StoreLocations, parser: any MessageParsing, faults: WriteFaults, index: MailIndex) {
         self.locations = locations
@@ -404,7 +404,7 @@ public actor MailStore {
 
     private func safeDirectory(_ relative: String) -> URL? { safeFile(relative) }
 
-    private func sortedContents(of folder: URL) throws -> [URL] {
+    func sortedContents(of folder: URL) throws -> [URL] {
         try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
@@ -417,7 +417,7 @@ public actor MailStore {
         }
     }
 
-    private func mapping(for account: String) throws -> RemoteMapping {
+    func mapping(for account: String) throws -> RemoteMapping {
         if let mapping = mappings[account] { return mapping }
         let mapping = try RemoteMapping(url: locations.stateFolder(account).appendingPathComponent("sync.sqlite"))
         mappings[account] = mapping
