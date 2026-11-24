@@ -7,6 +7,8 @@ import Observation
 enum SidebarSelection: Hashable {
     case allMail
     case account(MailAccountID)
+    /// One folder of an account at the provider, by the provider's name for it.
+    case folder(MailAccountID, String)
 }
 
 /// The single UI-facing state object. It owns the store and turns what the store holds into
@@ -36,11 +38,19 @@ final class AppModel {
 
     private let locations: StoreLocations?
     private var store: MailStore?
+    /// Accounts' sync and setup services (GKM-010, GKM-011; AppModel+Accounts.swift).
+    let sync: AccountSync
 
-    /// `locations` nil means the app's standard folders (`StoreLocations.standard()`).
-    init(locations: StoreLocations? = nil) {
+    /// `locations` nil means the mail folder the person chose, or the app's standard folders
+    /// (`MailFolderLocation`).
+    init(locations: StoreLocations? = nil, services: AccountServices = .live) {
         self.locations = locations
+        self.sync = AccountSync(services: services)
+        sync.onStoreChanged = { [weak self] in await self?.refreshAfterSync() }
     }
+
+    /// The open store, for the account intents.
+    var mailStore: MailStore? { store }
 
     /// Where the user's mail lives, once the store is open.
     var mailFolder: URL? { store?.locations.mailFolder }
@@ -51,7 +61,7 @@ final class AppModel {
     var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var selectedAccount: MailAccount? {
-        guard case .account(let id) = selection else { return nil }
+        guard let id = selection.account else { return nil }
         return accounts.first { $0.id == id }
     }
 
@@ -59,11 +69,14 @@ final class AppModel {
 
     func open() async {
         phase = .opening
+        await sync.stopAll()
         do {
-            let opened = try await MailStore.open(locations ?? StoreLocations.standard())
+            let folder = MailFolderLocation(defaults: sync.services.defaults)
+            let opened = try await MailStore.open(locations ?? folder.locations())
             store = opened
             try await reload()
             phase = .ready
+            await sync.start(accounts, store: opened)
         } catch {
             phase = .failed(String(describing: error))
         }
@@ -73,6 +86,7 @@ final class AppModel {
         guard selection != self.selection else { return }
         self.selection = selection
         await refreshList()
+        if case .folder(let account, let name) = selection { await sync.setActiveFolder(name, account: account) }
     }
 
     func search(_ text: String) async {
@@ -109,11 +123,25 @@ final class AppModel {
 
     // MARK: Loading
 
+    /// After an account was added or removed.
+    func reloadAfterAccountChange() async throws { try await reload() }
+
+    /// After the sync stored mail or saw new folders: counts and the list, keeping the selection.
+    func refreshAfterSync() async {
+        guard let store else { return }
+        do {
+            totalCount = try await store.messageCount()
+            try await loadList(from: store)
+        } catch {
+            actionError = String(describing: error)
+        }
+    }
+
     private func reload() async throws {
         guard let store else { return }
         accounts = try await store.accounts()
         totalCount = try await store.messageCount()
-        if case .account(let id) = selection, !accounts.contains(where: { $0.id == id }) { selection = .allMail }
+        if let id = selection.account, !accounts.contains(where: { $0.id == id }) { selection = .allMail }
         try await loadList(from: store)
     }
 
@@ -127,9 +155,16 @@ final class AppModel {
     }
 
     private func loadList(from store: MailStore) async throws {
-        let account: MailAccountID? = if case .account(let id) = selection { id } else { nil }
+        let account = selection.account
         let query = searchText
-        let found = isSearching ? try await store.search(query, account: account) : try await store.summaries(account: account)
+        let found: [MessageSummary]
+        if isSearching {
+            found = try await store.search(query, account: account)
+        } else if case .folder(let id, let mailbox) = selection {
+            found = try await store.summaries(account: id, mailbox: mailbox)
+        } else {
+            found = try await store.summaries(account: account)
+        }
         // Typing fast: only the newest query's results are shown.
         guard query == searchText else { return }
         messages = found
