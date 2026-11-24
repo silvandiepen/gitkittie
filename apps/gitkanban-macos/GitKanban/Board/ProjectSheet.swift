@@ -21,6 +21,10 @@ struct ProjectSheet: View {
         /// What the row was when the settings opened, for lanes and epics: they keep their id.
         var lane: Lane?
         var epic: Epic?
+        /// A name agents or people wrote on tasks that is not one of the board's members, and
+        /// on how many tasks: shown so it can be merged into a member. Not saved as a member
+        /// unless it is added as one.
+        var unlisted: Int?
     }
 
     /// The parts of a board's settings, as the sidebar of the settings window lists them.
@@ -173,6 +177,9 @@ struct ProjectSheet: View {
     }
 
     private func edit(_ field: RowField) {
+        // A name that is only on tasks is merged or added, not renamed: renaming it here
+        // would change nothing on the tasks that carry it.
+        if members.contains(where: { $0.id == field.row && $0.unlisted != nil }) { selection = [field.row]; return }
         selection = [field.row]
         editingField = field
     }
@@ -486,6 +493,12 @@ struct ProjectSheet: View {
                         HStack(spacing: 10) {
                             decoration(category, index).frame(width: 16)
                             editableText($item.text, hint: category.hint, field: .name(item.id))
+                                .opacity(item.unlisted == nil ? 1 : 0.6)
+                            if let count = item.unlisted {
+                                Text("on \(count) task\(count == 1 ? "" : "s") · not a member")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .help("Written on tasks but not one of the board's members. Merge it into a member, or add it as one.")
+                            }
                             Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary)
                                 .help("Drag to order")
                         }
@@ -530,7 +543,9 @@ struct ProjectSheet: View {
     @ViewBuilder private func entryMenu(_ item: Entry, in category: Category) -> some View {
         let ids = selection.contains(item.id) ? selection : [item.id]
         let chosen = entries(category).wrappedValue.filter { ids.contains($0.id) }
-        if chosen.count == 1 {
+        if chosen.count == 1, item.unlisted != nil, let index = entries(category).wrappedValue.firstIndex(where: { $0.id == item.id }) {
+            Button("Add as Member", systemImage: "person.badge.plus") { entries(category).wrappedValue[index].unlisted = nil }
+        } else if chosen.count == 1 {
             Button("Rename", systemImage: "pencil") { edit(.name(item.id)) }
         } else if category.canMerge {
             Menu("Merge Into") { mergeTargets(chosen, in: category) }
@@ -567,6 +582,10 @@ struct ProjectSheet: View {
         }
         let ids = Set(chosen.map(\.id))
         entries(category).wrappedValue.removeAll { ids.contains($0.id) }
+        // Tasks are about to name the target, so it is a member from now on.
+        if let index = entries(category).wrappedValue.firstIndex(where: { $0.id == target.id }) {
+            entries(category).wrappedValue[index].unlisted = nil
+        }
         selection = [target.id]
     }
 
@@ -637,7 +656,7 @@ struct ProjectSheet: View {
         name = config.project ?? editing.name
         lanes = config.lanes.map { Entry(text: $0.name, lane: $0) }
         priorities = config.priorities.map { Entry(text: $0.id) }
-        members = config.users.map { Entry(text: $0.id) }
+        members = config.users.map { Entry(text: $0.id) } + Self.unlistedPeople(on: model.allCards, members: config.users.map(\.id))
         types = config.types.map { Entry(text: $0) }
         epics = config.epics.map { Entry(text: $0.name ?? $0.id, epic: $0) }
         if ProcessInfo.processInfo.environment["GITKANBAN_SETTINGS_SELECT"] != nil { selection = Set(members.prefix(2).map(\.id)) }
@@ -665,6 +684,20 @@ struct ProjectSheet: View {
         }
     }
 
+    /// Names assigned on tasks that are not members, most used first. Agents often write a
+    /// name of their own (`claude-merge`, `claude-513`); listing them lets you merge them.
+    static func unlistedPeople(on cards: [Card], members: [String]) -> [Entry] {
+        let known = Set(members.map { $0.lowercased() })
+        var counts: [String: Int] = [:]
+        for card in cards {
+            guard let name = card.fields.assignee?.trimmingCharacters(in: .whitespaces), !name.isEmpty,
+                  name != "null", !known.contains(name.lowercased()) else { continue }
+            counts[name, default: 0] += 1
+        }
+        return counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            .map { Entry(text: $0.key, unlisted: $0.value) }
+    }
+
     private func texts(_ list: [Entry]) -> [String] {
         list.map { $0.text.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
@@ -675,13 +708,13 @@ struct ProjectSheet: View {
         if let editing {
             await model.saveProjectSettings(
                 project: editing, name: trimmedName, description: description,
-                lanes: builtLanes, priorities: texts(priorities).map { Priority(id: $0) }, users: texts(members).map { User(id: $0) },
+                lanes: builtLanes, priorities: texts(priorities).map { Priority(id: $0) }, users: texts(members.filter { $0.unlisted == nil }).map { User(id: $0) },
                 types: texts(types), epics: builtEpics.map(\.epic),
                 appearance: isCategorized ? (icon, color) : nil,
                 merges: fieldMerges(epicIDs: Dictionary(uniqueKeysWithValues: builtEpics.map { ($0.row, $0.epic.id) })))
         } else {
             await model.createProject(name: trimmedName, description: description, lanes: builtLanes,
-                                      priorities: texts(priorities).map { Priority(id: $0) }, users: texts(members).map { User(id: $0) },
+                                      priorities: texts(priorities).map { Priority(id: $0) }, users: texts(members.filter { $0.unlisted == nil }).map { User(id: $0) },
                                       epics: builtEpics.map(\.epic))
         }
         // The linked folders are their own lines in the README, written after the rest.
