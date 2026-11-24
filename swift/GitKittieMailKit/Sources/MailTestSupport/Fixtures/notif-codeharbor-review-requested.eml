@@ -1,0 +1,30 @@
+Authentication-Results: mx.example.net;
+ spf=pass smtp.mailfrom=codeharbor.example.com;
+ dkim=pass header.d=codeharbor.example.com;
+ dmarc=pass header.from=codeharbor.example.com
+From: Dana Field <notifications@codeharbor.example.com>
+Reply-To: acme-labs/widgets <reply+AB12CD@reply.codeharbor.example.com>
+To: acme-labs/widgets <widgets@noreply.codeharbor.example.com>
+Cc: Alex Morgan <alex.morgan@example.net>, Review requested <review_requested@noreply.codeharbor.example.com>
+Subject: [acme-labs/widgets] Fix flaky sync test (PR #214)
+Date: Mon, 23 Nov 2026 10:15:00 +0000
+Message-ID: <acme-labs/widgets/pull/214@codeharbor.example.com>
+List-ID: acme-labs/widgets <widgets.acme-labs.codeharbor.example.com>
+List-Archive: https://codeharbor.example.com/acme-labs/widgets
+List-Unsubscribe: <mailto:unsub+AB12CD@reply.codeharbor.example.com>, <https://codeharbor.example.com/notifications/unsubscribe/AB12CD>
+X-CodeHarbor-Reason: review_requested
+X-Auto-Response-Suppress: All
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+@alexmorgan your review was requested on this pull request.
+
+You can view, comment on, or merge this pull request online at:
+
+  https://codeharbor.example.com/acme-labs/widgets/pull/214
+
+Commit Summary
+  * Retry the sync assertion once before failing
+
+--
+Reply to this email directly or view it on CodeHarbor.

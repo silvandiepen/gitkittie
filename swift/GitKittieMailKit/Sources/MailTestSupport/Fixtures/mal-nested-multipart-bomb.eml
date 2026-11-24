@@ -1,0 +1,253 @@
+From: Archive Service <documents@archive-drop.example.net>
+To: alex.morgan@example.net
+Subject: Documents
+Date: Tue, 24 Nov 2026 00:00:01 +0000
+Message-ID: <nest-60@archive-drop.example.net>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="lvl0"
+
+--lvl0
+Content-Type: multipart/mixed; boundary="lvl1"
+
+--lvl1
+Content-Type: multipart/mixed; boundary="lvl2"
+
+--lvl2
+Content-Type: multipart/mixed; boundary="lvl3"
+
+--lvl3
+Content-Type: multipart/mixed; boundary="lvl4"
+
+--lvl4
+Content-Type: multipart/mixed; boundary="lvl5"
+
+--lvl5
+Content-Type: multipart/mixed; boundary="lvl6"
+
+--lvl6
+Content-Type: multipart/mixed; boundary="lvl7"
+
+--lvl7
+Content-Type: multipart/mixed; boundary="lvl8"
+
+--lvl8
+Content-Type: multipart/mixed; boundary="lvl9"
+
+--lvl9
+Content-Type: multipart/mixed; boundary="lvl10"
+
+--lvl10
+Content-Type: multipart/mixed; boundary="lvl11"
+
+--lvl11
+Content-Type: multipart/mixed; boundary="lvl12"
+
+--lvl12
+Content-Type: multipart/mixed; boundary="lvl13"
+
+--lvl13
+Content-Type: multipart/mixed; boundary="lvl14"
+
+--lvl14
+Content-Type: multipart/mixed; boundary="lvl15"
+
+--lvl15
+Content-Type: multipart/mixed; boundary="lvl16"
+
+--lvl16
+Content-Type: multipart/mixed; boundary="lvl17"
+
+--lvl17
+Content-Type: multipart/mixed; boundary="lvl18"
+
+--lvl18
+Content-Type: multipart/mixed; boundary="lvl19"
+
+--lvl19
+Content-Type: multipart/mixed; boundary="lvl20"
+
+--lvl20
+Content-Type: multipart/mixed; boundary="lvl21"
+
+--lvl21
+Content-Type: multipart/mixed; boundary="lvl22"
+
+--lvl22
+Content-Type: multipart/mixed; boundary="lvl23"
+
+--lvl23
+Content-Type: multipart/mixed; boundary="lvl24"
+
+--lvl24
+Content-Type: multipart/mixed; boundary="lvl25"
+
+--lvl25
+Content-Type: multipart/mixed; boundary="lvl26"
+
+--lvl26
+Content-Type: multipart/mixed; boundary="lvl27"
+
+--lvl27
+Content-Type: multipart/mixed; boundary="lvl28"
+
+--lvl28
+Content-Type: multipart/mixed; boundary="lvl29"
+
+--lvl29
+Content-Type: multipart/mixed; boundary="lvl30"
+
+--lvl30
+Content-Type: multipart/mixed; boundary="lvl31"
+
+--lvl31
+Content-Type: multipart/mixed; boundary="lvl32"
+
+--lvl32
+Content-Type: multipart/mixed; boundary="lvl33"
+
+--lvl33
+Content-Type: multipart/mixed; boundary="lvl34"
+
+--lvl34
+Content-Type: multipart/mixed; boundary="lvl35"
+
+--lvl35
+Content-Type: multipart/mixed; boundary="lvl36"
+
+--lvl36
+Content-Type: multipart/mixed; boundary="lvl37"
+
+--lvl37
+Content-Type: multipart/mixed; boundary="lvl38"
+
+--lvl38
+Content-Type: multipart/mixed; boundary="lvl39"
+
+--lvl39
+Content-Type: multipart/mixed; boundary="lvl40"
+
+--lvl40
+Content-Type: multipart/mixed; boundary="lvl41"
+
+--lvl41
+Content-Type: multipart/mixed; boundary="lvl42"
+
+--lvl42
+Content-Type: multipart/mixed; boundary="lvl43"
+
+--lvl43
+Content-Type: multipart/mixed; boundary="lvl44"
+
+--lvl44
+Content-Type: multipart/mixed; boundary="lvl45"
+
+--lvl45
+Content-Type: multipart/mixed; boundary="lvl46"
+
+--lvl46
+Content-Type: multipart/mixed; boundary="lvl47"
+
+--lvl47
+Content-Type: multipart/mixed; boundary="lvl48"
+
+--lvl48
+Content-Type: multipart/mixed; boundary="lvl49"
+
+--lvl49
+Content-Type: multipart/mixed; boundary="lvl50"
+
+--lvl50
+Content-Type: multipart/mixed; boundary="lvl51"
+
+--lvl51
+Content-Type: multipart/mixed; boundary="lvl52"
+
+--lvl52
+Content-Type: multipart/mixed; boundary="lvl53"
+
+--lvl53
+Content-Type: multipart/mixed; boundary="lvl54"
+
+--lvl54
+Content-Type: multipart/mixed; boundary="lvl55"
+
+--lvl55
+Content-Type: multipart/mixed; boundary="lvl56"
+
+--lvl56
+Content-Type: multipart/mixed; boundary="lvl57"
+
+--lvl57
+Content-Type: multipart/mixed; boundary="lvl58"
+
+--lvl58
+Content-Type: multipart/mixed; boundary="lvl59"
+
+--lvl59
+Content-Type: multipart/mixed; boundary="lvl60"
+
+--lvl60
+Content-Type: text/plain; charset=utf-8
+
+Open the innermost part.
+--lvl60--
+--lvl59--
+--lvl58--
+--lvl57--
+--lvl56--
+--lvl55--
+--lvl54--
+--lvl53--
+--lvl52--
+--lvl51--
+--lvl50--
+--lvl49--
+--lvl48--
+--lvl47--
+--lvl46--
+--lvl45--
+--lvl44--
+--lvl43--
+--lvl42--
+--lvl41--
+--lvl40--
+--lvl39--
+--lvl38--
+--lvl37--
+--lvl36--
+--lvl35--
+--lvl34--
+--lvl33--
+--lvl32--
+--lvl31--
+--lvl30--
+--lvl29--
+--lvl28--
+--lvl27--
+--lvl26--
+--lvl25--
+--lvl24--
+--lvl23--
+--lvl22--
+--lvl21--
+--lvl20--
+--lvl19--
+--lvl18--
+--lvl17--
+--lvl16--
+--lvl15--
+--lvl14--
+--lvl13--
+--lvl12--
+--lvl11--
+--lvl10--
+--lvl9--
+--lvl8--
+--lvl7--
+--lvl6--
+--lvl5--
+--lvl4--
+--lvl3--
+--lvl2--
+--lvl1--
+--lvl0--

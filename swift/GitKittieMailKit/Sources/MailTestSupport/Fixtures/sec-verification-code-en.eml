@@ -1,0 +1,19 @@
+Authentication-Results: mx.example.net;
+ spf=pass smtp.mailfrom=cloudvault.example.com;
+ dkim=pass header.d=cloudvault.example.com;
+ dmarc=pass header.from=cloudvault.example.com
+From: CloudVault <no-reply@accounts.cloudvault.example.com>
+To: alex.morgan@example.net
+Subject: Your CloudVault verification code
+Date: Mon, 23 Nov 2026 08:01:12 +0000
+Message-ID: <otp-9f12aa@accounts.cloudvault.example.com>
+Auto-Submitted: auto-generated
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Your verification code is:
+
+    482913
+
+It expires in 10 minutes. If you didn't try to sign in, you can ignore
+this email; nobody can sign in without this code.

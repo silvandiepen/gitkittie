@@ -1,0 +1,19 @@
+From: Larkspur Coffee Roasters <receipts@larkspur.example.com>
+To: alex.morgan@example.net
+Subject: Your receipt from Larkspur Coffee Roasters #LK-21102
+Date: Tue, 24 Nov 2026 09:00:00 +0000
+Message-ID: <receipt-LK-21102@larkspur.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="cut-off"
+
+--cut-off
+Content-Type: text/plain; charset=utf-8
+
+Receipt #LK-21102
+1 x Decaf Brazil, 250 g            EUR 9.50
+Total paid                         EUR 9.50
+
+--cut-off
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Receipt #LK-21102</p><p>Total paid EUR 9.50</p>

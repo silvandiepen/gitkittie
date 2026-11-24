@@ -1,0 +1,30 @@
+Authentication-Results: mx.example.net;
+ spf=pass smtp.mailfrom=weeklyloom.example.org;
+ dkim=pass header.d=weeklyloom.example.org;
+ dmarc=pass header.from=weeklyloom.example.org
+From: The Weekly Loom <editor@weeklyloom.example.org>
+To: alex.morgan@example.net
+Subject: The Weekly Loom, Issue 112: repairing old wool
+Date: Thu, 19 Nov 2026 06:00:00 +0000
+Message-ID: <issue-112@news.weeklyloom.example.org>
+List-ID: The Weekly Loom <weekly.weeklyloom.example.org>
+List-Unsubscribe: <https://weeklyloom.example.org/unsubscribe/k9x2>, <mailto:leave-k9x2@weeklyloom.example.org>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Precedence: bulk
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="loom-112"
+
+--loom-112
+Content-Type: text/plain; charset=utf-8
+
+The Weekly Loom, Issue 112
+
+This week: how to darn a moth hole, a visit to a small spinning mill in
+Drenthe, and three readers' projects.
+
+--loom-112
+Content-Type: text/html; charset=utf-8
+
+<html><body><h1>The Weekly Loom</h1><p>Issue 112</p><p>This week: how to darn a moth hole, a visit to a small spinning mill, and three readers' projects.</p>
+<p><a href="https://weeklyloom.example.org/unsubscribe/k9x2">Unsubscribe</a></p></body></html>
+--loom-112--

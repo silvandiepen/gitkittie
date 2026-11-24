@@ -1,0 +1,27 @@
+From: Skylark Air <bookings@skylark-air.example.net>
+To: Alex Morgan <alex.morgan@example.net>
+Subject: Booking confirmed: Amsterdam to Lisbon, 12 Dec 2026 (ref QX7K2P)
+Date: Sun, 15 Nov 2026 21:10:44 +0000
+Message-ID: <booking-QX7K2P@skylark-air.example.net>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="sk-alt"
+
+--sk-alt
+Content-Type: text/plain; charset=utf-8
+
+Your booking is confirmed.
+
+Booking reference: QX7K2P
+Passenger: Alex Morgan
+Flight SX 1042  Amsterdam (AMS) 07:15 -> Lisbon (LIS) 09:50, 12 Dec 2026
+Total paid: EUR 186.40
+
+Online check-in opens 24 hours before departure.
+
+--sk-alt
+Content-Type: text/html; charset=utf-8
+
+<html><body><h2>Your booking is confirmed</h2><p>Booking reference: <b>QX7K2P</b></p>
+<p>Flight SX 1042 Amsterdam (AMS) 07:15 &rarr; Lisbon (LIS) 09:50, 12 Dec 2026</p>
+<p>Total paid: EUR 186.40</p></body></html>
+--sk-alt--

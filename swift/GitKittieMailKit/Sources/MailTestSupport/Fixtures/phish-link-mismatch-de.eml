@@ -1,0 +1,11 @@
+From: Nordbank Kundenservice <service@nordbank-kundenservice.example.org>
+To: alex.morgan@example.net
+Subject: =?UTF-8?Q?Ihr_Konto_wurde_gesperrt_=2D_bitte_best=C3=A4tigen?=
+Date: Mon, 23 Nov 2026 04:04:04 +0100
+Message-ID: <sperre-4411@nordbank-kundenservice.example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Sehr geehrter Kunde,</p>
+<p>Ihr Konto wurde aus Sicherheitsgründen gesperrt. Bitte melden Sie sich an, um es zu entsperren:</p>
+<p><a href="http://login-nordbank.example.net/entsperren">https://www.nordbank.example.com/login</a></p></body></html>

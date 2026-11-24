@@ -1,0 +1,19 @@
+Authentication-Results: mx.example.net;
+ spf=pass smtp.mailfrom=larkspur.example.com;
+ dkim=pass header.d=larkspur.example.com;
+ dmarc=pass header.from=larkspur.example.com
+From: Larkspur Coffee Roasters <news@news.larkspur.example.com>
+To: alex.morgan@example.net
+Subject: Autumn sale: 30% off all single-origin beans
+Date: Mon, 16 Nov 2026 15:00:00 +0000
+Message-ID: <campaign-autumn-2026@news.larkspur.example.com>
+List-ID: Larkspur offers <offers.larkspur.example.com>
+List-Unsubscribe: <https://larkspur.example.com/email/unsubscribe?u=a1b2>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Precedence: bulk
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body><h1>Autumn sale</h1><p>30% off all single-origin beans this week only.</p>
+<p><a href="https://larkspur.example.com/sale">Shop now</a></p>
+<img src="https://larkspur.example.com/open.gif?c=autumn" width="1" height="1" alt=""></body></html>
