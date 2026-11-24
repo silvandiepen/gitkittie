@@ -176,9 +176,18 @@ public enum RemoteBoardStore {
     /// read). Cheap enough to run for every board on the home screen.
     public static func listing(source: BoardFileSource, folder: String) async throws -> BoardListing {
         let rootConfig = await resolveRootConfig(source: source, projectFolder: folder)
-        let projectConfig = (try? await loadProjectConfig(source: source, dir: folder)) ?? ProjectConfig()
+        // nil when the README could not be read (offline, rate-limited, a slow host): then
+        // the listing does not know the board's name, icon or colour, and says so.
+        let readConfig: ProjectConfig? = await {
+            guard let text = try? await source.readText(join(folder, "README.md")) else { return nil }
+            let (frontmatter, _) = BoardMarkdown.splitFrontmatter(text)
+            guard let frontmatter else { return ProjectConfig() }
+            return try? BoardStore.parseProjectConfig(yaml: frontmatter)
+        }()
+        let projectConfig = readConfig ?? ProjectConfig()
         let lanes = resolveEffectiveConfig(rootConfig, projectConfig).lanes.filter { !$0.folder.isEmpty }
         var result = try await listing(source: source, folder: folder, lanes: lanes)
+        result.readAppearance = readConfig != nil
         result.name = projectConfig.project.flatMap { $0.isEmpty ? nil : $0 }
         result.icon = projectConfig.icon
         result.color = projectConfig.color
@@ -334,6 +343,9 @@ public struct BoardListing: Sendable, Equatable {
     public var name: String?
     public var icon: String?
     public var color: String?
+    /// Whether the README was read, so `name`, `icon` and `color` are what it says. When it
+    /// was not, they are unknown, not empty: a saved icon must not be cleared for them.
+    public var readAppearance = false
 
     public init(lanes: [Lane], files: [String: [String]]) {
         self.lanes = lanes

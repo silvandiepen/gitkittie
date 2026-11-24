@@ -178,7 +178,9 @@ extension AppModel {
             persistSnapshots()
         }
         boardSummaries[key] = Self.summary(listing, since: boardSnapshots[key] ?? [:])
-        rememberAppearance(name: listing.name, icon: listing.icon, color: listing.color, repoID: repo.id, folder: folder)
+        if listing.readAppearance {
+            rememberAppearance(name: listing.name, icon: listing.icon, color: listing.color, repoID: repo.id, folder: folder)
+        }
     }
 
     /// Refresh every added board's summary (pull to refresh on the home screen).
@@ -202,7 +204,9 @@ extension AppModel {
         boardSnapshots[key] = listing.locations
         persistSnapshots()
         boardSummaries[key] = Self.summary(listing, since: listing.locations)
-        rememberAppearance(name: listing.name, icon: listing.icon, color: listing.color, repoID: repo.id, folder: folder)
+        if listing.readAppearance {
+            rememberAppearance(name: listing.name, icon: listing.icon, color: listing.color, repoID: repo.id, folder: folder)
+        }
     }
 
     static func summary(_ listing: BoardListing, since snapshot: [String: String]) -> BoardSummary {
