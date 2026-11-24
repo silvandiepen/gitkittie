@@ -42,6 +42,22 @@ struct MailWindow: View {
         } message: {
             Text(model.actionError ?? "")
         }
+        .alert("Import finished", isPresented: Binding(
+            get: { model.importReport != nil },
+            set: { if !$0 { model.importReport = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.importReport?.summary ?? "")
+        }
+        .alert("Something went wrong", isPresented: Binding(
+            get: { model.browser.actionError != nil },
+            set: { if !$0 { model.browser.actionError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.browser.actionError ?? "")
+        }
     }
 }
 
