@@ -53,6 +53,8 @@ struct AccountsSidebarSection: View {
                     FolderRow(folder: folder)
                         .tag(SidebarSelection.folder(account.id, folder.name))
                         .contextMenu { menu(for: account) }
+                        // Drop conversations on a folder to move them there (GKM-015).
+                        .movesDroppedConversations(to: folder, of: account.id, model: model)
                 }
                 if folders.isEmpty, account.connection != nil {
                     Text("Folders appear after the first sync.")
@@ -80,6 +82,10 @@ struct AccountsSidebarSection: View {
         }
         if account.connection != nil {
             Button("Sync Now") { Task { await model.sync.syncNow() } }
+        }
+        if (model.sync.replay[account.id]?.status.failed ?? 0) > 0 {
+            Button("Try Failed Changes Again") { Task { await model.actions.retryFailed(account: account.id) } }
+            Button("Discard Failed Changes") { Task { await model.actions.discardFailed(account: account.id) } }
         }
         Divider()
         Button("Remove Account…") { sheet = .remove(account) }
