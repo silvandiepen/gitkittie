@@ -156,7 +156,7 @@ struct AddAccountScreen: View {
         let draft = draft
         task = Task {
             defer { isVerifying = false }
-            do {
+            do throws(AccountSetupError) {
                 try await model.addAccount(draft)
                 dismiss()
             } catch {

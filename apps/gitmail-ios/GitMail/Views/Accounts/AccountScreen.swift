@@ -72,7 +72,7 @@ struct AccountScreen: View {
         passwordError = nil
         Task {
             defer { isSaving = false }
-            do {
+            do throws(AccountSetupError) {
                 try await model.updatePassword(password, for: accountID)
                 password = ""
             } catch {
