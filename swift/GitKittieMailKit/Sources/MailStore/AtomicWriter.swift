@@ -63,15 +63,26 @@ struct AtomicWriter {
             throw error
         }
         guard close(fd) == 0 else { throw MailStoreError.io(operation: "close", path: temporary.path, code: errno) }
+        StoreIOStatistics.record {
+            $0.fileSyncs += 1
+            $0.filesWritten += 1
+            $0.bytesWritten += Int64(data.count)
+        }
         return StagedFile(temporary: temporary, destination: destination)
     }
 
     func commit(_ staged: StagedFile) throws {
+        try rename(staged)
+        try Self.syncDirectory(staged.destination.deletingLastPathComponent())
+    }
+
+    /// Moves a staged file into place without flushing its directory: for several files in the
+    /// same directories, whose caller flushes each directory once afterwards.
+    func rename(_ staged: StagedFile) throws {
         try faults.check(.beforeRename(fileName: staged.destination.lastPathComponent))
-        guard rename(staged.temporary.path, staged.destination.path) == 0 else {
+        guard Foundation.rename(staged.temporary.path, staged.destination.path) == 0 else {
             throw MailStoreError.io(operation: "rename", path: staged.destination.path, code: errno)
         }
-        try Self.syncDirectory(staged.destination.deletingLastPathComponent())
     }
 
     /// Flush a directory so a rename in it survives power loss, not only a crash.
@@ -80,5 +91,6 @@ struct AtomicWriter {
         guard fd >= 0 else { throw MailStoreError.io(operation: "open", path: directory.path, code: errno) }
         defer { close(fd) }
         guard fsync(fd) == 0 else { throw MailStoreError.io(operation: "fsync", path: directory.path, code: errno) }
+        StoreIOStatistics.record { $0.directorySyncs += 1 }
     }
 }

@@ -207,6 +207,7 @@ final class MailIndex {
 
     init(url: URL) throws {
         database = try SQLiteDatabase(url: url)
+        database.countCommits(as: .index)
         try database.execute("PRAGMA journal_mode = WAL")
         try database.execute("PRAGMA synchronous = NORMAL")
         let version = try database.userVersion
@@ -252,6 +253,11 @@ final class MailIndex {
             try assignAllThreads()
         }
         needsRebuild = false
+    }
+
+    /// Runs `body` in one transaction, so many writes cost one commit (GKM-035).
+    func batch<T>(_ body: () throws -> T) throws -> T {
+        try database.transaction(body)
     }
 
     func upsert(_ record: IndexRecord) throws {
@@ -352,7 +358,7 @@ final class MailIndex {
     private func assignThreads(seeds: Set<String>) throws {
         let row = try database.prepare("SELECT account_id, message_id FROM messages WHERE local_id = ?")
         let refs = try database.prepare("SELECT ref_id FROM message_refs WHERE local_id = ?")
-        let claimants = try database.prepare("SELECT count(DISTINCT fingerprint) FROM messages WHERE account_id = ? AND message_id = ?")
+        let claimants = try database.prepare(Self.claimantsSQL)
         let linked = try database.prepare("""
             SELECT local_id FROM messages WHERE account_id = ?1 AND message_id = ?2
             UNION SELECT local_id FROM message_refs WHERE account_id = ?1 AND ref_id = ?2
@@ -394,6 +400,30 @@ final class MailIndex {
             for member in component { try update.run([.text(threadID), .text(member)]) }
             assigned.formUnion(component)
         }
+    }
+
+    /// How many different messages claim a Message-ID. INDEXED BY: left alone, SQLite reads the
+    /// fingerprint index in order for the DISTINCT, which visits every message in the account on
+    /// each call and made every arrival slower than the one before (GKM-035).
+    static let claimantsSQL = """
+        SELECT count(DISTINCT fingerprint) FROM messages INDEXED BY messages_by_message_id
+        WHERE account_id = ? AND message_id = ?
+        """
+
+    /// Reconciliation candidates as two indexed lookups. Written as one OR over optional
+    /// parameters, SQLite could use neither index and read the whole account per call (GKM-035).
+    static let candidatesSQL = """
+        SELECT local_id FROM messages WHERE account_id = ?1 AND message_id = ?2
+        UNION SELECT local_id FROM messages WHERE account_id = ?1 AND fingerprint = ?3
+        ORDER BY local_id
+        """
+
+    /// SQLite's plan for a statement, one line per step (for tests that pin index use).
+    func queryPlan(_ sql: String) throws -> [String] {
+        let statement = try database.prepare("EXPLAIN QUERY PLAN " + sql)
+        var lines: [String] = []
+        while try statement.step() { lines.append(statement.text(3) ?? "") }
+        return lines
     }
 
     /// Every thread at once, for a rebuild: union-find over the same graph `assignThreads` walks.
@@ -627,11 +657,7 @@ final class MailIndex {
     /// Messages in an account whose Message-ID or content fingerprint matches: candidates for
     /// reconciliation after a move or a UIDVALIDITY reset, never automatic merges.
     func candidates(account: MailAccountID, messageID: String?, fingerprint: String?) throws -> [MailMessageID] {
-        let statement = try database.prepare("""
-            SELECT local_id FROM messages WHERE account_id = ?
-              AND ((? IS NOT NULL AND message_id = ?) OR (? IS NOT NULL AND fingerprint = ?))
-            ORDER BY local_id
-            """).bind([.text(account.rawValue), .optional(messageID), .optional(messageID), .optional(fingerprint), .optional(fingerprint)])
+        let statement = try database.prepare(Self.candidatesSQL).bind([.text(account.rawValue), .optional(messageID), .optional(fingerprint)])
         var ids: [MailMessageID] = []
         while try statement.step() { if let raw = statement.text(0), let id = MailMessageID(raw) { ids.append(id) } }
         return ids

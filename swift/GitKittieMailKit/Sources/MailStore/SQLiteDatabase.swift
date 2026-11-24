@@ -24,6 +24,21 @@ final class SQLiteDatabase {
 
     deinit { sqlite3_close(handle) }
 
+    /// Which counter in ``StoreIOStatistics`` this connection's commits go to.
+    enum CommitCounter: Int {
+        case index = 1
+        case syncState = 2
+    }
+
+    /// Counts every committed transaction (explicit or implicit) in ``StoreIOStatistics``.
+    func countCommits(as counter: CommitCounter) {
+        sqlite3_commit_hook(handle, { context in
+            let isIndex = Int(bitPattern: context) == CommitCounter.index.rawValue
+            StoreIOStatistics.record { if isIndex { $0.indexCommits += 1 } else { $0.syncStateCommits += 1 } }
+            return 0 // 0: let the commit go ahead
+        }, UnsafeMutableRawPointer(bitPattern: counter.rawValue))
+    }
+
     func execute(_ sql: String) throws {
         var error: UnsafeMutablePointer<CChar>?
         let code = sqlite3_exec(handle, sql, nil, nil, &error)

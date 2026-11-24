@@ -24,6 +24,18 @@ public struct IMAPConnector: MailboxConnector {
         self.commandTimeout = commandTimeout
     }
 
+    /// The longest response line accepted. swift-nio-imap's default (8 KB) is shorter than the
+    /// `UID SEARCH ALL` answer of a folder with about 1,900 messages, so a larger mailbox failed
+    /// every listing with "connection lost" (GKM-035). 16 MiB holds the UIDs of a folder of
+    /// about two million messages and still bounds what a hostile server can make us buffer;
+    /// message bodies are streamed as literals and limited separately (`maximumBodySize`).
+    static let maximumResponseLine = 16 * 1024 * 1024
+
+    static func makeClientHandler() -> IMAPClientHandler {
+        IMAPClientHandler(parserOptions: ResponseParser.Options(bufferLimit: maximumResponseLine),
+                          maximumBufferSize: maximumResponseLine)
+    }
+
     public func withSession<Result>(_ body: (any MailboxSession) async throws -> Result) async throws -> Result {
         try await withIMAPSession { try await body($0) }
     }
@@ -55,7 +67,7 @@ public struct IMAPConnector: MailboxConnector {
                     if let tlsHandlerFactory {
                         try channel.pipeline.syncOperations.addHandler(tlsHandlerFactory())
                     }
-                    try channel.pipeline.syncOperations.addHandler(IMAPClientHandler())
+                    try channel.pipeline.syncOperations.addHandler(Self.makeClientHandler())
                     return try NIOAsyncChannel<Response, IMAPClientHandler.Message>(wrappingChannelSynchronously: channel)
                 }
             }
