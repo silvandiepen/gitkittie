@@ -40,6 +40,29 @@ struct GitMailApp: App {
                 .keyboardShortcut("l", modifiers: [.command, .shift])
                 .disabled(selected == nil)
                 Divider()
+                // Spaces and export (GKM-022, GKM-023): the marked conversations, or the selected one.
+                Menu("Add to Space") {
+                    ForEach(model.spaces.spaces) { space in
+                        Button(space.name) {
+                            Task {
+                                await model.spaces.add(threads: model.browser.threadIDs(actingOn: nil), to: space.id)
+                                model.browser.clearMarks()
+                                await model.browser.reload()
+                            }
+                        }
+                    }
+                }
+                .disabled(model.spaces.spaces.isEmpty || model.browser.threadIDs(actingOn: nil).isEmpty)
+                Button("Export Conversation…") {
+                    let threads = model.browser.threadIDs(actingOn: nil)
+                    Task { await Platform.export(.threads(threads), what: "Conversation", model: model) }
+                }
+                .disabled(model.browser.threadIDs(actingOn: nil).isEmpty)
+                Button("Export Message…") {
+                    if let selected { Task { await Platform.export(.messages([selected.id]), what: "Message", model: model) } }
+                }
+                .disabled(selected == nil)
+                Divider()
                 Button("Next Conversation") { Task { await model.browser.selectNext() } }
                     .keyboardShortcut(.downArrow, modifiers: [.command, .option])
                 Button("Previous Conversation") { Task { await model.browser.selectPrevious() } }

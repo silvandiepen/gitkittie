@@ -1,3 +1,4 @@
+import AppKit
 import MailCore
 import MailStore
 import SwiftUI
@@ -51,14 +52,22 @@ struct MessageListView: View {
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         ForEach(browser.rows) { row in
-                            MessageRow(row: row, isSelected: row.id == browser.selectedRowID, showsAccount: model.accounts.count > 1,
+                            MessageRow(row: row, isSelected: row.id == browser.selectedRowID || browser.isMarked(row.id),
+                                       showsAccount: model.accounts.count > 1,
                                        accountName: model.accounts.first { $0.id == row.latest.account }?.displayName)
                                 .id(row.id)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     listFocused = true
+                                    // ⌘-click and ⇧-click mark several conversations (GKM-022).
+                                    let flags = NSEvent.modifierFlags
+                                    if flags.contains(.command) { browser.toggleMark(row.id); return }
+                                    if flags.contains(.shift) { browser.extendMark(to: row.id); return }
+                                    browser.clearMarks()
                                     Task { await browser.select(row.id) }
                                 }
+                                .draggable(SpaceLook.dragPayload(browser.threadIDs(actingOn: row.id)))
+                                .contextMenu { SpaceRowMenu(rowID: row.id) }
                                 .onAppear {
                                     if row.id == browser.rows.last?.id { Task { await browser.loadMore() } }
                                 }
@@ -91,6 +100,8 @@ struct MessageListView: View {
         case .folder(_, let name): name
         case .drafts: "Drafts"
         case .outbox: "Outbox"
+        case .space(let id): model.spaces.space(id)?.name ?? "Space"
+        case .attachments: "Attachments"
         }
     }
 }
