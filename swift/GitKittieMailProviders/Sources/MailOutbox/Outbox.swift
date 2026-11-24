@@ -103,6 +103,8 @@ public actor Outbox {
     private var lock: Int32
     private var entriesByID: [OperationID: OutboxEntry] = [:]
     private var inFlight: Set<OperationID> = []
+    /// Callers waiting for the outbox to finish what it is doing with a message (see `waitUntilIdle`).
+    private var idleWaiters: [OperationID: [CheckedContinuation<Void, Never>]] = [:]
     private var isProcessing = false
     /// Set when a fault hook stopped the outbox: like a dead process, it does nothing more.
     private var stopped = false
@@ -254,7 +256,7 @@ public actor Outbox {
         guard var entry = entriesByID[id] else { throw OutboxError.notFound(id) }
         guard entry.canSendAgain, !inFlight.contains(id) else { throw OutboxError.notAllowed(action: "send again", state: entry.state) }
         inFlight.insert(id)
-        defer { inFlight.remove(id) }
+        defer { finishFlight(id) }
         switch try await lookUp(entry) {
         case .found(let inSent, let policy):
             try markFound(&entry, inSent: inSent, policy: policy)
@@ -274,14 +276,19 @@ public actor Outbox {
         guard var entry = entriesByID[id] else { throw OutboxError.notFound(id) }
         guard entry.state == .uncertain, !inFlight.contains(id) else { return entry }
         inFlight.insert(id)
-        defer { inFlight.remove(id) }
+        defer { finishFlight(id) }
         try await reconcile(&entry)
         return entry
     }
 
     /// Takes a send out of the outbox. Not while it is in flight and not once sent. Returns the
     /// entry and its bytes, so the caller can put the draft back.
-    public func cancel(_ id: OperationID) throws -> (entry: OutboxEntry, rawMessage: Data) {
+    public func cancel(_ id: OperationID) async throws -> (entry: OutboxEntry, rawMessage: Data) {
+        // The send loop may be looking at this message right now. Cancel waits for that step to
+        // end and then decides on the state it left: a queued message that could not go out yet
+        // is cancelled; one that went out is not. Refusing because of timing made Cancel fail at
+        // random (seen in CI).
+        await waitUntilIdle(id)
         guard let entry = entriesByID[id] else { throw OutboxError.notFound(id) }
         guard entry.canCancel, !inFlight.contains(id) else { throw OutboxError.notAllowed(action: "cancel", state: entry.state) }
         let raw = (try? rawMessage(id)) ?? Data()
@@ -290,13 +297,28 @@ public actor Outbox {
         return (entry, raw)
     }
 
+    // MARK: - In flight
+
+    private func finishFlight(_ id: OperationID) {
+        inFlight.remove(id)
+        for waiter in idleWaiters.removeValue(forKey: id) ?? [] { waiter.resume() }
+    }
+
+    /// Returns once nothing is being done with `id`. Actor reentrancy means another step can start
+    /// while a waiter wakes, so it checks again.
+    private func waitUntilIdle(_ id: OperationID) async {
+        while inFlight.contains(id) {
+            await withCheckedContinuation { continuation in idleWaiters[id, default: []].append(continuation) }
+        }
+    }
+
     // MARK: - The state machine
 
     private func step(_ id: OperationID) async throws {
         guard var entry = entriesByID[id], !inFlight.contains(id) else { return }
         let now = configuration.clock.now()
         inFlight.insert(id)
-        defer { inFlight.remove(id) }
+        defer { finishFlight(id) }
         switch entry.state {
         case .queued where (entry.nextAttemptAt ?? now) <= now:
             try await send(&entry)
