@@ -314,12 +314,15 @@ public actor SyncCoordinator {
                     try Task.checkCancellation()
                     if let deadline, ContinuousClock.now >= deadline { break chunks }
                     let next = Int64(batch.reduce(0) { $0 + ($1.size ?? 0) })
-                    if countsAgainstBudget {
-                        let imported = try await store.importedBytes(account: account) + (storing?.bytes ?? 0)
+                    if countsAgainstBudget, options.historyBudgetBytes != nil {
+                        // The budget is checked against what is actually stored: the batch in the
+                        // store is finished first (no overlap while a budget applies), because a
+                        // server's RFC822.SIZE is only an estimate of the bytes it sends.
+                        try await settle(&storing, into: &result, folder: folder)
+                        let imported = try await store.importedBytes(account: account)
                         guard SyncPlanner.budgetAllows(alreadyImported: imported, next: next, budget: options.historyBudgetBytes) else {
                             log.info("sync", "history paused at the storage budget")
                             progress.historyPausedForBudget = true
-                            try await settle(&storing, into: &result, folder: folder)
                             return result
                         }
                     }
@@ -331,12 +334,18 @@ public actor SyncCoordinator {
                     try await settle(&storing, into: &result, folder: folder)
                     let store = self.store
                     let account = self.account
-                    storing = StoringBatch(task: Task { try await store.storeSynced(messages, account: account) }, bytes: next)
+                    storing = StoringBatch(task: Task { try await store.storeSynced(messages, account: account) })
                     if !options.pipelineStores { try await settle(&storing, into: &result, folder: folder) }
                 }
                 if !large.isEmpty {
                     try await settle(&storing, into: &result, folder: folder)
-                    try await importPartially(large, folder: folder, session, into: &result)
+                    let paused = try await importPartially(large, folder: folder, session, countsAgainstBudget: countsAgainstBudget,
+                                                           into: &result)
+                    if paused {
+                        log.info("sync", "history paused at the storage budget")
+                        progress.historyPausedForBudget = true
+                        return result
+                    }
                 }
             }
             try await settle(&storing, into: &result, folder: folder)
@@ -352,7 +361,6 @@ public actor SyncCoordinator {
     /// A fetched batch the store is writing while the next one downloads.
     private struct StoringBatch {
         var task: Task<[SyncedOutcome], any Error>
-        var bytes: Int64
     }
 
     /// Waits for the batch being stored, if any, and counts it.
@@ -380,12 +388,20 @@ public actor SyncCoordinator {
     /// then the header, every MIME header and the parts at or below the threshold; the rest is
     /// fetched when opened or pinned. A message whose structure a partial copy cannot be made
     /// of, or that may be a message already stored whole, is fetched whole.
+    /// Returns true when the history budget stopped it (only when `countsAgainstBudget`): each
+    /// message is weighed by what storing it adds, against what is already stored.
     private func importPartially(_ summaries: [RemoteMessageSummary], folder: String, _ session: any MailboxSession,
-                                 into result: inout ImportResult) async throws {
+                                 countsAgainstBudget: Bool, into result: inout ImportResult) async throws -> Bool {
+        let budget = countsAgainstBudget ? options.historyBudgetBytes : nil
+        func allows(_ next: Int) async throws -> Bool {
+            guard let budget else { return true }
+            let imported = try await store.importedBytes(account: account)
+            return SyncPlanner.budgetAllows(alreadyImported: imported, next: Int64(next), budget: budget)
+        }
         let threshold = options.onDemandThreshold ?? 0
         let structures = try await session.bodyStructures(of: summaries.map(\.id))
-        var partials: [(summary: RemoteMessageSummary, message: SyncedPartialMessage)] = []
         var whole: [RemoteMessageSummary] = []
+        var stored = 0
         for summary in summaries {
             try Task.checkCancellation()
             guard let remote = structures[summary.id] else { continue } // expunged meanwhile
@@ -406,32 +422,33 @@ public actor SyncCoordinator {
             var parts = fetched
             parts["HEADER"] = nil
             let id = summary.id
-            partials.append((summary, SyncedPartialMessage(
+            let message = SyncedPartialMessage(
                 header: header, structure: structure, sections: parts, size: summary.size ?? 0,
                 remote: RemoteLocation(mailbox: id.folder, uidValidity: id.uidValidity, uid: id.uid),
-                receivedAt: summary.internalDate ?? Date(), flags: Self.flags(summary.flags))))
+                receivedAt: summary.internalDate ?? Date(), flags: Self.flags(summary.flags))
+            guard try await allows(message.storedSize) else { return true }
+            // One at a time: each is weighed against the budget by what is stored before it.
+            let outcome = try await store.storeSyncedPartials([message], account: account).first ?? nil
+            guard outcome != nil else { whole.append(summary); continue } // compare with a stored original
+            stored += 1
+            result.stored += 1
+            progress.imported += 1
+            progress.remaining = max(0, progress.remaining - 1)
         }
-        if !partials.isEmpty {
-            let outcomes = try await store.storeSyncedPartials(partials.map(\.message), account: account)
-            for (entry, outcome) in zip(partials, outcomes) {
-                guard outcome != nil else { whole.append(entry.summary); continue } // compare with a stored original
-                result.stored += 1
-                progress.imported += 1
-                progress.remaining = max(0, progress.remaining - 1)
-            }
-            log.debug("sync", "\(folder): \(partials.count) large messages stored without their large attachments")
-        }
-        guard !whole.isEmpty else { return }
+        if stored > 0 { log.debug("sync", "\(folder): \(stored) large messages stored without their large attachments") }
+        guard !whole.isEmpty else { return false }
         let (batches, tooLarge) = SyncPlanner.batches(whole, maxMessages: options.bodyBatchMessages, maxBytes: options.bodyBatchBytes,
                                                      maxMessageSize: session.maximumMessageSize)
         reportTooLarge(tooLarge, folder: folder, into: &result)
         for batch in batches {
+            guard try await allows(batch.reduce(0) { $0 + ($1.size ?? 0) }) else { return true }
             let fetched = try await session.fetchMessages(batch.map(\.id))
             let outcomes = try await store.storeSynced(fetched.map(Self.synced), account: account)
             result.stored += outcomes.count
             progress.imported += outcomes.count
             progress.remaining = max(0, progress.remaining - outcomes.count)
         }
+        return false
     }
 
     /// The provider's part tree as the store keeps it.

@@ -97,6 +97,15 @@ public struct SyncedPartialMessage: Sendable {
     }
 }
 
+extension SyncedPartialMessage {
+    /// The bytes storing it adds to the account's downloaded total (its skeleton): what the
+    /// sync weighs against the history budget before storing it.
+    public var storedSize: Int {
+        (try? PartialPlan.skeleton(header: header, root: structure, sections: sections).count)
+            ?? header.count + sections.values.reduce(0) { $0 + $1.count }
+    }
+}
+
 /// Which parts of a message are left at the provider, and which sections a partial copy needs.
 /// Plain functions, shared by the sync (what to fetch) and the store (what it was given).
 public enum PartialPlan {

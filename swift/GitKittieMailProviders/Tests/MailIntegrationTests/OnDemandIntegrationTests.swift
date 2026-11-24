@@ -310,6 +310,22 @@ final class OnDemandIntegrationTests: XCTestCase {
         XCTAssertFalse(complete)
     }
 
+    func testPartialMessagesInHistoryKeepToTheStorageBudgetAndNewMailDoesNot() async throws {
+        try await append([sample("Oldest", seed: 90).raw, sample("Older", seed: 91).raw, sample("Newest", seed: 92).raw])
+        // The newest is recent mail; the history budget is what that one stored: no room for more.
+        let recentOnly = SyncOptions(recentPerFolder: 1, historyBudgetBytes: 1, onDemandThreshold: 64 * 1024)
+        try await SyncCoordinator(account: account, connector: imap(), store: store, options: recentOnly, log: captured.log).syncOnce()
+        let stored = try await store.summaries(account: account).compactMap(\.subject)
+        XCTAssertEqual(stored, ["Newest"], "recent mail is stored even over the budget; partial history is held back")
+        let partial = try await store.partialMessages(account: account).count
+        XCTAssertEqual(partial, 1)
+
+        try await append([sample("Arrived later", seed: 93).raw])
+        try await SyncCoordinator(account: account, connector: imap(), store: store, options: recentOnly, log: captured.log).syncOnce()
+        let after = Set(try await store.summaries(account: account).compactMap(\.subject))
+        XCTAssertEqual(after, ["Newest", "Arrived later"], "new mail is never held back by the budget")
+    }
+
     func testEvictionGivesBackOnlyUnpinnedPartsThatCanBeFetchedAgain() async throws {
         let a = sample("Keep this one", seed: 70)
         let b = sample("Let this one go", seed: 80)
