@@ -53,6 +53,8 @@ public struct FixtureExpectations: Codable, Sendable {
         public var parse: ParseExpectation
         /// The provider's own junk verdict, when the fixture models one ("spam", "phishing", "notSpam").
         public var providerVerdict: String?
+        /// The provider folders the fixture models it being in (`Junk`), when they matter.
+        public var providerFolders: [String]?
         /// Fixtures that share a Message-ID on purpose name the same group.
         public var duplicateGroup: String?
         public var tags: [String]

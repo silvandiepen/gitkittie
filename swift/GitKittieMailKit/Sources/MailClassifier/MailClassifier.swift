@@ -10,9 +10,14 @@ import MailCore
 /// to review. Important purposes are decided before marketing ones, so a receipt with an offer
 /// or bulk headers stays a transaction, and when nothing fits the answer is `unknown`, which
 /// stays visible.
+///
+/// gkm-rules-2 (GKM-017): organisation domains from the Public Suffix List; the provider's junk
+/// folder counts as its verdict; a sender's own click-tracker is not a deceptive link; a person
+/// posting to a discussion list is a conversation; a person mentioning a password or an order is
+/// not a security alert or a receipt; transactions carry urgency (act now, pay or attend, keep).
 public struct MailClassifier: Sendable {
     /// Bump when any rule or template list changes, so stored verdicts can be re-evaluated.
-    public static let ruleSetVersion = "gkm-rules-1"
+    public static let ruleSetVersion = "gkm-rules-2"
 
     public var context: ClassificationContext
 
@@ -29,14 +34,13 @@ public struct MailClassifier: Sendable {
             confidence = 0.4
             trace.add(.riskyWithoutPurpose, "rule", "risky mail with no stronger purpose evidence")
         }
-        var urgency = decideUrgency(purpose: purpose, risk: risk, signals: signals, trace: &trace)
-
         var finalPurpose = purpose
         var finalRisk = risk
+        var chosenUrgency: MailUrgency?
         if let rule = matchingRule(message, signals) {
             finalPurpose = rule.purpose
             confidence = 0.95
-            if let ruleUrgency = rule.urgency, !finalRisk.isQuarantined { urgency = ruleUrgency }
+            if let ruleUrgency = rule.urgency, !finalRisk.isQuarantined { chosenUrgency = ruleUrgency }
             let code: ReasonCode = switch rule.scope {
             case .listID: .userRuleList
             case .senderAddress: .userRuleSender
@@ -47,10 +51,14 @@ public struct MailClassifier: Sendable {
         if let id = message.messageID, let override = context.overrides.first(where: { $0.messageID == id }) {
             if let p = override.purpose { finalPurpose = p }
             if let r = override.risk { finalRisk = r }
-            if let u = override.urgency { urgency = u }
+            if let u = override.urgency { chosenUrgency = u }
             confidence = 1
             trace.add(.userOverride, "rule", id)
         }
+        // Urgency follows the final purpose and risk, so a corrected message ("not phishing",
+        // "move to Transactions") gets the urgency it would have had, unless one was chosen.
+        let urgency = finalRisk.isQuarantined ? .low
+            : chosenUrgency ?? decideUrgency(purpose: finalPurpose, risk: finalRisk, signals: signals, trace: &trace)
 
         return Classification(purpose: finalPurpose, risk: finalRisk, urgency: urgency, confidence: confidence,
                               reasons: trace.reasons, evidence: trace.evidence, ruleSetVersion: Self.ruleSetVersion)
@@ -82,7 +90,7 @@ public struct MailClassifier: Sendable {
 
     private func assessRisk(_ s: Signals, trace: inout Trace) -> MailRisk {
         if s.providerVerdict == .phishing { return .phishing }
-        let claimsCredentialsOrMoney = s.securityTemplate != nil || s.transactionTerm != nil
+        let claimsCredentialsOrMoney = s.securityTemplate != nil || s.transactionTerm != nil || s.securityClaim
         if s.displayNameSpoof || s.lookalikeSender != nil || s.lookalikeLink != nil || s.linkTextMismatch || s.dangerousAttachment {
             return .phishing
         }
@@ -100,6 +108,11 @@ public struct MailClassifier: Sendable {
         if s.knownCorrespondent && personalHeaders {
             return (.conversation, 0.85)
         }
+        // A person replying is talking, whatever the subject says ("Re: the wifi password").
+        if s.personalSender && s.isReply {
+            trace.add(.personalSender, "From", s.fromLocalPart)
+            return (.conversation, 0.8)
+        }
         if let template = s.securityTemplate {
             trace.add(template.reason, template.field, template.term)
             return (.security, template.reason == .securityCode ? 0.9 : 0.8)
@@ -109,9 +122,17 @@ public struct MailClassifier: Sendable {
             return (.notification, 0.8)
         }
         if let term = s.transactionTerm {
-            trace.add(.transaction, "subject", term)
-            if s.hasMoneyAmount { trace.add(.moneyAmount, "body", "amount") }
-            return (.transaction, s.hasMoneyAmount ? 0.9 : 0.75)
+            if Templates.weakTransaction.contains(term), let offer = s.promotionTerm, !s.hasOrderReference {
+                trace.add(.offerNotOrder, "subject", "\(term) + \(offer)")
+            } else {
+                switch s.transactionKind {
+                case .action: trace.add(.transactionAction, "subject", term)
+                case .due: trace.add(.transactionDue, "subject", term)
+                case .record: trace.add(.transaction, "subject", term)
+                }
+                if s.hasMoneyAmount { trace.add(.moneyAmount, "body", "amount") }
+                return (.transaction, s.hasMoneyAmount ? 0.9 : 0.75)
+            }
         }
         if s.isReply && personalHeaders {
             return (.conversation, 0.8)
@@ -120,6 +141,11 @@ public struct MailClassifier: Sendable {
             if s.codeHost { trace.add(.codeHost, "subject", "repository notification") }
             if s.notificationSender { trace.add(.notificationSender, "From", s.fromLocalPart) }
             return (.notification, s.codeHost ? 0.85 : 0.75)
+        }
+        // A discussion list (it accepts posts) carrying a person's message, not a campaign.
+        if s.acceptsPosts && !s.isRoleAddress && !s.oneClickUnsubscribe && s.promotionTerm == nil && !s.autoSubmitted {
+            trace.add(.listDiscussion, "List-Post", s.listPost ?? "")
+            return (.conversation, s.isReply ? 0.8 : 0.7)
         }
         if s.hasListSignals {
             if let term = s.promotionTerm {
@@ -160,7 +186,15 @@ public struct MailClassifier: Sendable {
             return .low
         case .subscription, .promotion:
             return .low
-        case .conversation, .transaction, .unknown:
+        case .transaction:
+            // Without a transaction template (a rule or an override set the purpose) it stays normal.
+            guard signals.transactionTerm != nil else { return .normal }
+            switch signals.transactionKind {
+            case .action: return .high
+            case .due: return .normal
+            case .record: return .low
+            }
+        case .conversation, .unknown:
             return .normal
         }
     }
@@ -203,9 +237,20 @@ private struct Signals {
     var dangerousAttachment = false
     var spamPhraseCount = 0
     var structureFlags: Set<StructureFlag> = []
+    enum TransactionKind { case action, due, record }
+
     var securityTemplate: Template?
+    /// The subject or body claims to be about credentials, whoever sent it (for risk).
+    var securityClaim = false
     var deliveryTerm: String?
     var transactionTerm: String?
+    var transactionKind = TransactionKind.record
+    var hasOrderReference = false
+    /// A person, not a function or a mailing machine: no role address, list or automation headers.
+    var personalSender = false
+    var listPost: String?
+    var acceptsPosts = false
+    var oneClickUnsubscribe = false
     var hasMoneyAmount = false
     var codeHost = false
     var notificationSender = false
@@ -223,9 +268,12 @@ private struct Signals {
             case .notSpam: trace.add(.providerNotSpam, "provider", "not-spam verdict")
             case nil: break
             }
-            if let junk = provider.labels.first(where: { ["junk", "spam", "\\junk"].contains($0.lowercased()) }) {
+            if let junk = provider.labels.first(where: { Templates.junkLabels.contains($0.lowercased()) }) {
                 providerJunkLabel = true
                 trace.add(.providerJunkLabel, "provider", junk)
+            } else if let folder = provider.folders.first(where: Signals.isJunkFolder) {
+                providerJunkLabel = true
+                trace.add(.providerJunkFolder, "provider", folder)
             }
         }
 
@@ -255,7 +303,13 @@ private struct Signals {
         }
         if let post = m.value("List-Unsubscribe-Post") {
             hasListSignals = true
+            oneClickUnsubscribe = true
             trace.add(.listUnsubscribePost, "List-Unsubscribe-Post", post)
+        }
+        if let post = m.value("List-Post") {
+            listPost = post
+            // RFC 2369: "NO" marks an announcement list that takes no posts.
+            acceptsPosts = m.value("List-ID") != nil && post.trimmingCharacters(in: .whitespaces).uppercased() != "NO"
         }
         if let precedence = m.value("Precedence")?.lowercased(), ["bulk", "list", "junk"].contains(precedence) {
             hasListSignals = true
@@ -315,13 +369,22 @@ private struct Signals {
         let subject = m.subject.lowercased()
         let body = plain.lowercased()
 
+        let claimsTemplate = Templates.firstMatch(Templates.securityAlert, in: subject) != nil
+            || Templates.firstMatch(Templates.transactionAction + Templates.transactionDue, in: subject) != nil
         for link in Signals.anchors(in: html) {
             guard let hrefHost = Signals.host(in: link.href) else { continue }
-            if let shownHost = Signals.host(in: Signals.stripTags(link.text)),
-               DomainHeuristics.organisationDomain(shownHost) != DomainHeuristics.organisationDomain(hrefHost) {
-                linkTextMismatch = true
-                trace.add(.linkTextMismatch, "link", "shows \(shownHost), goes to \(hrefHost)")
+            guard let shownHost = Signals.host(in: Signals.stripTags(link.text)) else { continue }
+            let shownOrganisation = DomainHeuristics.organisationDomain(shownHost)
+            guard shownOrganisation != DomainHeuristics.organisationDomain(hrefHost) else { continue }
+            // Campaign mail sends links through its mailing service's click tracker. That is
+            // tracking, not deception, when the text shows the sender's own organisation, the
+            // message is bulk mail, and it makes no claim about an account or a payment.
+            if hasListSignals && !claimsTemplate && shownOrganisation == fromOrganisation && !displayNameSpoof {
+                trace.add(.trackedLink, "link", "shows \(shownHost), counted through \(hrefHost)")
+                continue
             }
+            linkTextMismatch = true
+            trace.add(.linkTextMismatch, "link", "shows \(shownHost), goes to \(hrefHost)")
         }
         for host in Signals.hosts(in: plain + "\n" + html) {
             let organisation = DomainHeuristics.organisationDomain(host)
@@ -343,14 +406,30 @@ private struct Signals {
         }
 
         // Step 4: templates.
+        personalSender = fromAddress != nil && !isRoleAddress && !hasListSignals && !autoSubmitted
+        var security: Template?
         if let term = Templates.firstMatch(Templates.securityCode, in: subject) ?? Templates.firstMatch(Templates.securityCode, in: body),
            Signals.containsCode(plain) {
-            securityTemplate = Template(reason: .securityCode, field: "subject+body", term: term)
+            security = Template(reason: .securityCode, field: "subject+body", term: term)
         } else if let term = Templates.firstMatch(Templates.securityAlert, in: subject) {
-            securityTemplate = Template(reason: .securityAlert, field: "subject", term: term)
+            security = Template(reason: .securityAlert, field: "subject", term: term)
         }
+        securityClaim = security != nil
+        // Account mail comes from a function (no-reply, security@), never from a person's own
+        // address; a person writing about a password is having a conversation.
+        if !personalSender { securityTemplate = security }
         deliveryTerm = Templates.firstMatch(Templates.delivery, in: subject)
-        transactionTerm = Templates.firstMatch(Templates.transaction, in: subject)
+        if let term = Templates.firstMatch(Templates.transactionAction, in: subject) {
+            transactionTerm = term
+            transactionKind = .action
+        } else if let term = Templates.firstMatch(Templates.transactionDue, in: subject) {
+            transactionTerm = term
+            transactionKind = .due
+        } else {
+            transactionTerm = Templates.firstMatch(Templates.transaction, in: subject)
+            transactionKind = .record
+        }
+        hasOrderReference = Signals.containsOrderReference(plain)
         hasMoneyAmount = Signals.containsMoney(body)
         codeHost = Signals.repositoryTag(in: m.subject) || m.headers.contains { Signals.isReasonHeader($0.name) }
         notificationSender = Templates.notificationLocalParts.contains(fromLocalPart)
@@ -396,6 +475,12 @@ private struct Signals {
         return Templates.dangerousExtensions.contains(ext)
     }
 
+    /// The provider's junk folder, by name: the last path component, so `[Gmail]/Spam` counts.
+    static func isJunkFolder(_ folder: String) -> Bool {
+        let last = folder.split(whereSeparator: { $0 == "/" || $0 == "." }).last.map { $0.lowercased() } ?? folder.lowercased()
+        return Templates.junkLabels.contains(last)
+    }
+
     static func isReasonHeader(_ name: String) -> Bool {
         let n = name.lowercased()
         return n.hasPrefix("x-") && n.hasSuffix("-reason")
@@ -415,6 +500,14 @@ private struct Signals {
         pattern: #"((eur|usd|gbp|jpy|€|\$|£|¥)\s?\d)|(\d[\d.,]*\s?(eur|usd|€|円))"#, options: [.caseInsensitive])
     static func containsMoney(_ text: String) -> Bool {
         moneyPattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+    }
+
+    private static let orderReferencePattern = try! NSRegularExpression(
+        pattern: #"(order|bestelling|bestellung|bestellnummer|ordernummer|注文番号|παραγγελία)\s*(#|no\.?|number|nr\.?|nummer)?\s*[:#]?\s*[a-z]{0,4}-?\d{3,}"#,
+        options: [.caseInsensitive])
+    /// An order number in the body ("Order #12345", "Bestellnummer: 2026-77812").
+    static func containsOrderReference(_ text: String) -> Bool {
+        orderReferencePattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 
     private static let percentPattern = try! NSRegularExpression(pattern: #"-?\d{1,2}\s?%"#)

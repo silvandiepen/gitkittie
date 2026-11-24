@@ -94,7 +94,7 @@ extension AppModel {
         try await store.disconnectAccount(id, mail: removal == .keepMail ? .keep : .remove)
         try sync.services.credentials.delete(for: id)
         sync.forget(id)
-        if selection.account == id, removal != .keepMail { await select(.allMail) }
+        if selection.account == id, removal != .keepMail { await select(.category(.focused)) }
         try await reloadAfterAccountChange()
     }
 
@@ -133,7 +133,7 @@ extension SidebarSelection {
     /// The account the selection belongs to, if any.
     var account: MailAccountID? {
         switch self {
-        case .allMail, .drafts, .outbox, .space, .attachments: nil
+        case .allMail, .category, .drafts, .outbox, .space, .attachments: nil
         case .account(let id), .folder(let id, _): id
         }
     }
