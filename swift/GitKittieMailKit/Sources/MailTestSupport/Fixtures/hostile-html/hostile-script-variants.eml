@@ -1,0 +1,43 @@
+From: Ada Example <ada@example.com>
+To: alex.morgan@example.net
+Subject: Script variants
+Date: Tue, 24 Nov 2026 10:00:00 +0000
+Message-ID: <hostile-scripts@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+<!DOCTYPE html>
+<html><head><title>Hostile</title>
+<meta http-equiv="refresh" content="0;url=https://refresh.example.net/meta">
+<base href="https://base.example.net/">
+<link rel="stylesheet" href="https://css.example.net/link.css">
+<script>document.documentElement.setAttribute('data-pwned','script')</script>
+<SCRIPT type="text/javascript">document.documentElement.setAttribute('data-pwned','upper')</SCRIPT>
+<script src="https://js.example.net/remote.js"></script>
+</head>
+<body onload="document.documentElement.setAttribute('data-pwned','onload')">
+<p id="intro">Hello Alex, this is the visible text.</p>
+<img src="x" onerror="document.documentElement.setAttribute('data-pwned','onerror')">
+<svg onload="document.documentElement.setAttribute('data-pwned','svg')"><script>document.documentElement.setAttribute('data-pwned','svgscript')</script></svg>
+<math><mtext><script>document.documentElement.setAttribute('data-pwned','math')</script></mtext></math>
+<iframe src="https://frame.example.net/frame.html"></iframe>
+<iframe srcdoc="&lt;script&gt;parent.document.documentElement.setAttribute('data-pwned','srcdoc')&lt;/script&gt;"></iframe>
+<object data="https://object.example.net/x.swf"></object>
+<embed src="https://embed.example.net/x.swf">
+<a href="javascript:document.documentElement.setAttribute('data-pwned','jslink')">Click me</a>
+<a href=" java&#x09;script:document.documentElement.setAttribute('data-pwned','obfuscated')">Obfuscated</a>
+<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">Data link</a>
+<details open ontoggle="document.documentElement.setAttribute('data-pwned','toggle')"><summary>More</summary>Details text</details>
+<div style="width:expression(alert(1))">expression</div>
+<form action="https://forms.example.net/steal" method="post">
+  <label>Password</label><input type="password" name="pw"><input type="submit" value="Sign in">
+  <button formaction="https://forms.example.net/other">Go</button>
+</form>
+<template><script>document.documentElement.setAttribute('data-pwned','template')</script></template>
+<noscript><p>noscript text shows</p></noscript>
+<!--<script>document.documentElement.setAttribute('data-pwned','comment')</script>-->
+<scr<script>document.documentElement.setAttribute('data-pwned','split')</script>ipt>document.documentElement.setAttribute('data-pwned','split2')</script>
+<p>Unclosed attribute <img src="https://img.example.net/a.png" alt='x>
+<p>After the end.</p>
+<script>document.documentElement.setAttribute('data-pwned','unclosed')

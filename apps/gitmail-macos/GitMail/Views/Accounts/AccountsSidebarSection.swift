@@ -48,7 +48,7 @@ struct AccountsSidebarSection: View {
                 AccountRow(account: account, status: model.syncStatus(account.id), needsPassword: model.needsPassword(account.id))
                     .tag(SidebarSelection.account(account.id))
                     .contextMenu { menu(for: account) }
-                let folders = model.sync.folders[account.id] ?? []
+                let folders = Self.folders(of: account, model: model)
                 ForEach(folders, id: \.name) { folder in
                     FolderRow(folder: folder)
                         .tag(SidebarSelection.folder(account.id, folder.name))
@@ -62,6 +62,15 @@ struct AccountsSidebarSection: View {
                         .selectionDisabled()
                 }
             }
+        }
+    }
+
+    /// The provider's folders once the sync has listed them; before that (or for an account
+    /// that no longer syncs) the folders that hold stored mail.
+    @MainActor static func folders(of account: MailAccount, model: AppModel) -> [SyncedFolder] {
+        if let synced = model.sync.folders[account.id], !synced.isEmpty { return synced }
+        return (model.folders[account.id] ?? []).map { name in
+            SyncedFolder(name: name, path: [name], role: name.caseInsensitiveCompare("INBOX") == .orderedSame ? "inbox" : nil)
         }
     }
 

@@ -36,19 +36,42 @@ public struct SyncedFolder: Sendable, Hashable, Codable {
 }
 
 extension RemoteMapping {
-    static let syncTablesSQL = """
-        CREATE TABLE folder_state (
-          name TEXT PRIMARY KEY, path TEXT NOT NULL, role TEXT, position INTEGER NOT NULL,
-          uid_validity INTEGER, highest_uid INTEGER NOT NULL DEFAULT 0,
-          history_complete INTEGER NOT NULL DEFAULT 0, server_count INTEGER NOT NULL DEFAULT 0
-        );
-        CREATE TABLE message_flags (
-          local_id TEXT PRIMARY KEY, seen INTEGER NOT NULL, answered INTEGER NOT NULL,
-          flagged INTEGER NOT NULL, draft INTEGER NOT NULL, keywords TEXT NOT NULL
-        );
-        CREATE TABLE counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
-        CREATE INDEX locations_by_mailbox ON locations (mailbox, uid_validity, uid);
-        """
+    /// Schema 2 → 3 (GKM-011). Also takes a database from before the merge with GKM-012, whose
+    /// version 2 had the sync tables and a `message_flags` table instead of `flags`: nothing
+    /// shipped with it, but a development machine may have one.
+    func migrateToSyncState() throws {
+        func tableExists(_ name: String) throws -> Bool {
+            try database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").bind([.text(name)]).step()
+        }
+        func columnExists(_ column: String, in table: String) throws -> Bool {
+            let statement = try database.prepare("SELECT 1 FROM pragma_table_info(?) WHERE name = ?").bind([.text(table), .text(column)])
+            return try statement.step()
+        }
+        try database.execute("CREATE TABLE IF NOT EXISTS flags (local_id TEXT PRIMARY KEY, seen INTEGER NOT NULL, flagged INTEGER NOT NULL)")
+        if try !columnExists("answered", in: "flags") {
+            try database.execute("""
+                ALTER TABLE flags ADD COLUMN answered INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE flags ADD COLUMN draft INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE flags ADD COLUMN keywords TEXT NOT NULL DEFAULT '';
+                """)
+        }
+        if try tableExists("message_flags") {
+            try database.execute("""
+                INSERT OR REPLACE INTO flags (local_id, seen, flagged, answered, draft, keywords)
+                  SELECT local_id, seen, flagged, answered, draft, keywords FROM message_flags;
+                DROP TABLE message_flags;
+                """)
+        }
+        try database.execute("""
+            CREATE TABLE IF NOT EXISTS folder_state (
+              name TEXT PRIMARY KEY, path TEXT NOT NULL, role TEXT, position INTEGER NOT NULL,
+              uid_validity INTEGER, highest_uid INTEGER NOT NULL DEFAULT 0,
+              history_complete INTEGER NOT NULL DEFAULT 0, server_count INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS locations_by_mailbox ON locations (mailbox, uid_validity, uid);
+            """)
+    }
 
     // MARK: Folders and cursors
 
@@ -126,11 +149,12 @@ extension RemoteMapping {
 
     // MARK: Flags
 
-    func setFlags(_ flags: [MailMessageID: MailMessageFlags]) throws {
+    func setSyncFlags(_ flags: [MailMessageID: MailMessageFlags]) throws {
+        // The same table as the reader's seen/flagged (schema 2), with the rest beside it.
         guard !flags.isEmpty else { return }
         try database.transaction {
             let statement = try database.prepare("""
-                INSERT OR REPLACE INTO message_flags (local_id, seen, answered, flagged, draft, keywords) VALUES (?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO flags (local_id, seen, answered, flagged, draft, keywords) VALUES (?, ?, ?, ?, ?, ?)
                 """)
             for (id, flag) in flags.sorted(by: { $0.key < $1.key }) {
                 try statement.run([
@@ -141,8 +165,8 @@ extension RemoteMapping {
         }
     }
 
-    func flags(of ids: [MailMessageID]) throws -> [MailMessageID: MailMessageFlags] {
-        let statement = try database.prepare("SELECT seen, answered, flagged, draft, keywords FROM message_flags WHERE local_id = ?")
+    func syncFlags(of ids: [MailMessageID]) throws -> [MailMessageID: MailMessageFlags] {
+        let statement = try database.prepare("SELECT seen, answered, flagged, draft, keywords FROM flags WHERE local_id = ?")
         var result: [MailMessageID: MailMessageFlags] = [:]
         for id in ids {
             _ = try statement.bind([.text(id.rawValue)])

@@ -56,8 +56,9 @@ final class SendingTests: XCTestCase {
 
     func testReplyAllFromTheReaderMakesADraftWithTheRightHeaders() async throws {
         let (model, sending) = try await openModel()
-        let id = try XCTUnwrap(model.messages.first?.id)
-        await model.selectMessage(id)
+        let row = try XCTUnwrap(model.browser.rows.first)
+        let id = row.latest.id
+        await model.browser.select(row.id)
         XCTAssertTrue(model.canAnswer)
 
         let draftIDValue = await model.compose(.replyAll)

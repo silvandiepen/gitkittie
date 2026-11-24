@@ -19,7 +19,10 @@ extension MailStore {
     /// in the mail folder. Returns the removed folder names.
     @discardableResult
     public func replaceSyncedFolders(_ folders: [SyncedFolder], account: MailAccountID) throws -> [String] {
-        try mapping(for: SafePath.component(account.rawValue)).replaceFolders(folders)
+        let removed = try mapping(for: SafePath.component(account.rawValue)).replaceFolders(folders)
+        // The index's folder memberships follow the mapping.
+        for name in removed { try index.setMembers([], ofMailbox: name, account: account) }
+        return removed
     }
 
     /// Checkpoints a folder's cursor. Call it only after the messages it covers are stored:
@@ -38,14 +41,16 @@ extension MailStore {
         try mapping(for: SafePath.component(account.rawValue)).uids(mailbox: mailbox, uidValidity: uidValidity)
     }
 
-    /// Saves the provider's flags for stored messages.
+    /// Saves the provider's flags for stored messages, and the read and flagged state the list
+    /// and search show (the same `flags` table as ``setFlags(_:for:)``).
     public func setFlags(_ flags: [MailMessageID: MailMessageFlags], account: MailAccountID) throws {
-        try mapping(for: SafePath.component(account.rawValue)).setFlags(flags)
+        try mapping(for: SafePath.component(account.rawValue)).setSyncFlags(flags)
+        for (id, flag) in flags { try index.setFlags(MessageFlags(seen: flag.seen, flagged: flag.flagged), for: id) }
     }
 
     /// The provider's flags as last synced; messages never synced are missing from the result.
     public func flags(of ids: [MailMessageID], account: MailAccountID) throws -> [MailMessageID: MailMessageFlags] {
-        try mapping(for: SafePath.component(account.rawValue)).flags(of: ids)
+        try mapping(for: SafePath.component(account.rawValue)).syncFlags(of: ids)
     }
 
     /// Bytes of mail the sync has downloaded for the account, for the storage budget.
@@ -59,8 +64,7 @@ extension MailStore {
 
     /// Newest first, only messages this device knows to be in `mailbox` at the provider.
     public func summaries(account: MailAccountID, mailbox: String, limit: Int = 200, offset: Int = 0) throws -> [MessageSummary] {
-        let ids = try mapping(for: SafePath.component(account.rawValue)).localIDs(mailbox: mailbox)
-        return try index.summaries(among: ids, account: account, limit: limit, offset: offset)
+        try index.summaries(matching: SearchQuery(account: account, mailbox: mailbox), limit: limit, offset: offset)
     }
 
     /// How many stored messages this device knows to be in `mailbox` at the provider.
@@ -70,29 +74,12 @@ extension MailStore {
 }
 
 extension MailIndex {
-    /// Summaries for a set of ids, newest first. The ids go through a temporary table, so a
-    /// folder of any size works without hitting SQLite's limit on bound values.
-    func summaries(among ids: Set<MailMessageID>, account: MailAccountID, limit: Int, offset: Int) throws -> [MessageSummary] {
-        guard !ids.isEmpty else { return [] }
-        return try database.transaction {
-            try database.execute("CREATE TEMP TABLE IF NOT EXISTS selected_ids (local_id TEXT PRIMARY KEY); DELETE FROM selected_ids;")
-            let insert = try database.prepare("INSERT OR IGNORE INTO selected_ids (local_id) VALUES (?)")
-            for id in ids { try insert.run([.text(id.rawValue)]) }
-            let result = try readSummaries(database.prepare("""
-                SELECT \(Self.summaryColumns) FROM messages m JOIN selected_ids s ON s.local_id = m.local_id
-                WHERE m.account_id = ? ORDER BY m.sort_date DESC, m.local_id LIMIT ? OFFSET ?
-                """).bind([.text(account.rawValue), .int(Int64(limit)), .int(Int64(offset))]))
-            try database.execute("DELETE FROM selected_ids")
-            return result
-        }
-    }
-
-    /// Drops every message of an account from the index.
+    /// Drops every message of an account from the index, with everything that hangs off it.
     func removeAccount(_ account: MailAccountID) throws {
-        try database.transaction {
-            try database.prepare("DELETE FROM message_text WHERE local_id IN (SELECT local_id FROM messages WHERE account_id = ?)")
-                .run([.text(account.rawValue)])
-            try database.prepare("DELETE FROM messages WHERE account_id = ?").run([.text(account.rawValue)])
+        while true {
+            let page = try summaries(account: account, limit: 500, offset: 0)
+            if page.isEmpty { return }
+            for summary in page { try remove(summary.id) }
         }
     }
 }

@@ -77,7 +77,7 @@ final class MailSyncIntegrationTests: XCTestCase {
             }
             for index in 1...count {
                 let raw = message("\(prefix) \(index)")
-                _ = try await session.append(raw, to: folder, flags: MessageFlags())
+                _ = try await session.append(raw, to: folder, flags: MailProvider.MessageFlags())
                 sent.append(raw)
             }
         }
@@ -239,8 +239,8 @@ final class MailSyncIntegrationTests: XCTestCase {
         }
         XCTAssertNotEqual(newValidity, oldValidity)
         try await imap().withSession { session in
-            for raw in original { _ = try await session.append(raw, to: "Projects", flags: MessageFlags()) }
-            _ = try await session.append(message("new after the reset"), to: "Projects", flags: MessageFlags())
+            for raw in original { _ = try await session.append(raw, to: "Projects", flags: MailProvider.MessageFlags()) }
+            _ = try await session.append(message("new after the reset"), to: "Projects", flags: MailProvider.MessageFlags())
         }
 
         try await coordinator(SyncOptions(reconnect: Self.fast)).syncOnce()
@@ -340,7 +340,7 @@ final class MailSyncIntegrationTests: XCTestCase {
 
         // Another client reads and flags the first message, and moves the second to Archive.
         try await imap().withSession { session in
-            try await session.setFlags(MessageFlags(seen: true, flagged: true, keywords: ["$Label1"]), .add,
+            try await session.setFlags(MailProvider.MessageFlags(seen: true, flagged: true, keywords: ["$Label1"]), .add,
                                        on: [RemoteMessageID(folder: "INBOX", uidValidity: validity, uid: 1)])
             try await session.createFolder("Archive")
             _ = try await session.move([RemoteMessageID(folder: "INBOX", uidValidity: validity, uid: 2)], to: "Archive")

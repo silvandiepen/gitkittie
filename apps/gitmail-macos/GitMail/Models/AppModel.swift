@@ -1,5 +1,6 @@
 import Foundation
 import MailCore
+import MailExtraction
 import MailStore
 import Observation
 
@@ -7,13 +8,30 @@ import Observation
 enum SidebarSelection: Hashable {
     case allMail
     case account(MailAccountID)
-    /// One folder of an account at the provider, by the provider's name for it.
+    /// A provider folder of an account, as this device's sync state knows it (GKM-012).
     case folder(MailAccountID, String)
     /// Messages being written (GKM-013).
     case drafts
     /// Messages waiting to be sent, or needing a decision (GKM-014).
     case outbox
+
+    /// The mail the list shows for it (drafts and the outbox have their own views).
+    var scope: MailScope {
+        switch self {
+        case .allMail, .drafts, .outbox: .allMail
+        case .account(let id): .account(id)
+        case .folder(let id, let name): .folder(id, name)
+        }
+    }
 }
+
+/// Turns attachment bytes into text for search. The app's is the isolated XPC service
+/// (`IsolatedTextExtractor`); nothing in the app process parses a PDF.
+protocol AttachmentTextExtracting: Sendable {
+    func extract(_ data: Data, mediaType: String) async -> String?
+}
+
+extension IsolatedTextExtractor: AttachmentTextExtracting {}
 
 /// The single UI-facing state object. It owns the store and turns what the store holds into
 /// what the window shows; views render it and send intents back, nothing more.
@@ -29,16 +47,26 @@ final class AppModel {
 
     private(set) var phase: Phase = .opening
     private(set) var accounts: [MailAccount] = []
-    private(set) var messages: [MessageSummary] = []
+    /// Each account's folders that hold stored mail.
+    private(set) var folders: [MailAccountID: [String]] = [:]
     private(set) var totalCount = 0
-    private(set) var openMessage: StoredMessage?
     private(set) var isRebuildingIndex = false
+    private(set) var isImporting = false
+    /// What the last import did, for a notice; cleared when shown.
+    var importReport: ImportReport?
+    /// The message list, the open thread and search (GKM-012, GKM-016).
+    let browser = MailBrowser()
+
+    /// The message the reader is focused on (the newest expanded one in the open thread):
+    /// what Reply, Reply All and Forward answer.
+    var openMessage: StoredMessage? {
+        guard let thread = browser.openThread else { return nil }
+        return thread.messages.last(where: { $0.isExpanded && $0.stored != nil })?.stored
+    }
     /// An error from the last action, for an alert; cleared when shown.
     var actionError: String?
 
     private(set) var selection: SidebarSelection = .allMail
-    private(set) var selectedMessageID: MailMessageID?
-    private(set) var searchText = ""
 
     /// Drafts and the outbox; nil until the store is open.
     private(set) var sending: MailSending?
@@ -47,13 +75,17 @@ final class AppModel {
 
     private let locations: StoreLocations?
     private var store: MailStore?
+    private let extractor: (any AttachmentTextExtracting)?
+    private var extraction: Task<Void, Never>?
     /// Accounts' sync and setup services (GKM-010, GKM-011; AppModel+Accounts.swift).
     let sync: AccountSync
 
     /// `locations` nil means the mail folder the person chose, or the app's standard folders
     /// (`MailFolderLocation`).
-    init(locations: StoreLocations? = nil, services: AccountServices = .live) {
+    init(locations: StoreLocations? = nil, extractor: (any AttachmentTextExtracting)? = nil,
+         services: AccountServices = .live) {
         self.locations = locations
+        self.extractor = extractor
         self.sync = AccountSync(services: services)
         sync.onStoreChanged = { [weak self] in await self?.refreshAfterSync() }
     }
@@ -67,8 +99,7 @@ final class AppModel {
     /// True when there is nothing at all yet: no account and no message.
     var isEmpty: Bool { accounts.isEmpty && totalCount == 0 }
 
-    var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
-
+    /// The account of the selection: the account itself or one of its folders.
     var selectedAccount: MailAccount? {
         guard let id = selection.account else { return nil }
         return accounts.first { $0.id == id }
@@ -83,6 +114,7 @@ final class AppModel {
             let folder = MailFolderLocation(defaults: sync.services.defaults)
             let opened = try await MailStore.open(locations ?? folder.locations())
             store = opened
+            browser.attach(opened)
             if let current = sending, sendingFolder != opened.locations.mailFolder {
                 // Another mail folder was chosen: its drafts and outbox are its own.
                 await current.stop()
@@ -99,6 +131,7 @@ final class AppModel {
             phase = .ready
             await sync.start(accounts, store: opened)
             await registerForSending(accounts)
+            indexAttachmentTextInBackground()
         } catch {
             phase = .failed(String(describing: error))
         }
@@ -107,26 +140,47 @@ final class AppModel {
     func select(_ selection: SidebarSelection) async {
         guard selection != self.selection else { return }
         self.selection = selection
-        await refreshList()
+        await browser.setScope(selection.scope)
         if case .folder(let account, let name) = selection { await sync.setActiveFolder(name, account: account) }
     }
 
-    func search(_ text: String) async {
-        guard text != searchText else { return }
-        searchText = text
-        await refreshList()
+    /// File ▸ Import Messages…: `.eml` files and folders of them, into "On My Mac".
+    func importMessages(from urls: [URL]) async {
+        guard let store, !isImporting else { return }
+        isImporting = true
+        defer { isImporting = false }
+        let report = await MailImporter.importMessages(from: urls, into: store)
+        importReport = report
+        do { try await reload() } catch { actionError = String(describing: error) }
+        indexAttachmentTextInBackground()
     }
 
-    func selectMessage(_ id: MailMessageID?) async {
-        selectedMessageID = id
-        guard let id, let store else { openMessage = nil; return }
-        do {
-            let message = try await store.message(id)
-            // A later selection may have landed while this one was reading.
-            if selectedMessageID == id { openMessage = message }
-        } catch {
-            openMessage = nil
-            actionError = String(describing: error)
+    /// Extracts text from PDF and plain-text attachments that have none yet, one at a time,
+    /// through the isolated extractor (GKM-016). Runs after opening and after an import.
+    func indexAttachmentTextInBackground() {
+        guard extraction == nil, let store, let extractor else { return }
+        extraction = Task { [weak self] in
+            await Self.indexAttachmentText(store: store, extractor: extractor)
+            self?.extraction = nil
+        }
+    }
+
+    /// Waits for the background extraction, for tests.
+    func waitForAttachmentText() async { await extraction?.value }
+
+    nonisolated static func indexAttachmentText(store: MailStore, extractor: any AttachmentTextExtracting) async {
+        var failures = 0
+        while !Task.isCancelled {
+            guard let pending = try? await store.attachmentsNeedingText(mediaTypes: AttachmentTextExtractor.supportedMediaTypes, limit: 20),
+                  !pending.isEmpty else { return }
+            for item in pending {
+                guard let data = try? await store.blobData(item.blob) else { failures += 1; continue }
+                let text = await extractor.extract(data, mediaType: item.mediaType)
+                // No text (unsupported, too big, crashed or timed out) is recorded too, so a
+                // hostile attachment is tried once, not on every launch.
+                if (try? await store.recordAttachmentText(text, forBlob: item.blob)) == nil { failures += 1 }
+            }
+            if failures > 50 { return }
         }
     }
 
@@ -144,6 +198,7 @@ final class AppModel {
         do {
             try await store.rebuildIndex()
             try await reload()
+            indexAttachmentTextInBackground()
         } catch {
             actionError = String(describing: error)
         }
@@ -154,51 +209,39 @@ final class AppModel {
     /// After an account was added or removed.
     func reloadAfterAccountChange() async throws { try await reload() }
 
-    /// After the sync stored mail or saw new folders: counts and the list, keeping the selection.
+    /// After the sync stored mail or saw new folders: counts, folders and the list, keeping the
+    /// selection and the open thread.
     func refreshAfterSync() async {
         guard let store else { return }
         do {
             totalCount = try await store.messageCount()
-            try await loadList(from: store)
+            var found: [MailAccountID: [String]] = [:]
+            for account in accounts { found[account.id] = try await store.folders(account: account.id) }
+            folders = found
         } catch {
             actionError = String(describing: error)
         }
+        await browser.reload()
     }
 
     private func reload() async throws {
         guard let store else { return }
         accounts = try await store.accounts()
         totalCount = try await store.messageCount()
-        if let id = selection.account, !accounts.contains(where: { $0.id == id }) { selection = .allMail }
-        try await loadList(from: store)
-    }
-
-    private func refreshList() async {
-        guard let store else { return }
-        do {
-            try await loadList(from: store)
-        } catch {
-            actionError = String(describing: error)
+        var found: [MailAccountID: [String]] = [:]
+        for account in accounts { found[account.id] = try await store.folders(account: account.id) }
+        folders = found
+        let stillThere: Bool = switch selection {
+        case .allMail, .drafts, .outbox: true
+        case .account(let id): accounts.contains { $0.id == id }
+        case .folder(let id, let name):
+            // A folder with stored mail, or one the sync knows at the provider (may be empty).
+            found[id]?.contains(name) == true || sync.folders[id]?.contains { $0.name == name } == true
         }
-    }
-
-    private func loadList(from store: MailStore) async throws {
-        let account = selection.account
-        let query = searchText
-        let found: [MessageSummary]
-        if isSearching {
-            found = try await store.search(query, account: account)
-        } else if case .folder(let id, let mailbox) = selection {
-            found = try await store.summaries(account: id, mailbox: mailbox)
-        } else {
-            found = try await store.summaries(account: account)
+        if !stillThere {
+            selection = .allMail
+            await browser.setScope(.allMail)
         }
-        // Typing fast: only the newest query's results are shown.
-        guard query == searchText else { return }
-        messages = found
-        if let selected = selectedMessageID, !found.contains(where: { $0.id == selected }) {
-            selectedMessageID = nil
-            openMessage = nil
-        }
+        await browser.reload()
     }
 }

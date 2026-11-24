@@ -360,7 +360,7 @@ public actor SyncCoordinator {
         progress.folders.first { $0.name == folder }?.displayName ?? folder
     }
 
-    static func flags(_ flags: MessageFlags) -> MailMessageFlags {
+    static func flags(_ flags: MailProvider.MessageFlags) -> MailMessageFlags {
         MailMessageFlags(seen: flags.seen, answered: flags.answered, flagged: flags.flagged, draft: flags.draft,
                          keywords: Array(flags.keywords))
     }

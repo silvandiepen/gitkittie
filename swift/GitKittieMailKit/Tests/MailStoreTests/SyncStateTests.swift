@@ -104,6 +104,74 @@ final class SyncStateTests: XCTestCase {
         XCTAssertEqual(folders, [])
     }
 
+    private func writeMapping(_ sql: String) throws {
+        let url = locations.deviceFolder.appendingPathComponent("state/acct-1/sync.sqlite")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let database = try SQLiteDatabase(url: url)
+        try database.execute(sql)
+    }
+
+    private static let versionOneTables = """
+        CREATE TABLE mailboxes (name TEXT PRIMARY KEY, uid_validity INTEGER NOT NULL);
+        CREATE TABLE locations (mailbox TEXT NOT NULL, uid_validity INTEGER NOT NULL, uid INTEGER NOT NULL,
+          local_id TEXT NOT NULL, PRIMARY KEY (mailbox, uid_validity, uid));
+        CREATE INDEX locations_by_local_id ON locations (local_id);
+        """
+
+    func testTheReadersVersionTwoKeepsItsFlagsAndGainsTheSyncState() async throws {
+        let id = MailMessageID()
+        try writeMapping(Self.versionOneTables + """
+            CREATE TABLE flags (local_id TEXT PRIMARY KEY, seen INTEGER NOT NULL, flagged INTEGER NOT NULL);
+            INSERT INTO mailboxes VALUES ('INBOX', 7);
+            INSERT INTO locations VALUES ('INBOX', 7, 3, '\(id.rawValue)');
+            INSERT INTO flags VALUES ('\(id.rawValue)', 1, 1);
+            PRAGMA user_version = 2;
+            """)
+        let store = try await MailStore.open(locations)
+        let flags = try await store.flags(of: [id], account: account)
+        XCTAssertEqual(flags[id], MailMessageFlags(seen: true, flagged: true))
+        try await store.saveCursor(folder: "INBOX", uidValidity: 7, highestUID: 3, historyComplete: true, serverCount: 1, account: account)
+        let folders = try await store.syncedFolders(account: account)
+        XCTAssertEqual(folders.map(\.highestUID), [3])
+    }
+
+    func testAPreMergeSyncVersionTwoMovesItsFlagsIntoTheSharedTable() async throws {
+        let id = MailMessageID()
+        try writeMapping(Self.versionOneTables + """
+            CREATE TABLE folder_state (name TEXT PRIMARY KEY, path TEXT NOT NULL, role TEXT, position INTEGER NOT NULL,
+              uid_validity INTEGER, highest_uid INTEGER NOT NULL DEFAULT 0, history_complete INTEGER NOT NULL DEFAULT 0,
+              server_count INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE message_flags (local_id TEXT PRIMARY KEY, seen INTEGER NOT NULL, answered INTEGER NOT NULL,
+              flagged INTEGER NOT NULL, draft INTEGER NOT NULL, keywords TEXT NOT NULL);
+            CREATE TABLE counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
+            INSERT INTO folder_state VALUES ('INBOX', '["INBOX"]', 'inbox', 0, 7, 9, 1, 2);
+            INSERT INTO message_flags VALUES ('\(id.rawValue)', 1, 1, 0, 0, '$Forwarded');
+            INSERT INTO counters VALUES ('imported_bytes', 42);
+            PRAGMA user_version = 2;
+            """)
+        let store = try await MailStore.open(locations)
+        let flags = try await store.flags(of: [id], account: account)
+        XCTAssertEqual(flags[id], MailMessageFlags(seen: true, answered: true, keywords: ["$Forwarded"]))
+        let folders = try await store.syncedFolders(account: account)
+        XCTAssertEqual(folders.first?.highestUID, 9)
+        let bytes = try await store.importedBytes(account: account)
+        XCTAssertEqual(bytes, 42)
+    }
+
+    func testSyncedFlagsReachTheListAndALocalChangeKeepsTheRest() async throws {
+        let store = try await MailStore.open(locations)
+        let a = try await store.ingest(SyntheticMail.plain(subject: "a", body: "a"), account: account, remote: location("INBOX", 1))
+        try await store.setFlags([a.id: MailMessageFlags(seen: false, answered: true, flagged: true, keywords: ["$Label1"])], account: account)
+        let listed = try await store.summaries(account: account, mailbox: "INBOX")
+        XCTAssertEqual(listed.first?.isUnread, true)
+        XCTAssertEqual(listed.first?.isFlagged, true)
+
+        try await store.setFlags(MessageFlags(seen: true, flagged: true), for: a.id)
+        let after = try await store.flags(of: [a.id], account: account)
+        XCTAssertEqual(after[a.id], MailMessageFlags(seen: true, answered: true, flagged: true, keywords: ["$Label1"]),
+                       "marking read keeps what only the sync knows")
+    }
+
     // MARK: Disconnecting
 
     private func seedTwoAccounts(_ store: MailStore) async throws -> (only: MailMessageID, shared: String, own: String) {

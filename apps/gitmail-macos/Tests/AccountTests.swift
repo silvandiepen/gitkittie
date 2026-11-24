@@ -175,11 +175,11 @@ final class AccountTests: XCTestCase {
         XCTAssertEqual(registered.first?.credential.account, account.id.rawValue)
         XCTAssertEqual(registered.first?.credential.username, user.address)
 
-        try await waitUntil("three messages listed") { model.messages.count == 3 }
-        XCTAssertEqual(Set(model.messages.compactMap(\.subject)), ["One", "Two", "Three"])
+        try await waitUntil("three messages listed") { model.browser.rows.map(\.latest).count == 3 }
+        XCTAssertEqual(Set(model.browser.rows.map(\.latest).compactMap(\.subject)), ["One", "Two", "Three"])
         try await waitUntil("the folder list") { model.sync.folders[account.id]?.contains { $0.name == "INBOX" } == true }
         await model.select(.folder(account.id, "INBOX"))
-        XCTAssertEqual(model.messages.count, 3)
+        XCTAssertEqual(model.browser.rows.map(\.latest).count, 3)
         XCTAssertEqual(model.selectedAccount?.id, account.id)
 
         // The password is nowhere on disk: not in account.json, not in the device state.
@@ -194,7 +194,7 @@ final class AccountTests: XCTestCase {
         XCTAssertNil(try credentials.secret(for: account.id), "the Keychain item goes with the account")
         let afterRemoval = await model.sending?.registry.all() ?? []
         XCTAssertEqual(afterRemoval.count, 0, "and so does sending from it")
-        XCTAssertEqual(model.messages, [])
+        XCTAssertEqual(model.browser.rows.map(\.latest), [])
         XCTAssertEqual(model.totalCount, 0)
     }
 
@@ -233,13 +233,13 @@ final class AccountTests: XCTestCase {
         let model = AppModel(locations: locations, services: services(trust: server.trust))
         await model.open()
         let account = try await model.addAccount(draft(server, user))
-        try await waitUntil("the message listed") { model.messages.count == 1 }
+        try await waitUntil("the message listed") { model.browser.rows.map(\.latest).count == 1 }
 
         try await model.removeAccount(account.id, .keepMail)
         XCTAssertEqual(model.accounts.map(\.id), [account.id])
         XCTAssertNil(model.accounts.first?.connection)
         XCTAssertEqual(model.syncStatus(account.id), "Not connected · mail kept on this Mac")
-        XCTAssertEqual(model.messages.map(\.subject), ["Kept"])
+        XCTAssertEqual(model.browser.rows.map(\.latest).map(\.subject), ["Kept"])
         XCTAssertNil(try credentials.secret(for: account.id))
         XCTAssertFalse(model.sync.isSyncing(account.id))
     }
@@ -251,7 +251,7 @@ final class AccountTests: XCTestCase {
         let model = AppModel(locations: locations, services: services(trust: server.trust))
         await model.open()
         let account = try await model.addAccount(draft(server, user))
-        try await waitUntil("the message listed") { model.messages.count == 1 }
+        try await waitUntil("the message listed") { model.browser.rows.map(\.latest).count == 1 }
 
         let exports = root.appendingPathComponent("Exports", isDirectory: true)
         try FileManager.default.createDirectory(at: exports, withIntermediateDirectories: true)
