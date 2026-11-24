@@ -51,6 +51,7 @@ struct ClassificationPanel: View {
                 Label(line, systemImage: "circle.fill")
                     .labelStyle(BulletLabelStyle())
             }
+            if verdict.senderRule != nil { SenderRuleReason(message: verdict.id) }
             Text("Sorted on this Mac by rule set \(verdict.classification.ruleSetVersion). Nothing was changed at your mail provider.")
                 .foregroundStyle(.tertiary)
                 .padding(.top, 2)

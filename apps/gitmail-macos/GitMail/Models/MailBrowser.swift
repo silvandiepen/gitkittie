@@ -166,6 +166,8 @@ final class MailBrowser {
     var actionError: String?
     /// Called when a read or flag change was queued for the provider (GKM-015).
     @ObservationIgnored var onActionsQueued: (@MainActor ([MailAccountID]) async -> Void)?
+    /// Messages shown expanded in the reader: the sender's local open history (GKM-019).
+    @ObservationIgnored var onMessagesOpened: (@MainActor ([MailMessageID]) async -> Void)?
 
     private var store: MailStore?
     private var preferences: RemoteContentPreferences?
@@ -314,6 +316,7 @@ final class MailBrowser {
             }
             guard selectedRowID == row.id else { return }
             openThread = thread
+            await onMessagesOpened?(thread.messages.filter(\.isExpanded).map(\.id))
             await markRead(thread.messages.filter { $0.summary.isUnread }.map(\.id))
         } catch {
             actionError = String(describing: error)

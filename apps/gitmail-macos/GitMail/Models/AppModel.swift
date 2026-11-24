@@ -21,13 +21,15 @@ enum SidebarSelection: Hashable {
     case space(MailSpaceID)
     /// Every attachment across accounts (GKM-023).
     case attachments
+    /// Senders and lists, their rules and unsubscribe (GKM-019, GKM-020).
+    case senders
     /// The cleanup dashboard (GKM-021).
     case cleanup
 
     /// The mail the list shows for it (drafts and the outbox have their own views).
     var scope: MailScope {
         switch self {
-        case .allMail, .drafts, .outbox, .attachments, .cleanup: .allMail
+        case .allMail, .drafts, .outbox, .attachments, .senders, .cleanup: .allMail
         case .category(let category): .category(category)
         case .space(let id): .space(id)
         case .account(let id): .account(id)
@@ -74,6 +76,8 @@ final class AppModel {
     var exportReport: ExportReport?
     /// Everyday actions with Undo, sent through each account's action journal (GKM-015).
     let actions: MailActions
+    /// Senders and lists, their rules, and unsubscribe (GKM-019, GKM-020; Models/Senders).
+    let senders: SendersModel
     /// The cleanup dashboard: analysis and batch previews (GKM-021).
     let cleanup: CleanupModel
 
@@ -114,12 +118,22 @@ final class AppModel {
         let browser = MailBrowser()
         self.sync = sync
         self.browser = browser
-        self.actions = MailActions(sync: sync, browser: browser)
+        let actions = MailActions(sync: sync, browser: browser)
+        self.actions = actions
         self.cleanup = CleanupModel(actions: actions, browser: browser)
         self.attention = MailAttention(poster: notifications)
+        self.senders = SendersModel(actions: actions, browser: browser, unsubscribe: UnsubscribeModel())
         sync.onStoreChanged = { [weak self] in await self?.refreshAfterSync() }
         browser.onActionsQueued = { [weak self] accounts in await self?.sync.actionsQueued(for: accounts) }
-        cleanup.onClassificationChanged = { [weak self] in await self?.refreshAfterClassificationChange() }
+        browser.onMessagesOpened = { [weak self] ids in await self?.senders.recordOpen(ids) }
+        senders.onPlacementsChanged = { [weak self] in
+            guard let self else { return }
+            await self.attention.refresh(accounts: self.accounts, arrivals: .leave)
+        }
+        senders.unsubscribe.accountAddresses = { [weak self] account in
+            guard let found = self?.accounts.first(where: { $0.id == account }), !found.address.isEmpty else { return [] }
+            return [MailAddress(name: found.displayName.isEmpty ? nil : found.displayName, address: found.address)]
+        }
     }
 
     /// The open store, for the account intents.
@@ -151,6 +165,7 @@ final class AppModel {
             cleanup.attach(opened)
             spaces.attach(opened)
             library.attach(opened, browser: browser)
+            await senders.attach(opened)
             await browser.setScope(selection.scope)
             try await attention.attach(opened)
             if let current = sending, sendingFolder != opened.locations.mailFolder {
@@ -165,6 +180,7 @@ final class AppModel {
                 self.sending = sending
                 sendingFolder = opened.locations.mailFolder
             }
+            senders.unsubscribe.sending = sending
             try await reload()
             phase = .ready
             await sync.start(accounts, store: opened)
@@ -268,6 +284,7 @@ final class AppModel {
         await spaces.refresh(applyRules: true)
         await browser.reload()
         await attention.refresh(accounts: accounts, arrivals: .notify)
+        await senders.afterSync()
     }
 
     private func reload() async throws {
@@ -279,7 +296,7 @@ final class AppModel {
         folders = found
         await spaces.refresh(applyRules: true)
         let stillThere: Bool = switch selection {
-        case .allMail, .category, .drafts, .outbox, .attachments, .cleanup: true
+        case .allMail, .category, .drafts, .outbox, .attachments, .senders, .cleanup: true
         case .space(let id): spaces.space(id) != nil
         case .account(let id): accounts.contains { $0.id == id }
         case .folder(let id, let name):

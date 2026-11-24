@@ -23,26 +23,22 @@ struct RootView: View {
 struct MailWindow: View {
     @Environment(AppModel.self) private var model
 
-    var body: some View {
-        @Bindable var model = model
+    /// Sidebar, middle column, detail; split out of `body` so the alerts below type-check quickly.
+    private var columns: some View {
         NavigationSplitView {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 320)
         } content: {
-            Group {
-                switch model.selection {
-                case .drafts: DraftsView()
-                case .outbox: OutboxView()
-                case .attachments: AttachmentLibraryView(space: nil).navigationTitle("Attachments")
-                case .space(let id): SpaceView(space: id)
-                case .cleanup: CleanupDashboardView()
-                default: MessageListView()
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
+            ContentColumn(selection: model.selection)
+                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
         } detail: {
-            MailDetail()
+            DetailColumn(selection: model.selection)
         }
+    }
+
+    var body: some View {
+        @Bindable var model = model
+        columns
         .toolbar { ComposeToolbar(model: model) }
         // Undo for actions, the Delete Permanently confirmation and action notices (GKM-015).
         .mailActionChrome(model)
@@ -99,12 +95,34 @@ struct MailWindow: View {
     }
 }
 
-/// The reader, or the cleanup preview while Clean Up is selected (GKM-021).
-private struct MailDetail: View {
-    @Environment(AppModel.self) private var model
+/// The middle column: the list for the selection, or its own view.
+private struct ContentColumn: View {
+    let selection: SidebarSelection
 
     var body: some View {
-        if model.selection == .cleanup { CleanupDetailView() } else { ReaderView() }
+        switch selection {
+        case .drafts: DraftsView()
+        case .outbox: OutboxView()
+        case .attachments: AttachmentLibraryView(space: nil).navigationTitle("Attachments")
+        case .space(let id): SpaceView(space: id)
+        case .senders: SendersListView()
+        case .cleanup: CleanupDashboardView()
+        default: MessageListView()
+        }
+    }
+}
+
+/// The reader, the selected sender's page in the Senders view (GKM-019), or the cleanup
+/// preview (GKM-021).
+private struct DetailColumn: View {
+    let selection: SidebarSelection
+
+    var body: some View {
+        switch selection {
+        case .senders: SenderDetailView()
+        case .cleanup: CleanupDetailView()
+        default: ReaderView()
+        }
     }
 }
 
