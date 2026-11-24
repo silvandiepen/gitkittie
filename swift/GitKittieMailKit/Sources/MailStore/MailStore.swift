@@ -50,7 +50,7 @@ public actor MailStore {
     public static let layoutVersion = 1
 
     public nonisolated let locations: StoreLocations
-    private let parser: any MessageParsing
+    let parser: any MessageParsing
     let writer: AtomicWriter
     private let faults: WriteFaults
     var index: MailIndex
@@ -95,35 +95,83 @@ public actor MailStore {
         if let remote, let existing = try mapping(for: accountName).localID(at: remote) {
             return IngestResult(id: existing, isNew: false)
         }
-        let id = MailMessageID()
-        // Whole seconds: the received date is stored as ISO 8601 and must read back equal.
-        let received = Date(timeIntervalSince1970: receivedAt.timeIntervalSince1970.rounded(.down))
-        let derived = try derive(eml, parsed: parser.parse(eml), id: id, account: account, received: received)
-        let directory = try messageDirectory(account: accountName, date: derived.front.sortDate)
-
-        let journalURL = locations.journalFolder.appendingPathComponent("\(id.rawValue).json")
-        let entry = JournalEntry(id: id, account: account, directory: relativePath(of: directory), remote: remote, received: received)
-        try writer.write(JSONCoding.encoder.encode(entry), to: journalURL)
-
-        try storeBlobs(derived.blobs)
-        let markdown = try writer.stage(Data(derived.markdown.utf8), for: directory.appendingPathComponent("\(id.rawValue).md"))
-        let original = try writer.stage(eml, for: directory.appendingPathComponent("\(id.rawValue).eml"))
-        try writer.commit(markdown)
-        try writer.commit(original)
-
-        try faults.check(.beforeIndex)
-        try index.upsert(IndexRecord(front: derived.front, message: derived.message, path: relativePath(of: original.destination),
-                                     attachmentText: attachmentText(for: derived.front.attachments)))
-        if let remote {
-            try mapping(for: accountName).record(remote, for: id)
-            try index.setMailboxes([remote.mailbox], for: id, account: account)
-        }
+        let id = try write([NewMessage(eml: eml, parsed: parser.parse(eml), remote: remote, receivedAt: receivedAt)],
+                           account: account)[0]
         if let flags {
             try mapping(for: accountName).setFlags(flags, for: id)
             try index.setFlags(flags, for: id)
         }
-        try FileManager.default.removeItem(at: journalURL)
         return IngestResult(id: id, isNew: true)
+    }
+
+    /// A message to write, parsed once.
+    struct NewMessage {
+        var eml: Data
+        var parsed: ParsedMessage
+        var remote: RemoteLocation?
+        var receivedAt: Date
+    }
+
+    /// Writes new messages as one unit of durability (GKM-035): one journal file lists them all;
+    /// every blob, `.md` and `.eml` is flushed and renamed into place, then each directory
+    /// touched is flushed once; then the index and the remote mapping take them in one
+    /// transaction each, and the journal file goes. Per message the guarantee is unchanged: a
+    /// crash leaves each one wholly there (its `.eml` made it; recovery completes the rest) or
+    /// wholly absent — only the flushes are shared.
+    func write(_ messages: [NewMessage], account: MailAccountID) throws -> [MailMessageID] {
+        guard !messages.isEmpty else { return [] }
+        let accountName = try SafePath.component(account.rawValue)
+        var planned: [(id: MailMessageID, derived: Derived, directory: URL, remote: RemoteLocation?, eml: Data)] = []
+        for message in messages {
+            let id = MailMessageID()
+            // Whole seconds: the received date is stored as ISO 8601 and must read back equal.
+            let received = Date(timeIntervalSince1970: message.receivedAt.timeIntervalSince1970.rounded(.down))
+            let derived = try derive(message.eml, parsed: message.parsed, id: id, account: account, received: received)
+            planned.append((id, derived, try messageDirectory(account: accountName, date: derived.front.sortDate), message.remote, message.eml))
+        }
+
+        let journalURL = locations.journalFolder.appendingPathComponent("\(planned.count == 1 ? planned[0].id.rawValue : UUID().uuidString.lowercased()).json")
+        let entries = planned.map { JournalEntry(id: $0.id, account: account, directory: relativePath(of: $0.directory),
+                                                 remote: $0.remote, received: $0.derived.front.received) }
+        try writer.write(JSONCoding.encoder.encode(entries), to: journalURL)
+
+        var directories = Set<URL>()
+        var seenBlobs = Set<String>()
+        for blob in planned.flatMap(\.derived.blobs) where seenBlobs.insert(blob.hash).inserted {
+            let url = locations.blobsFolder.appendingPathComponent(blob.hash)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                try writer.rename(writer.stage(blob.data, for: url))
+                directories.insert(locations.blobsFolder)
+            }
+        }
+        for directory in directories { try AtomicWriter.syncDirectory(directory) }
+        directories = []
+
+        var originals: [URL] = []
+        for message in planned {
+            let markdown = try writer.stage(Data(message.derived.markdown.utf8), for: message.directory.appendingPathComponent("\(message.id.rawValue).md"))
+            let original = try writer.stage(message.eml, for: message.directory.appendingPathComponent("\(message.id.rawValue).eml"))
+            try writer.rename(markdown)
+            try writer.rename(original)
+            originals.append(original.destination)
+            directories.insert(message.directory)
+        }
+        for directory in directories { try AtomicWriter.syncDirectory(directory) }
+
+        try faults.check(.beforeIndex)
+        try index.batch {
+            for (message, original) in zip(planned, originals) {
+                try index.upsert(IndexRecord(front: message.derived.front, message: message.derived.message, path: relativePath(of: original),
+                                             attachmentText: attachmentText(for: message.derived.front.attachments)))
+                if let remote = message.remote { try index.setMailboxes([remote.mailbox], for: message.id, account: account) }
+            }
+        }
+        let mapping = try mapping(for: accountName)
+        try mapping.database.transaction {
+            for message in planned { if let remote = message.remote { try mapping.record(remote, for: message.id) } }
+        }
+        try FileManager.default.removeItem(at: journalURL)
+        return planned.map(\.id)
     }
 
     /// Records the account's description in the folder (`accounts/<id>/account.json`). No
@@ -411,26 +459,35 @@ public actor MailStore {
         try removePartials(in: locations.blobsFolder)
         var everyEntryReadable = true
         for file in try sortedContents(of: locations.journalFolder) where file.pathExtension == "json" {
-            guard let entry = try? JSONCoding.decoder.decode(JournalEntry.self, from: Data(contentsOf: file)),
-                  let accountName = try? SafePath.component(entry.account.rawValue),
-                  let directory = safeDirectory(entry.directory) else {
+            // A journal file lists the messages of one write (older versions wrote one each).
+            let data = try? Data(contentsOf: file)
+            let entries = data.flatMap { try? JSONCoding.decoder.decode([JournalEntry].self, from: $0) }
+                ?? data.flatMap { try? JSONCoding.decoder.decode(JournalEntry.self, from: $0) }.map { [$0] }
+            guard let entries else {
                 // Journal entries are written atomically, so this is damage from outside. The
                 // folder is the truth: drop the entry and let the full rebuild sort it out.
                 everyEntryReadable = false
                 try fileManager.removeItem(at: file)
                 continue
             }
-            try removePartials(in: directory, prefix: ".\(entry.id.rawValue).")
-            let emlURL = directory.appendingPathComponent("\(entry.id.rawValue).eml")
-            let markdownURL = directory.appendingPathComponent("\(entry.id.rawValue).md")
-            if fileManager.fileExists(atPath: emlURL.path) {
-                try index.upsert(complete(id: entry.id, account: entry.account, emlURL: emlURL, fallbackReceived: entry.received))
-                if let remote = entry.remote {
-                    try mapping(for: accountName).record(remote, for: entry.id)
-                    try index.setMailboxes(Set(mapping(for: accountName).locations(of: entry.id).map(\.mailbox)), for: entry.id, account: entry.account)
+            for entry in entries {
+                guard let accountName = try? SafePath.component(entry.account.rawValue),
+                      let directory = safeDirectory(entry.directory) else {
+                    everyEntryReadable = false
+                    continue
                 }
-            } else if fileManager.fileExists(atPath: markdownURL.path) {
-                try fileManager.removeItem(at: markdownURL)
+                try removePartials(in: directory, prefix: ".\(entry.id.rawValue).")
+                let emlURL = directory.appendingPathComponent("\(entry.id.rawValue).eml")
+                let markdownURL = directory.appendingPathComponent("\(entry.id.rawValue).md")
+                if fileManager.fileExists(atPath: emlURL.path) {
+                    try index.upsert(complete(id: entry.id, account: entry.account, emlURL: emlURL, fallbackReceived: entry.received))
+                    if let remote = entry.remote {
+                        try mapping(for: accountName).record(remote, for: entry.id)
+                        try index.setMailboxes(Set(mapping(for: accountName).locations(of: entry.id).map(\.mailbox)), for: entry.id, account: entry.account)
+                    }
+                } else if fileManager.fileExists(atPath: markdownURL.path) {
+                    try fileManager.removeItem(at: markdownURL)
+                }
             }
             try fileManager.removeItem(at: file)
         }

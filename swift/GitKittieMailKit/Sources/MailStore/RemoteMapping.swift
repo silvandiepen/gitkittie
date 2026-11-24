@@ -16,6 +16,7 @@ final class RemoteMapping {
 
     init(url: URL) throws {
         database = try SQLiteDatabase(url: url)
+        database.countCommits(as: .syncState)
         try database.execute("PRAGMA journal_mode = WAL")
         let version = try database.userVersion
         guard version != Self.schemaVersion else { return }

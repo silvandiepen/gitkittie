@@ -5,6 +5,7 @@ import SQLite3
 /// the store needs no third-party dependency. One connection, used from one actor.
 final class SQLiteDatabase {
     private var handle: OpaquePointer?
+    private var transactionDepth = 0
     let url: URL
 
     init(url: URL) throws {
@@ -23,6 +24,21 @@ final class SQLiteDatabase {
 
     deinit { sqlite3_close(handle) }
 
+    /// Which counter in ``StoreIOStatistics`` this connection's commits go to.
+    enum CommitCounter: Int {
+        case index = 1
+        case syncState = 2
+    }
+
+    /// Counts every committed transaction (explicit or implicit) in ``StoreIOStatistics``.
+    func countCommits(as counter: CommitCounter) {
+        sqlite3_commit_hook(handle, { context in
+            let isIndex = Int(bitPattern: context) == CommitCounter.index.rawValue
+            StoreIOStatistics.record { if isIndex { $0.indexCommits += 1 } else { $0.syncStateCommits += 1 } }
+            return 0 // 0: let the commit go ahead
+        }, UnsafeMutableRawPointer(bitPattern: counter.rawValue))
+    }
+
     func execute(_ sql: String) throws {
         var error: UnsafeMutablePointer<CChar>?
         let code = sqlite3_exec(handle, sql, nil, nil, &error)
@@ -40,8 +56,16 @@ final class SQLiteDatabase {
         return Statement(statement, database: self)
     }
 
-    /// Run `body` in one transaction: all of it lands, or none of it.
+    /// Run `body` in one transaction: all of it lands, or none of it. A transaction inside
+    /// another joins it.
     func transaction<T>(_ body: () throws -> T) throws -> T {
+        if transactionDepth > 0 {
+            transactionDepth += 1
+            defer { transactionDepth -= 1 }
+            return try body()
+        }
+        transactionDepth = 1
+        defer { transactionDepth = 0 }
         try execute("BEGIN IMMEDIATE")
         do {
             let result = try body()
