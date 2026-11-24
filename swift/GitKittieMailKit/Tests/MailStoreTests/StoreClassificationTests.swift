@@ -94,6 +94,58 @@ final class StoreClassificationTests: XCTestCase {
         XCTAssertEqual(pending, 0)
     }
 
+    /// The sync stores a fetched batch in one write (GKM-035): every message in it gets the
+    /// verdict, home and arrival number the one-by-one path gives, and joins a rule-set upgrade.
+    func testASyncedBatchIsClassifiedExactlyAsMessagesStoredOneByOne() async throws {
+        let single = try await open()
+        let expectations = try await seedHistory(single)
+        let singleIDs = try await ingestCorpus(single, expectations)
+
+        locations = StoreLocations(mailFolder: root.appendingPathComponent("Batch/Mail"),
+                                   deviceFolder: root.appendingPathComponent("Batch/Support/Mail"))
+        let batched = try await open()
+        _ = try await seedHistory(batched)
+        let start = try await batched.latestArrival()
+        var messages: [SyncedMessage] = []
+        for (n, fixture) in expectations.fixtures.enumerated() {
+            let data = try Data(contentsOf: XCTUnwrap(MailFixtures.directory?.appendingPathComponent(fixture.file)))
+            let folder = fixture.providerFolders?.first ?? (fixture.providerVerdict == "spam" ? "Junk" : "INBOX")
+            messages.append(SyncedMessage(eml: data, remote: RemoteLocation(mailbox: folder, uidValidity: 1, uid: UInt32(n + 1)),
+                                          receivedAt: Date(), flags: MailMessageFlags()))
+        }
+        let outcomes = try await batched.storeSynced(messages, account: account)
+        XCTAssertTrue(outcomes.allSatisfy { if case .stored = $0 { return true }; return false }, "\(outcomes)")
+
+        for (fixture, outcome) in zip(expectations.fixtures, outcomes) {
+            let one = try await XCTUnwrapAsync(await single.verdict(of: XCTUnwrap(singleIDs[fixture.file])), fixture.file)
+            let batch = try await XCTUnwrapAsync(await batched.verdict(of: outcome.id), fixture.file)
+            XCTAssertEqual(batch.classification.ruleSetVersion, MailClassifier.ruleSetVersion)
+            XCTAssertEqual(batch.classification.purpose, one.classification.purpose, fixture.file)
+            XCTAssertEqual(batch.classification.risk, one.classification.risk, fixture.file)
+            XCTAssertEqual(batch.classification.urgency, one.classification.urgency, fixture.file)
+            XCTAssertEqual(batch.classification.reasons, one.classification.reasons, fixture.file)
+            XCTAssertEqual(batch.home, one.home, fixture.file)
+            XCTAssertEqual(batch.isCorrected, one.isCorrected, fixture.file)
+        }
+        let pending = try await batched.pendingClassificationCount()
+        XCTAssertEqual(pending, 0)
+        let arrivals = try await batched.arrivals(after: start)
+        XCTAssertEqual(arrivals.map(\.id), outcomes.map(\.id), "each arrives once, in batch order")
+
+        // A new rule set reclassifies batch-stored mail like any other, keeping the arrivals.
+        let total = try await batched.messageCount()
+        try await batched.markVerdictsAsRuleSetForTesting("gkm-rules-1")
+        let stale = try await batched.pendingClassificationCount()
+        XCTAssertEqual(stale, total)
+        while try await batched.classifyPending() > 0 {}
+        for outcome in outcomes {
+            let verdict = try await batched.verdict(of: outcome.id)
+            XCTAssertEqual(verdict?.classification.ruleSetVersion, MailClassifier.ruleSetVersion)
+        }
+        let again = try await batched.arrivals(after: start)
+        XCTAssertEqual(again.map(\.sequence), arrivals.map(\.sequence))
+    }
+
     func testEveryViewShowsExactlyItsMessagesAndAllMailShowsEverything() async throws {
         let store = try await open()
         let expectations = try await seedHistory(store)

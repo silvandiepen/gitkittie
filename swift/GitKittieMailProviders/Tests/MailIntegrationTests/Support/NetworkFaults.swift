@@ -5,7 +5,8 @@ import NIOPosix
 import NIOSSL
 
 // Real network conditions in front of the real test server: a TCP proxy that can cut every
-// connection on demand, or cut an SMTP connection right after the server accepted a message;
+// connection on demand, cut an SMTP connection right after the server accepted a message, or
+// add a round-trip delay and a link speed (the sync benchmark's estimate of a real provider);
 // and a STARTTLS front, because GreenMail's SMTP port does not offer STARTTLS (iCloud's 587
 // requires it). Both forward bytes to GreenMail unchanged; neither imitates a server.
 
@@ -19,6 +20,13 @@ final class RelayHandler: ChannelInboundHandler {
     var skipFirstLine = false
     /// Looks at each buffer; returns false to drop it and close both sides.
     var inspect: ((ByteBuffer) -> Bool)?
+    /// Delays every buffer by this one-way latency and the time the link needs to carry it.
+    var link: LinkConditions?
+    /// Buffers held back by `link`, oldest first; each scheduled send takes the oldest, so the
+    /// byte order never changes.
+    private var delayed: [ByteBuffer] = []
+    /// When the simulated link has finished sending what was queued before.
+    private var linkFreeAt = NIODeadline.uptimeNanoseconds(0)
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         var buffer = unwrapInboundIn(data)
@@ -33,7 +41,20 @@ final class RelayHandler: ChannelInboundHandler {
             context.close(promise: nil)
             return
         }
-        if let partner { partner.writeAndFlush(buffer, promise: nil) } else { pending.append(buffer) }
+        guard let partner else { pending.append(buffer); return }
+        guard let link else { partner.writeAndFlush(buffer, promise: nil); return }
+        var sentAt = max(NIODeadline.now(), linkFreeAt)
+        if let bytesPerSecond = link.bytesPerSecond, bytesPerSecond > 0 {
+            sentAt = sentAt + .nanoseconds(Int64(buffer.readableBytes) * 1_000_000_000 / Int64(bytesPerSecond))
+        }
+        linkFreeAt = sentAt
+        delayed.append(buffer)
+        let bound = NIOLoopBound(self, eventLoop: context.eventLoop)
+        context.eventLoop.scheduleTask(deadline: sentAt + link.oneWay) {
+            let relay = bound.value
+            guard !relay.delayed.isEmpty else { return }
+            relay.partner?.writeAndFlush(relay.delayed.removeFirst(), promise: nil)
+        }
     }
 
     func attach(_ partner: any Channel) {
@@ -53,10 +74,23 @@ final class RelayHandler: ChannelInboundHandler {
     }
 }
 
+/// A simulated network path: half the round trip each way, and optionally a link speed.
+struct LinkConditions: Sendable {
+    var oneWay: TimeAmount
+    var bytesPerSecond: Int?
+
+    init(roundTrip: TimeAmount, bitsPerSecond: Int? = nil) {
+        oneWay = .nanoseconds(roundTrip.nanoseconds / 2)
+        bytesPerSecond = bitsPerSecond.map { $0 / 8 }
+    }
+}
+
 /// A loopback TCP proxy in front of a test server port.
 final class FaultProxy: Sendable {
     enum Mode: Sendable {
         case relay
+        /// Relay with a delay in both directions (and a link speed), as a distant server.
+        case slowLink(LinkConditions)
         /// SMTP in plaintext: once the client has sent the end-of-data marker, swallow the
         /// server's reply and cut the connection. The server has the message; the client
         /// never learns it.
@@ -84,6 +118,9 @@ final class FaultProxy: Sendable {
                 switch mode {
                 case .relay:
                     break
+                case .slowLink(let link):
+                    downstream.link = link
+                    upstream.link = link
                 case .cutBeforeGreeting:
                     upstream.inspect = { _ in false }
                 case .cutWhenClientSends(let marker):

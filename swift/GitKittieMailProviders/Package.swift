@@ -126,7 +126,10 @@ let package = Package(
         ),
         .testTarget(
             name: "MailIMAPTests",
-            dependencies: ["MailIMAP", "MailProvider", .product(name: "NIOIMAP", package: "swift-nio-imap")],
+            dependencies: [
+                "MailIMAP", "MailProvider", .product(name: "NIOIMAP", package: "swift-nio-imap"),
+                .product(name: "NIOEmbedded", package: "swift-nio"),
+            ],
             swiftSettings: protocolSettings
         ),
         .testTarget(

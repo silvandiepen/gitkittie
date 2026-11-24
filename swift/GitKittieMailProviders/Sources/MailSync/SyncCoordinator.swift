@@ -37,6 +37,8 @@ public actor SyncCoordinator {
     private var historyPending = false
     /// Messages too large to download, per folder: reported, never retried in a loop.
     private var tooLargeByFolder: [String: Set<UInt32>] = [:]
+    /// When every folder's flags were last checked.
+    private var lastFlagCheck: ContinuousClock.Instant?
 
     public private(set) var progress = SyncProgress() {
         didSet { if progress != oldValue { continuation.yield(progress) } }
@@ -128,7 +130,7 @@ public actor SyncCoordinator {
         while true {
             try Task.checkCancellation()
             if historyPending {
-                try await pass(session)
+                try await pass(session, continuingHistory: true)
                 continue
             }
             let folder = activeFolder ?? inboxName()
@@ -138,7 +140,7 @@ public actor SyncCoordinator {
             switch event {
             case .changed:
                 log.debug("sync", "\(folder) changed")
-                try await syncFolders([folder], session, includeHistory: false)
+                try await syncFolders([folder], session, includeHistory: false, checkFlags: true)
             case .timedOut:
                 try await pass(session)
             }
@@ -146,13 +148,15 @@ public actor SyncCoordinator {
     }
 
     private func passUntilHistoryDone(_ session: any MailboxSession) async throws {
-        repeat { try await pass(session) } while historyPending
+        try await pass(session)
+        while historyPending { try await pass(session, continuingHistory: true) }
     }
 
     // MARK: - A pass
 
-    /// Lists the folders, then syncs them all.
-    private func pass(_ session: any MailboxSession) async throws {
+    /// Lists the folders, then syncs them all. A pass that only continues a history import
+    /// checks flags at most every ``SyncOptions/flagCheckInterval``.
+    private func pass(_ session: any MailboxSession, continuingHistory: Bool = false) async throws {
         let remote = try await session.listFolders().filter(\.isSelectable)
         let ordered = SyncPlanner.order(remote)
         let removed = try await store.replaceSyncedFolders(
@@ -163,12 +167,14 @@ public actor SyncCoordinator {
             tooLargeByFolder[name] = nil
         }
         progress.folders = try await store.syncedFolders(account: account)
-        try await syncFolders(ordered.map(\.id), session, includeHistory: true)
+        let flagsDue = lastFlagCheck.map { ContinuousClock.now - $0 >= options.flagCheckInterval } ?? true
+        try await syncFolders(ordered.map(\.id), session, includeHistory: true, checkFlags: !continuingHistory || flagsDue)
         progress.lastCompletedPass = Date()
     }
 
     /// New mail in every folder first, then flags and removals, then history.
-    private func syncFolders(_ names: [String], _ session: any MailboxSession, includeHistory: Bool) async throws {
+    private func syncFolders(_ names: [String], _ session: any MailboxSession, includeHistory: Bool,
+                             checkFlags: Bool) async throws {
         var plans: [PreparedFolder] = []
         for name in names {
             try Task.checkCancellation()
@@ -193,9 +199,8 @@ public actor SyncCoordinator {
             updateRemaining()
         }
 
+        if checkFlags { try await syncFlags(of: plans, session, recordCheck: includeHistory) }
         for entry in plans {
-            progress.activity = .checking(folder: displayName(entry.folder))
-            try await syncFlags(entry.folder, uidValidity: entry.uidValidity, highestModSeq: entry.highestModSeq, session)
             // Moves this device made that the provider did not report ids for are mapped by now
             // (the folder was listed after them), or did not land there: either way they settle.
             try await store.settleAwaitingActions(mailbox: entry.folder, listedAt: entry.listedAt, account: account)
@@ -222,6 +227,8 @@ public actor SyncCoordinator {
                 }
                 if progress.historyPausedForBudget { break }
             }
+            // The history is done (or paused): bring flags up to date before waiting for changes.
+            if !checkFlags, !historyPending { try await syncFlags(of: plans, session, recordCheck: true) }
         }
         progress.folders = try await store.syncedFolders(account: account)
     }
@@ -301,41 +308,35 @@ public actor SyncCoordinator {
                 }
                 let fetched = try await session.fetchMessages(batch.map(\.id))
                 let byID = Dictionary(fetched.map { ($0.summary.id, $0) }, uniquingKeysWith: { a, _ in a })
-                for summary in batch {
-                    guard let message = byID[summary.id] else { continue } // expunged meanwhile
-                    try await save(message)
-                    result.stored += 1
-                    progress.imported += 1
-                    progress.remaining = max(0, progress.remaining - 1)
+                // Stored as one batch: one flush per directory and one commit per database for
+                // the lot, instead of several per message (GKM-035).
+                let messages = batch.compactMap { byID[$0.id] } // missing: expunged meanwhile
+                let outcomes = try await store.storeSynced(messages.map(Self.synced), account: account)
+                for outcome in outcomes {
+                    if case .matched(let id) = outcome { log.debug("sync", "\(folder): a fetched message matched stored \(id)") }
                 }
+                result.stored += outcomes.count
+                progress.imported += outcomes.count
+                progress.remaining = max(0, progress.remaining - outcomes.count)
             }
         }
         return result
     }
 
-    /// Stores one fetched message, or records its location on the stored message it is.
-    private func save(_ message: FetchedMessage) async throws {
+    /// A fetched message as the store takes it.
+    private static func synced(_ message: FetchedMessage) -> SyncedMessage {
         let id = message.summary.id
-        let location = RemoteLocation(mailbox: id.folder, uidValidity: id.uidValidity, uid: id.uid)
-        let flags = Self.flags(message.summary.flags)
-        if let existing = try await store.localID(at: location, account: account) {
-            try await store.setFlags([existing: flags], account: account)
-            return
+        return SyncedMessage(eml: message.rawMessage, remote: RemoteLocation(mailbox: id.folder, uidValidity: id.uidValidity, uid: id.uid),
+                             receivedAt: message.summary.internalDate ?? Date(), flags: flags(message.summary.flags))
+    }
+
+    /// Checks the flags in each folder; `recordCheck` when these are all the account's folders.
+    private func syncFlags(of folders: [PreparedFolder], _ session: any MailboxSession, recordCheck: Bool) async throws {
+        for entry in folders {
+            progress.activity = .checking(folder: displayName(entry.folder))
+            try await syncFlags(entry.folder, uidValidity: entry.uidValidity, highestModSeq: entry.highestModSeq, session)
         }
-        // The same message seen before (a move, a copy, a UIDVALIDITY reset): same bytes, same
-        // message. Message-ID or a fingerprint alone is only a signal, never enough to merge.
-        for candidate in try await store.reconciliationCandidates(for: message.rawMessage, account: account) {
-            if let original = try? await store.originalData(of: candidate), original == message.rawMessage {
-                try await store.record(location, for: candidate, account: account)
-                try await store.setFlags([candidate: flags], account: account)
-                log.debug("sync", "\(id) matched a stored message")
-                return
-            }
-        }
-        let result = try await store.ingest(message.rawMessage, account: account, remote: location,
-                                            receivedAt: message.summary.internalDate ?? Date())
-        try await store.setFlags([result.id: flags], account: account)
-        try await store.addImportedBytes(Int64(message.rawMessage.count), account: account)
+        if recordCheck { lastFlagCheck = ContinuousClock.now }
     }
 
     /// Brings stored flags in line with the provider's, for every stored message in the folder.

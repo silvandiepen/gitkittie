@@ -14,19 +14,27 @@ public struct SyncOptions: Sendable {
     public var historyPerPass: Int
     /// UIDs per summary or flag fetch.
     public var summaryBatch: Int
-    /// Messages and bytes per body fetch.
+    /// Messages and bytes per body fetch. Each fetch is a round trip and each stored batch one
+    /// flush per directory and one commit, so fewer, larger batches help most on a slow link
+    /// (GKM-035); the byte limit keeps a batch's memory bounded.
     public var bodyBatchMessages: Int
     public var bodyBatchBytes: Int
     /// How long one IDLE (or poll) waits before every folder is checked again. Under the
     /// 29 minutes RFC 2177 allows, and short enough for NAT timeouts.
     public var idleTimeout: Duration
+    /// While a long history import runs pass after pass, flags of stored messages are checked
+    /// at most this often (and once more when the history is complete). Every pass still
+    /// checks for new mail first. Checking every stored message's flags on every slice made a
+    /// first sync quadratic in the mailbox size (GKM-035).
+    public var flagCheckInterval: Duration
     /// Backoff between reconnects. Its `maxAttempts` is not used: the sync keeps trying at the
     /// longest delay until it is stopped.
     public var reconnect: ReconnectPolicy
 
     public init(recentPerFolder: Int = 200, historyBudgetBytes: Int64? = nil, historyPerPass: Int = 500,
-                summaryBatch: Int = 500, bodyBatchMessages: Int = 25, bodyBatchBytes: Int = 8 * 1024 * 1024,
-                idleTimeout: Duration = .seconds(9 * 60), reconnect: ReconnectPolicy = ReconnectPolicy()) {
+                summaryBatch: Int = 500, bodyBatchMessages: Int = 100, bodyBatchBytes: Int = 8 * 1024 * 1024,
+                idleTimeout: Duration = .seconds(9 * 60), flagCheckInterval: Duration = .seconds(120),
+                reconnect: ReconnectPolicy = ReconnectPolicy()) {
         self.recentPerFolder = recentPerFolder
         self.historyBudgetBytes = historyBudgetBytes
         self.historyPerPass = historyPerPass
@@ -34,6 +42,7 @@ public struct SyncOptions: Sendable {
         self.bodyBatchMessages = bodyBatchMessages
         self.bodyBatchBytes = bodyBatchBytes
         self.idleTimeout = idleTimeout
+        self.flagCheckInterval = flagCheckInterval
         self.reconnect = reconnect
     }
 }
