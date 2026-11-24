@@ -9,4 +9,4 @@ In development: the app shell (GKM-009) and the mail store (GKM-005, `swift/GitK
 - Mail core: `cd swift/GitKittieMailKit && swift test`.
 - `GitMail/Models` is UI-free and built into `GitMailTests` too; views live in `GitMail/Views`, the shared navy `Theme` comes from `swift/GitKittieUI`.
 - The MIME reading in `MailStore` is provisional (`BasicMessageParser`) until GKM-002; a library plugs in through `MessageParsing`.
-- No app icon yet; add the AppIcon set and `ASSETCATALOG_COMPILER_APPICON_NAME` together.
+- App icon: `GitMail/Assets.xcassets/AppIcon.appiconset`, rendered from project-assets `GitKittie/assets/icon_gitmail.svg`.
