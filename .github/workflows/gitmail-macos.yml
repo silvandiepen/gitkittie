@@ -6,6 +6,7 @@ on:
     paths:
       - apps/gitmail-macos/**
       - swift/GitKittieMailKit/**
+      - swift/GitKittieMailProviders/**
       - swift/GitKittieUI/**
       - .github/workflows/gitmail-macos.yml
   push:
@@ -13,13 +14,15 @@ on:
     paths:
       - apps/gitmail-macos/**
       - swift/GitKittieMailKit/**
+      - swift/GitKittieMailProviders/**
       - swift/GitKittieUI/**
       - .github/workflows/gitmail-macos.yml
   workflow_dispatch:
 
 jobs:
   build-and-test:
-    runs-on: macos-15
+    # Xcode 26 / Swift 6.2: GitKittieMailProviders (swift-nio-imap 0.5) needs macOS 15 and Swift 6.2.
+    runs-on: macos-26
     defaults:
       run:
         working-directory: apps/gitmail-macos
