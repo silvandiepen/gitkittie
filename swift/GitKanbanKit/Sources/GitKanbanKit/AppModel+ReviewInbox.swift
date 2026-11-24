@@ -26,8 +26,27 @@ extension AppModel {
     /// Items waiting for a decision, over all boards.
     public var pendingReviewTotal: Int { reviewInbox.reduce(0) { $0 + $1.pending } }
 
-    /// Requests with something waiting, over all boards, in the inbox's order.
-    public var openReviewRequests: [ReviewRequest] { reviewInbox.flatMap(\.open) }
+    /// Requests with something waiting, over all boards, newest first: "Review All" starts
+    /// with what was asked last.
+    public var openReviewRequests: [ReviewRequest] { Self.newestFirst(reviewInbox.flatMap(\.open)) }
+
+    /// Requests newest first, by `requested_at`. Ones without a date go last, in the order
+    /// they came in.
+    public nonisolated static func newestFirst(_ requests: [ReviewRequest]) -> [ReviewRequest] {
+        requests.enumerated().sorted { a, b in
+            switch (BoardProgress.date(a.element.requestedAt), BoardProgress.date(b.element.requestedAt)) {
+            case let (x?, y?) where x != y: return x > y
+            case (.some, .none): return true
+            case (.none, .some): return false
+            default: return a.offset < b.offset
+            }
+        }.map(\.element)
+    }
+
+    /// When a board's latest waiting request was made, to put the board with the newest on top.
+    nonisolated static func newestOpenDate(_ board: BoardReviews) -> Date {
+        board.open.compactMap { BoardProgress.date($0.requestedAt) }.max() ?? .distantPast
+    }
 
     /// Whether any board has review requests at all (decided ones included).
     public var hasReviews: Bool { reviewInbox.contains { !$0.requests.isEmpty } }
@@ -62,11 +81,11 @@ extension AppModel {
                     group.addTask {
                         let (_, config) = await RemoteBoardStore.loadEffectiveConfig(source: source, folder: boardFolder)
                         guard let folder = Review.reviewFolder(config.reviewPath, projectFolder: boardFolder) else { return nil }
-                        let requests = await RemoteBoardStore.loadReviews(source: source, folder: folder).map { request -> ReviewRequest in
+                        let requests = Self.newestFirst(await RemoteBoardStore.loadReviews(source: source, folder: folder).map { request -> ReviewRequest in
                             var request = request
                             request.origin = repoID
                             return request
-                        }
+                        })
                         return (position, BoardReviews(
                             repoID: repoID, boardFolder: boardFolder, boardName: name,
                             icon: icon, color: color, users: config.users, requests: requests))
@@ -75,10 +94,13 @@ extension AppModel {
             }
             for await result in group { if let result { loaded.append(result) } }
         }
-        // Boards with something waiting first, then in sidebar order.
+        // Boards with something waiting first, the one asked most recently on top, then in
+        // sidebar order.
         reviewInbox = loaded.sorted { a, b in
             let ap = a.1.pending > 0, bp = b.1.pending > 0
-            return ap != bp ? ap : a.0 < b.0
+            if ap != bp { return ap }
+            let ad = Self.newestOpenDate(a.1), bd = Self.newestOpenDate(b.1)
+            return ad != bd ? ad > bd : a.0 < b.0
         }.map(\.1).filter { !$0.requests.isEmpty }
         await reviewInboxDidLoad()
     }

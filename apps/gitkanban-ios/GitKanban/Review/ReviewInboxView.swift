@@ -46,6 +46,7 @@ struct ReviewInboxView: View {
                     Section {
                         ForEach(requests) { request in
                             NavigationLink(value: request.ref) { ReviewRequestRow(request: request) }
+                                .reviewRequestActions(request)
                         }
                     } header: {
                         HStack(spacing: 6) {

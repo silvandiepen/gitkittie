@@ -137,11 +137,11 @@ extension AppModel {
         isLoadingReviews = true
         defer { isLoadingReviews = false }
         let origin = activeRepo?.id ?? ""
-        reviews = await RemoteBoardStore.loadReviews(source: source, folder: folder).map {
+        reviews = Self.newestFirst(await RemoteBoardStore.loadReviews(source: source, folder: folder).map {
             var request = $0
             request.origin = origin
             return request
-        }
+        })
         if serverLogin == nil, let server = source as? ServerFolderSource {
             serverLogin = await server.whoami()?.login
         }
