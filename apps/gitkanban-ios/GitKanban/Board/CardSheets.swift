@@ -238,7 +238,7 @@ struct CardDetailSheet: View {
                     Divider()
                     Button { showCardReviews = true } label: {
                         let pending = cardReviews.reduce(0) { $0 + $1.summary.pending }
-                        Label(pending > 0 ? "\(pending) asset\(pending == 1 ? "" : "s") to review" : "\(cardReviews.count) review\(cardReviews.count == 1 ? "" : "s")",
+                        Label(pending > 0 ? "\(pending) waiting for review" : "\(cardReviews.count) review\(cardReviews.count == 1 ? "" : "s")",
                               systemImage: "checkmark.seal")
                     }
                 }

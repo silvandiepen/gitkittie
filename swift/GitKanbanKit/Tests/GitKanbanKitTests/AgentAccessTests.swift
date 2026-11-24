@@ -360,4 +360,37 @@ final class AgentAccessTests: XCTestCase {
         XCTAssertEqual(model.board?.columns.first?.cards.map(\.fields.id).sorted(), ["PETS-007", "PETS-008"])
         model.closeRepo()
     }
+
+    func testAQuestionIsAskedOverMCPAndItsAnswerComesBack() async throws {
+        let created = try await call("create_review", [
+            "board": "Pets", "title": "Food", "agent": "claude",
+            "questions": [[
+                "id": "food", "question": "Which food?", "detail": "The cat is **picky**.", "select": "many", "other": true,
+                "options": [["id": "fish", "label": "Fish", "detail": "She likes it."], ["id": "chicken", "label": "Chicken"]],
+            ]],
+        ])
+        XCTAssertFalse(created.isError, created.text)
+        XCTAssertEqual(try object(created.text)["questions"] as? [String], ["food"])
+
+        let badSelect = try await call("create_review", [
+            "board": "Pets", "title": "Bad", "agent": "claude",
+            "questions": [["id": "q", "question": "Q?", "select": "some", "options": [["id": "a", "label": "A"]]]],
+        ])
+        XCTAssertTrue(badSelect.isError)
+
+        // Answer in the file, as the app does, and read it back as the agent.
+        let file = root.appendingPathComponent("Pets/review/food/review.md")
+        let text = try String(contentsOf: file, encoding: .utf8)
+        try Data(try Review.applyAnswer(text, questionID: "food", choices: ["fish"], other: "Tuna", by: "sil").utf8).write(to: file)
+        let listed = try await call("list_reviews", ["board": "Pets"])
+        let requests = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(listed.text.utf8)) as? [[String: Any]], listed.text)
+        let question = try XCTUnwrap((requests.first?["questions"] as? [[String: Any]])?.first)
+        XCTAssertEqual(question["answer"] as? [String], ["fish"])
+        XCTAssertEqual(question["answer_other"] as? String, "Tuna")
+        XCTAssertEqual(question["select"] as? String, "many")
+
+        let handled = try await call("handle_review_item", ["board": "Pets", "request": "food", "item": "food"])
+        XCTAssertFalse(handled.isError, handled.text)
+        XCTAssertEqual(try object(handled.text)["closed"] as? Int, 1)
+    }
 }
