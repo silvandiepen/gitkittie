@@ -62,10 +62,9 @@ final class MailIndex {
     /// Returns false when a step is missing; the index is then rebuilt, which is always safe
     /// because it holds nothing the folder does not. There are no steps yet (schema 1).
     private func migrate(from version: Int) throws -> Bool {
-        var current = version
-        while current < Self.schemaVersion {
-            switch current {
-            // case 1: try database.execute("ALTER TABLE …"); current = 2
+        for step in version..<Self.schemaVersion {
+            switch step {
+            // case 1: try database.execute("ALTER TABLE …")   (1 → 2)
             default: return false
             }
         }

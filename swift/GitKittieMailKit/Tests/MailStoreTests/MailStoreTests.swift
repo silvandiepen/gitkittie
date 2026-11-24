@@ -46,6 +46,7 @@ final class MailStoreTests: XCTestCase {
         XCTAssertTrue(stored.markdown.hasPrefix("---\nschema: 1\nid: \"\(result.id)\"\n"))
         XCTAssertTrue(stored.body.contains("# Invoice 2026-114 for November"))
         XCTAssertTrue(stored.body.contains("The invoice for November is attached in the portal."))
+        XCTAssertEqual(stored.textBody, "Hello Bo,\nThe invoice for November is attached in the portal.\nRegards, Ada\n")
         let value1 = try await store.originalData(of: result.id)
         XCTAssertEqual(value1, eml)
     }

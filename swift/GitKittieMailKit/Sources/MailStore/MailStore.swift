@@ -18,6 +18,10 @@ public struct StoredMessage: Sendable {
     public var markdown: String
     public var emlURL: URL
     public var markdownURL: URL
+    /// The plain-text body as the parser reads it from the `.eml`; `nil` when there is none.
+    public var textBody: String?
+    /// True when the message has an HTML body, which nothing renders yet (GKM-012).
+    public var hasHTMLBody: Bool
 
     /// The Markdown below the front matter.
     public var body: String {
@@ -155,7 +159,9 @@ public actor MailStore {
         let emlURL = try url(of: id)
         let markdownURL = emlURL.deletingPathExtension().appendingPathExtension("md")
         let markdown = try String(contentsOf: markdownURL, encoding: .utf8)
-        return StoredMessage(front: try DerivedMarkdown.frontMatter(of: markdown), markdown: markdown, emlURL: emlURL, markdownURL: markdownURL)
+        let parsed = try parser.parse(Data(contentsOf: emlURL))
+        return StoredMessage(front: try DerivedMarkdown.frontMatter(of: markdown), markdown: markdown, emlURL: emlURL,
+                             markdownURL: markdownURL, textBody: parsed.textBody, hasHTMLBody: parsed.hasHTMLBody)
     }
 
     /// The original bytes, checked against the hash recorded when they were stored.
