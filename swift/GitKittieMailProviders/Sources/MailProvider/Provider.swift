@@ -33,6 +33,12 @@ public protocol MailboxSession: AnyObject {
     func fetchMessages(_ ids: [RemoteMessageID]) async throws -> [FetchedMessage]
     /// Current flags of these messages.
     func flags(of ids: [RemoteMessageID]) async throws -> [RemoteMessageID: MessageFlags]
+    /// The MIME structure of these messages (IMAP BODYSTRUCTURE), keyed by id (GKM-036).
+    func bodyStructures(of ids: [RemoteMessageID]) async throws -> [RemoteMessageID: RemoteBodyPart]
+    /// Sections of one message, by name: `"HEADER"` (the message header), `"1.MIME"` (a part's
+    /// MIME header), `"1"` (a part's body as stored, still encoded). Sections the server returns
+    /// nothing for are left out. Throws `messageNotFound` when the message is gone.
+    func fetchSections(_ sections: [String], of id: RemoteMessageID) async throws -> [String: Data]
     /// The largest message the session can fetch; the sync skips and reports bigger ones.
     var maximumMessageSize: Int { get }
 

@@ -33,3 +33,35 @@ public struct FlagChanges: Sendable, Hashable {
         self.flags = flags
     }
 }
+
+/// One part of a message's MIME structure as the provider describes it (IMAP BODYSTRUCTURE), so
+/// the sync can fetch text first and leave large attachments at the provider (GKM-036).
+public struct RemoteBodyPart: Sendable, Hashable {
+    /// The IMAP part specifier ("1", "2.1"); "" for the top of a multipart message.
+    public var section: String
+    /// Lowercased `type/subtype`.
+    public var mediaType: String
+    public var boundary: String?
+    /// Lowercased Content-Transfer-Encoding.
+    public var encoding: String?
+    /// Encoded size in octets.
+    public var size: Int
+    public var fileName: String?
+    /// Lowercased Content-Disposition.
+    public var disposition: String?
+    public var contentID: String?
+    public var parts: [RemoteBodyPart]
+
+    public init(section: String, mediaType: String, boundary: String? = nil, encoding: String? = nil, size: Int,
+                fileName: String? = nil, disposition: String? = nil, contentID: String? = nil, parts: [RemoteBodyPart] = []) {
+        self.section = section
+        self.mediaType = mediaType.lowercased()
+        self.boundary = boundary
+        self.encoding = encoding?.lowercased()
+        self.size = size
+        self.fileName = fileName
+        self.disposition = disposition?.lowercased()
+        self.contentID = contentID
+        self.parts = parts
+    }
+}
