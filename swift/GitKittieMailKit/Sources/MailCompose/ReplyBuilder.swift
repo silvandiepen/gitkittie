@@ -86,8 +86,10 @@ public struct ReplyBuilder: Sendable {
         if !original.to.isEmpty { header.append("To: \(original.to.map(Self.display).joined(separator: ", "))") }
         if !original.cc.isEmpty { header.append("Cc: \(original.cc.map(Self.display).joined(separator: ", "))") }
         // Two spaces end a Markdown line with a hard break, so the header block stays one line
-        // per field in the HTML part too.
-        let headerBlock = header.map { Self.escapeMarkdownLine($0) + "  " }.joined(separator: "\n")
+        // per field in the HTML part too. Nothing is escaped: the text part is what people
+        // read in plain-text clients, and `<address>` is shown as written in the HTML part
+        // (only web and mail URLs become links).
+        let headerBlock = header.map { $0 + "  " }.joined(separator: "\n")
         let body = "\n\n" + headerBlock + "\n\n" + Self.bodyText(of: original)
 
         let attachments = original.attachments.map { part in
@@ -123,7 +125,7 @@ public struct ReplyBuilder: Sendable {
         let quoted = text.split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.isEmpty ? ">" : "> " + $0 }
             .joined(separator: "\n")
-        return Self.escapeMarkdownLine(attribution) + "\n\n" + quoted + "\n"
+        return attribution + "\n\n" + quoted + "\n"
     }
 
     func formatted(_ date: Date) -> String {
@@ -148,17 +150,6 @@ public struct ReplyBuilder: Sendable {
     static func display(_ address: MailAddress) -> String {
         guard let name = address.name, !name.isEmpty, name != address.address else { return "<\(address.address)>" }
         return "\(name) <\(address.address)>"
-    }
-
-    /// Addresses in a forwarded-message header must not turn into Markdown (an `<a@b>` is an
-    /// autolink, a leading `#` a heading); the text part keeps them as written.
-    static func escapeMarkdownLine(_ line: String) -> String {
-        var out = ""
-        for character in line {
-            if "\\`*_[]<>#".contains(character) { out.append("\\") }
-            out.append(character)
-        }
-        return out
     }
 
     /// "Re: Re: Re:" stays "Re:"; a subject that already starts with any language's reply

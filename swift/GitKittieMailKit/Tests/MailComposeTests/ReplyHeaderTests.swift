@@ -41,9 +41,11 @@ final class ReplyHeaderTests: XCTestCase {
         XCTAssertEqual(draft.subject, "Re: Draft floor plan for the Hollis project")
         XCTAssertEqual(draft.inReplyTo, "pr-hollis-plan-1@studio.example.com")
         XCTAssertEqual(draft.references, ["pr-hollis-plan-1@studio.example.com"])
-        XCTAssertTrue(draft.body.contains("On Thu, 19 Nov 2026 at 07:47, Priya Raman \\<priya.raman@studio.example.com\\> wrote:"), draft.body)
+        XCTAssertTrue(draft.body.contains("On Thu, 19 Nov 2026 at 07:47, Priya Raman <priya.raman@studio.example.com> wrote:"), draft.body)
         XCTAssertTrue(draft.body.contains("> Hi Alex,\n>\n> Attached is the first draft"), draft.body)
         XCTAssertTrue(draft.attachments.isEmpty, "a reply does not carry the attachments")
+        // The attribution's address is shown as text in the HTML part, not turned into markup.
+        XCTAssertTrue(MarkdownHTML.fragment(draft.body).contains("Priya Raman &lt;priya.raman@studio.example.com&gt; wrote:"))
 
         let message = try sent(draft)
         XCTAssertEqual(message.inReplyTo, ["pr-hollis-plan-1@studio.example.com"])
