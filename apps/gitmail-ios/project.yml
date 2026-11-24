@@ -1,0 +1,184 @@
+name: GitMail
+options:
+  bundleIdPrefix: app.hakobs
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "26.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: 1
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: "38MGF83L2L"
+
+packages:
+  # The UI-independent mail core, the same as the Mac app's (MAIL-050).
+  GitKittieMailKit:
+    path: ../../swift/GitKittieMailKit
+  # Accounts, sync, the outbox (iOS 18 for swift-nio-imap).
+  GitKittieMailProviders:
+    path: ../../swift/GitKittieMailProviders
+
+targets:
+  GitMail:
+    type: application
+    platform: iOS
+    sources:
+      - path: GitMail
+      # The UI-free app model the Mac app uses too (MAIL-067).
+      - path: ../../swift/MailAppModel
+      # The colours every GitKittie app shares.
+      - path: ../../swift/GitKittieUI
+    dependencies:
+      - package: GitKittieMailKit
+        product: MailCore
+      - package: GitKittieMailKit
+        product: MailStore
+      - package: GitKittieMailKit
+        product: MailClassifier
+      - package: GitKittieMailKit
+        product: MailMIME
+      - package: GitKittieMailKit
+        product: MailCompose
+      - package: GitKittieMailKit
+        product: MailHTML
+      - package: GitKittieMailKit
+        product: MailReader
+      - package: GitKittieMailKit
+        product: MailReaderWeb
+      # iOS parses attachment text in process, within strict limits (MAIL-052).
+      - package: GitKittieMailKit
+        product: MailExtraction
+      - package: GitKittieMailKit
+        product: MailUnsubscribe
+      - package: GitKittieMailProviders
+        product: MailProvider
+      - package: GitKittieMailProviders
+        product: MailOutbox
+      - package: GitKittieMailProviders
+        product: MailAccounts
+      - package: GitKittieMailProviders
+        product: MailSync
+    settings:
+      base:
+        # One App Store record with the Mac app, as Tasks has.
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail
+        PRODUCT_NAME: Mail
+        PRODUCT_MODULE_NAME: GitMail
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_FILE: GitMail/Info.plist
+        CODE_SIGN_ENTITLEMENTS: GitMail/GitMail.entitlements
+        CODE_SIGN_STYLE: Automatic
+        # Icon source: project-assets GitKittie/assets/icon_gitmail.svg (lavender field), one
+        # 1024 px universal image without alpha.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    entitlements:
+      path: GitMail/GitMail.entitlements
+      properties:
+        # Account passwords, in the same group as the Mac app's (GKM-010).
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)app.hakobs.gitmail
+        # Background sync writes while the phone is locked, so files are readable after the
+        # first unlock, the same class as the Keychain items (MAIL-051).
+        com.apple.developer.default-data-protection: NSFileProtectionCompleteUntilFirstUserAuthentication
+    info:
+      path: GitMail/Info.plist
+      properties:
+        CFBundleDisplayName: Mail
+        CFBundleName: Mail
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.productivity
+        # The mail folder (Documents/Mail) shows in Files under On My iPhone (MAIL-051).
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        # Mail servers on the local network ask first; loopback (the simulator's test server) does not.
+        NSLocalNetworkUsageDescription: Mail connects to the mail server you set up. When that server is on your local network, iOS asks first.
+        # A short check for new mail and longer catch-up work, when iOS allows (MAIL-053).
+        UIBackgroundModes:
+          - fetch
+          - processing
+        BGTaskSchedulerPermittedIdentifiers:
+          - app.hakobs.gitmail.refresh
+          - app.hakobs.gitmail.processing
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+
+  # The app model and the iOS-only parts (lifecycle, budgets, background work) against a real
+  # store, hosted in the app so the Keychain round trip has its entitlement (MAIL-050).
+  GitMailTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+      # The local GreenMail helper the Mac app's tests use too.
+      - path: ../../swift/MailAppTestSupport
+    dependencies:
+      - target: GitMail
+      # Visible to the tests; linked once, into the app they run in.
+      - package: GitKittieMailKit
+        product: MailCore
+        link: false
+      - package: GitKittieMailKit
+        product: MailStore
+        link: false
+      - package: GitKittieMailProviders
+        product: MailProvider
+        link: false
+      - package: GitKittieMailProviders
+        product: MailAccounts
+        link: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail.tests
+        GENERATE_INFOPLIST_FILE: true
+
+  # The flows on a simulator: adding an account against the local test mail server, reading,
+  # swiping, composing; and the screenshots of the main screens.
+  GitMailUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+      # Makes the test server's users and puts synthetic mail on it over IMAP.
+      - path: ../../swift/MailAppTestSupport
+    dependencies:
+      - target: GitMail
+      - package: GitKittieMailKit
+        product: MailCore
+      - package: GitKittieMailProviders
+        product: MailProvider
+      - package: GitKittieMailProviders
+        product: MailAccounts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail.uitests
+        GENERATE_INFOPLIST_FILE: true
+        TEST_TARGET_NAME: GitMail
+
+schemes:
+  GitMail:
+    build:
+      targets:
+        GitMail: all
+        GitMailTests: test
+        GitMailUITests: test
+    test:
+      targets:
+        - GitMailTests
+        - GitMailUITests

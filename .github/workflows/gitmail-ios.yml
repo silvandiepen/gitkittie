@@ -1,0 +1,72 @@
+name: GitKittie Mail iOS
+
+# GKM-027: the iPhone and iPad app builds and its tests pass on a simulator — the app model and
+# lifecycle tests (hosted, with the Keychain entitlement) and the UI flow against the local test
+# mail server. Screenshots of the main screens are kept as an artifact.
+
+on:
+  pull_request:
+    branches: [main, development]
+    paths:
+      - apps/gitmail-ios/**
+      - swift/MailAppModel/**
+      - swift/MailAppTestSupport/**
+      - swift/GitKittieMailKit/**
+      - swift/GitKittieMailProviders/**
+      - swift/GitKittieUI/**
+      - .github/workflows/gitmail-ios.yml
+  push:
+    branches: [main, development]
+    paths:
+      - apps/gitmail-ios/**
+      - swift/MailAppModel/**
+      - swift/MailAppTestSupport/**
+      - swift/GitKittieMailKit/**
+      - swift/GitKittieMailProviders/**
+      - swift/GitKittieUI/**
+      - .github/workflows/gitmail-ios.yml
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and test (iOS Simulator, with the test mail server)
+    # swift-nio-imap 0.5 needs Swift 6.2 (Xcode 26).
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v6
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Pick an iPhone simulator
+        # Prefer iPhone 17 Pro Max (as locally); the runner image decides which devices exist.
+        run: |
+          id=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = [d for runtime, ds in json.load(sys.stdin)["devices"].items() if "iOS" in runtime for d in ds]
+          phones = [d for d in devices if d["name"].startswith("iPhone")]
+          preferred = [d for d in phones if d["name"] == "iPhone 17 Pro Max"]
+          print((preferred or phones)[-1]["udid"])')
+          echo "Using simulator $id"
+          echo "DESTINATION=platform=iOS Simulator,id=$id" >> "$GITHUB_ENV"
+      - name: Boot the simulator and wait until it is ready
+        run: xcrun simctl bootstatus "${DESTINATION##*id=}" -b
+      - name: Start the local test mail server (GreenMail, loopback only)
+        run: swift/GitKittieMailProviders/scripts/test-mail-server.sh start
+      - name: Build and test
+        env:
+          GKM_REQUIRE_TEST_MAIL_SERVER: "1"
+          DERIVED_DATA_PATH: ${{ runner.temp }}/dd
+          RESULT_BUNDLE: ${{ runner.temp }}/gitmail-ios.xcresult
+          SCREENSHOTS: ${{ runner.temp }}/screenshots
+        run: zsh apps/gitmail-ios/scripts/test.sh
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitmail-ios-screenshots
+          path: ${{ runner.temp }}/screenshots
+          if-no-files-found: ignore
+      - name: Stop the test mail server
+        if: always()
+        run: swift/GitKittieMailProviders/scripts/test-mail-server.sh stop

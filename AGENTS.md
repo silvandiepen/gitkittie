@@ -20,6 +20,7 @@ no-server apps that treat a git repository as the source of truth.
 | GitBud (macOS) | `apps/gitbud-macos/` | SwiftUI git client | In development — tested local history/rewrite UI |
 | GitBud (iOS/iPadOS) | `apps/gitbud-ios/` | SwiftUI remote git client (planned) | Docs/spec — GitPont remote-only |
 | GitKittie Mail (macOS) | `apps/gitmail-macos/` | SwiftUI mail client, core in `swift/GitKittieMailKit` | In development — store + empty window |
+| GitKittie Mail (iOS/iPadOS) | `apps/gitmail-ios/` | SwiftUI mail client on the same core and app model (`swift/MailAppModel`) | In development (GKM-027) |
 | Website | `apps/website/` | Vue 3 + Vite | Shipping |
 
 Each app folder carries its own `AGENTS.md` and `docs/{Features,Decisions,Architecture}.md`.
