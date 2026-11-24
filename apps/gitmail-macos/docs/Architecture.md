@@ -8,19 +8,27 @@ Provider adapters expose capabilities and normalized operations: enumerate folde
 
 ## Storage and identity
 
-Provider is authoritative for live mail and flags. Explicitly preserved archive files are independently owned. GitKittie metadata has separate sync; SQLite FTS5 is a rebuildable index. Suggested schema:
+Provider is authoritative for live mail and flags. Explicitly preserved archive files are independently owned. GitKittie metadata has separate sync; SQLite FTS5 is a rebuildable index. Suggested schema, in two places.
+
+The mail folder holds only what the user owns and may sync, back up or put under version control:
 
     Mail/accounts/<account-id>/messages/<year>/<month>/<local-id>.eml
     Mail/accounts/<account-id>/messages/<year>/<month>/<local-id>.md
-    Mail/accounts/<account-id>/state/
     Mail/blobs/<content-hash>
     Mail/archive/
     Mail/spaces/
     Mail/drafts/
     Mail/views/
-    Mail/index.sqlite
 
-Preserve original RFC 5322/MIME in EML; derive readable Markdown with YAML (id, messageId, references, sender, recipients, subject, date, attachment refs). Separate mutable metadata. Markdown is not lossless HTML/MIME; retain original signatures, inline images and attachments. Atomic writes, schema migrations, safe paths and integrity hashes. Deduplicate attachment blobs within appropriate access boundaries. Attachments on demand, pin for offline. Index/cache excluded from Git and whole-folder sync. Encrypted message support is separate; preserve originals without modification.
+Device-local state lives outside it, in the app's Application Support container, and is never synced:
+
+    <Application Support>/Mail/index.sqlite
+    <Application Support>/Mail/state/<account-id>/   (sync cursors, UIDVALIDITY, IDLE state)
+    <Application Support>/Mail/cache/                (downloaded bodies and attachments not pinned)
+
+Each device has its own position at each provider, so sync cursors are per device; in a shared folder two devices would overwrite each other's. The index is rebuilt from the folder, so losing it costs time, not data. Keeping both out of the folder means pointing GitKittie Folder, iCloud Drive or Git at `Mail/` can never commit an index on every change or mix two devices' cursors.
+
+Preserve original RFC 5322/MIME in EML; derive readable Markdown with YAML (id, messageId, references, sender, recipients, subject, date, attachment refs). Separate mutable metadata. Markdown is not lossless HTML/MIME; retain original signatures, inline images and attachments. Atomic writes, schema migrations, safe paths and integrity hashes. Deduplicate attachment blobs within appropriate access boundaries. Attachments on demand, pin for offline. Index, cache and sync state are outside the mail folder (above), so they cannot reach Git or folder sync. Encrypted message support is separate; preserve originals without modification.
 
 Account-scoped local UUID, provider ID where available, IMAP mailbox + UIDVALIDITY + UID as remote mapping; Message-ID/content fingerprint are reconciliation signals, not globally unique. Handle moves, UID resets, missing/duplicate IDs, aliases and Gmail label duplication. Thread graph from References/In-Reply-To with conservative fallback, never subject alone. Each message remains independent. Reply preserves recipients, Reply-To, account identity and standard headers; never expose internal tags.
 

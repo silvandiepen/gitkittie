@@ -20,7 +20,7 @@ Shared core, native mobile UI, private CloudKit metadata, account authorization,
 
 ## 4. More providers and controlled automation
 
-Gmail and Outlook adapters after authentication verification, label semantics, migration and capability tests. Opt-in active organisation, dry run, audit, protected retention and reversible cleanup. Encrypted archive sync feasibility, optional Git metadata export via GitPont, Tasks integration and scoped agent access.
+Gmail and Outlook adapters only after GKM-008 has costed OAuth verification and any security assessment, then authentication verification, label semantics, migration and capability tests. Opt-in active organisation, dry run, audit, protected retention and reversible cleanup. Encrypted archive sync feasibility, optional Git metadata export via GitPont, Tasks integration and scoped agent access.
 
 ## Later
 
