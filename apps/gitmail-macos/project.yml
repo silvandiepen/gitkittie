@@ -46,8 +46,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail
         # The bundle is GitMail.app; people see "GitKittie Mail" (CFBundleDisplayName), as with GitBud.
-        # No AppIcon yet: the Mail icon is still to be designed (same as GitBud). Add the
-        # AppIcon set to Assets.xcassets and ASSETCATALOG_COMPILER_APPICON_NAME together.
+        # Icon source: project-assets GitKittie/assets/icon_gitmail.svg (the family's construction,
+        # lavender field); the PNGs in AppIcon.appiconset are rendered from it.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: GitMail/Info.plist
         CODE_SIGN_ENTITLEMENTS: GitMail/GitMail.entitlements
         ENABLE_HARDENED_RUNTIME: true
