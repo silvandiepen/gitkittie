@@ -10,7 +10,7 @@ struct KeychainCredentials: CredentialProvider {
         var status: OSStatus
         var description: String {
             status == errSecItemNotFound
-                ? "No password is saved for this account on this Mac."
+                ? "No password is saved for this account on \(DeviceWords.this)."
                 : "The Keychain refused to read the password (\(status))."
         }
     }

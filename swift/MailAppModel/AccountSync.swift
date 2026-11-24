@@ -51,7 +51,9 @@ final class AccountSync {
     /// Each account's on-demand fetcher: attachments left at the provider, pins (GKM-036).
     @ObservationIgnored private var fetchers: [MailAccountID: OnDemandFetcher] = [:]
     @ObservationIgnored private var refreshPending = false
-    @ObservationIgnored let services: AccountServices
+    /// Settable so the iPhone app can apply a changed storage budget (`syncOptions`) to the next
+    /// start; a running sync keeps the options it started with.
+    @ObservationIgnored var services: AccountServices
     /// Called (coalesced) when synced mail changed what the window shows.
     @ObservationIgnored var onStoreChanged: (@MainActor () async -> Void)?
 
@@ -85,7 +87,7 @@ final class AccountSync {
             return
         }
         guard let secret else {
-            progress[account.id] = Self.signInNeeded("This Mac has no password for this account yet.")
+            progress[account.id] = Self.signInNeeded("\(DeviceWords.thisAtStart) has no password for this account yet.")
             return
         }
         let connector = services.connections.imap(connection, password: secret)

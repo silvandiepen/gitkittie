@@ -154,10 +154,12 @@ final class AttachmentLibraryModel {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         try data.write(to: url, options: .atomic)
+        #if os(macOS)
         var values = URLResourceValues()
         values.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload,
                                        kLSQuarantineAgentNameKey as String: "GitKittie Mail"]
         var marked = url
         try marked.setResourceValues(values)
+        #endif
     }
 }

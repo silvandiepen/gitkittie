@@ -508,7 +508,7 @@ final class MailBrowser {
     }
 
     /// Writes an attachment to a private cache file named for display, marked as downloaded
-    /// (quarantine), for Quick Look. Only ever called when the user asks to see it.
+    /// (quarantine, on the Mac; iOS has no quarantine), for Quick Look. Only ever called when the user asks to see it.
     func previewFile(for attachment: AttachmentReference) async throws -> URL {
         guard let store, let quickLookFolder else { throw CocoaError(.fileNoSuchFile) }
         let data = try await store.attachmentData(attachment)
@@ -516,10 +516,12 @@ final class MailBrowser {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var url = folder.appendingPathComponent(Self.previewName(attachment))
         try data.write(to: url, options: [.atomic, .completeFileProtection])
+        #if os(macOS)
         var values = URLResourceValues()
         values.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload,
                                        kLSQuarantineAgentNameKey as String: "GitKittie Mail"]
         try? url.setResourceValues(values)
+        #endif
         return url
     }
 

@@ -3,7 +3,8 @@ import Foundation
 import MailStore
 
 /// Where the mail folder is (MAIL-021): `Documents/Mail` in the app's container by default, or
-/// a folder the person chose, remembered as a security-scoped bookmark (GKM-010).
+/// a folder the person chose, remembered as a security-scoped bookmark (GKM-010). iOS uses
+/// `Documents/Mail` only (MAIL-051).
 ///
 /// The device state (index, mapping, cursors) belongs to one mail folder: it says which of
 /// *that* folder's messages are where at the provider. So each chosen folder gets its own
@@ -20,6 +21,7 @@ struct MailFolderLocation {
     /// The chosen folder, if there is one and it can still be found. Starts security-scoped
     /// access, which lasts for the life of the app.
     func chosenFolder() -> URL? {
+        #if os(macOS)
         guard let data = defaults.data(forKey: Self.bookmarkKey) else { return nil }
         var isStale = false
         guard let url = try? URL(resolvingBookmarkData: data, options: [.withSecurityScope], relativeTo: nil,
@@ -29,13 +31,21 @@ struct MailFolderLocation {
             defaults.set(fresh, forKey: Self.bookmarkKey)
         }
         return url
+        #else
+        // iOS keeps the mail in Documents/Mail only, for now (MAIL-051).
+        return nil
+        #endif
     }
 
     /// Remembers a folder the person picked (from an open panel, which grants access).
     func choose(_ url: URL) throws {
+        #if os(macOS)
         let data = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
         defaults.set(data, forKey: Self.bookmarkKey)
         _ = url.startAccessingSecurityScopedResource()
+        #else
+        throw CocoaError(.featureUnsupported)
+        #endif
     }
 
     /// Back to the default folder.

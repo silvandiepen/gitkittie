@@ -38,13 +38,18 @@ enum SidebarSelection: Hashable {
     }
 }
 
-/// Turns attachment bytes into text for search. The app's is the isolated XPC service
-/// (`IsolatedTextExtractor`); nothing in the app process parses a PDF.
+/// Turns attachment bytes into text for search. On the Mac it is the isolated XPC service
+/// (`IsolatedTextExtractor`), so nothing in the app process parses a PDF; iOS has no XPC
+/// services for apps and parses in process within strict limits (MAIL-052).
 protocol AttachmentTextExtracting: Sendable {
     func extract(_ data: Data, mediaType: String) async -> String?
 }
 
+#if os(macOS)
 extension IsolatedTextExtractor: AttachmentTextExtracting {}
+#else
+extension InProcessTextExtractor: AttachmentTextExtracting {}
+#endif
 
 /// The single UI-facing state object. It owns the store and turns what the store holds into
 /// what the window shows; views render it and send intents back, nothing more.
@@ -102,6 +107,9 @@ final class AppModel {
     private var store: MailStore?
     private let extractor: (any AttachmentTextExtracting)?
     private var extraction: Task<Void, Never>?
+    /// False while attachment text must not be extracted: iOS extracts only while the app is
+    /// active or in a processing task (MAIL-052). Always true on the Mac.
+    @ObservationIgnored var extractsAttachmentText = true
     /// Accounts' sync and setup services (GKM-010, GKM-011; AppModel+Accounts.swift).
     let sync: AccountSync
     /// Category counts, the badge, background classification and notifications (GKM-017,
@@ -220,11 +228,19 @@ final class AppModel {
     /// Extracts text from PDF and plain-text attachments that have none yet, one at a time,
     /// through the isolated extractor (GKM-016). Runs after opening and after an import.
     func indexAttachmentTextInBackground() {
-        guard extraction == nil, let store, let extractor else { return }
+        guard extractsAttachmentText, extraction == nil, let store, let extractor else { return }
         extraction = Task { [weak self] in
             await Self.indexAttachmentText(store: store, extractor: extractor)
             self?.extraction = nil
         }
+    }
+
+    /// Stops extracting attachment text, for now (MAIL-052); what was extracted is kept, and
+    /// `indexAttachmentTextInBackground()` carries on later.
+    func pauseAttachmentText() {
+        extractsAttachmentText = false
+        extraction?.cancel()
+        extraction = nil
     }
 
     /// Waits for the background extraction, for tests.

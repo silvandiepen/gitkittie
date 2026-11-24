@@ -1,4 +1,3 @@
-import AppKit
 import UserNotifications
 
 /// Posts mail notifications through the system (GKM-018). Asks for permission only when there
@@ -33,13 +32,5 @@ struct UserNotificationPoster: MailNotificationPosting {
         case .notDetermined: .notAsked
         @unknown default: .denied
         }
-    }
-}
-
-/// The Dock badge: unread mail in Focused, nothing else (GKM-018).
-enum DockBadge {
-    @MainActor
-    static func show(_ count: Int) {
-        NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
     }
 }
