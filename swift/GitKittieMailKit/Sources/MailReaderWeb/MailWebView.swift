@@ -50,6 +50,10 @@ public final class MailWebView: WKWebView {
         configuration.allowsAirPlayForMediaPlayback = false
         configuration.suppressesIncrementalRendering = true
         configuration.userContentController.add(allowRemoteImages ? ruleLists.remoteImagesOnly : ruleLists.blockAll)
+        #if os(iOS)
+        // No phone numbers, addresses or dates turned into tappable links the sanitizer never saw.
+        configuration.dataDetectorTypes = []
+        #endif
         super.init(frame: .zero, configuration: configuration)
         navigationDelegate = guardDelegate
         uiDelegate = guardDelegate
@@ -183,6 +187,15 @@ final class NavigationGuard: NSObject, WKNavigationDelegate, WKUIDelegate {
         if let url = action.request.url, let index = ReaderURLs.linkIndex(in: url) { owner?.linkActivated(index) }
         return nil
     }
+
+    #if os(iOS)
+    /// No long-press menu or link preview on iOS (the macOS menu is trimmed in `willOpenMenu`):
+    /// its "Open" and "Open in New Tab" would bypass the app's link check. Text selection and
+    /// copy stay available through the selection menu.
+    func webView(_ webView: WKWebView, contextMenuConfigurationFor elementInfo: WKContextMenuElementInfo) async -> UIContextMenuConfiguration? {
+        nil
+    }
+    #endif
 }
 
 /// Serves the reader's scheme: the sanitized document (with its CSP as a header) and the
