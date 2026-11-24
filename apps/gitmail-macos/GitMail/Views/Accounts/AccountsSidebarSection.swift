@@ -83,6 +83,7 @@ struct AccountsSidebarSection: View {
         if account.connection != nil {
             Button("Sync Now") { Task { await model.sync.syncNow() } }
         }
+        Button("Export Account…") { Task { await Platform.export(.account(account.id), what: account.displayName, model: model) } }
         if (model.sync.replay[account.id]?.status.failed ?? 0) > 0 {
             Button("Try Failed Changes Again") { Task { await model.actions.retryFailed(account: account.id) } }
             Button("Discard Failed Changes") { Task { await model.actions.discardFailed(account: account.id) } }

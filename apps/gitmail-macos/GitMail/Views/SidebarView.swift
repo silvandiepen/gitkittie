@@ -5,6 +5,7 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @State private var sheet: AccountSheet?
+    @State private var spaceSheet: SpaceSheet?
 
     private var selection: Binding<SidebarSelection?> {
         Binding(
@@ -33,9 +34,12 @@ struct SidebarView: View {
                 }
                 .padding(.vertical, 3)
                 .tag(SidebarSelection.allMail)
+                AttachmentsSidebarRow()
             }
 
             SendingSidebarSection()
+
+            SpacesSidebarSection(sheet: $spaceSheet)
 
             AccountsSidebarSection(sheet: $sheet)
         }
@@ -43,6 +47,12 @@ struct SidebarView: View {
         .background(Theme.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         .sheet(item: $sheet) { $0.view }
+        .sheet(item: $spaceSheet) { sheet in
+            switch sheet {
+            case .create: SpaceEditorSheet(space: nil)
+            case .edit(let space): SpaceEditorSheet(space: space)
+            }
+        }
     }
 
     /// What to add on the left, the app's settings on the right — as in Tasks.
@@ -50,6 +60,7 @@ struct SidebarView: View {
         HStack {
             Menu {
                 Button("Add Account…", systemImage: "at") { sheet = .add }
+                Button("New Space…", systemImage: "square.stack.3d.up") { spaceSheet = .create }
             } label: {
                 Label("Add", systemImage: "plus").font(.callout)
             }

@@ -14,11 +14,16 @@ enum SidebarSelection: Hashable {
     case drafts
     /// Messages waiting to be sent, or needing a decision (GKM-014).
     case outbox
+    /// A space's messages and attachments, across accounts (GKM-022).
+    case space(MailSpaceID)
+    /// Every attachment across accounts (GKM-023).
+    case attachments
 
     /// The mail the list shows for it (drafts and the outbox have their own views).
     var scope: MailScope {
         switch self {
-        case .allMail, .drafts, .outbox: .allMail
+        case .allMail, .drafts, .outbox, .attachments: .allMail
+        case .space(let id): .space(id)
         case .account(let id): .account(id)
         case .folder(let id, let name): .folder(id, name)
         }
@@ -56,6 +61,11 @@ final class AppModel {
     var importReport: ImportReport?
     /// The message list, the open thread and search (GKM-012, GKM-016).
     let browser: MailBrowser
+    /// Spaces (GKM-022) and the attachment library (GKM-023).
+    let spaces = SpacesModel()
+    let library = AttachmentLibraryModel()
+    /// What the last export did, for a notice; cleared when shown (GKM-023).
+    var exportReport: ExportReport?
     /// Everyday actions with Undo, sent through each account's action journal (GKM-015).
     let actions: MailActions
 
@@ -123,6 +133,8 @@ final class AppModel {
             store = opened
             browser.attach(opened)
             actions.attach(opened)
+            spaces.attach(opened)
+            library.attach(opened, browser: browser)
             if let current = sending, sendingFolder != opened.locations.mailFolder {
                 // Another mail folder was chosen: its drafts and outbox are its own.
                 await current.stop()
@@ -160,6 +172,8 @@ final class AppModel {
         let report = await MailImporter.importMessages(from: urls, into: store)
         importReport = report
         do { try await reload() } catch { actionError = String(describing: error) }
+        // New mail may match a space's rules.
+        if await spaces.refresh(applyRules: true) > 0 { await browser.reload() }
         indexAttachmentTextInBackground()
     }
 
@@ -229,6 +243,8 @@ final class AppModel {
         } catch {
             actionError = String(describing: error)
         }
+        // Synced mail may match a space's rules (GKM-022).
+        await spaces.refresh(applyRules: true)
         await browser.reload()
     }
 
@@ -239,8 +255,10 @@ final class AppModel {
         var found: [MailAccountID: [String]] = [:]
         for account in accounts { found[account.id] = try await store.folders(account: account.id) }
         folders = found
+        await spaces.refresh(applyRules: true)
         let stillThere: Bool = switch selection {
-        case .allMail, .drafts, .outbox: true
+        case .allMail, .drafts, .outbox, .attachments: true
+        case .space(let id): spaces.space(id) != nil
         case .account(let id): accounts.contains { $0.id == id }
         case .folder(let id, let name):
             // A folder with stored mail, or one the sync knows at the provider (may be empty).

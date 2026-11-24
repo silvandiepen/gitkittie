@@ -56,6 +56,27 @@ Durable outbox, operation ID, stable outgoing Message-ID, recipient/account snap
 
 *Verified* against the real local server with real TCP cuts (`swift/GitKittieMailProviders`, `OutboxIntegrationTests`): a cut before the greeting, at EHLO, AUTH, MAIL FROM, RCPT TO, DATA, in the body, at the end-of-data marker, after acceptance and at QUIT each end with exactly one copy at every recipient and in Sent; the outbox stopped after marking `sending`, after the SMTP outcome, after marking `sent` and after the Sent append each resume without a second copy; no Bcc in any stored or delivered header.
 
+## Spaces and export
+
+**What exists (GKM-022, GKM-023).**
+
+*Spaces* (`MailStore+Spaces.swift`, MAIL-042, MAIL-043). One file per space in `Mail/spaces/<space-id>.json`, pretty-printed JSON with sorted keys, dates ISO 8601 in whole seconds. This is the stable format GKM-026 maps to CloudKit records:
+
+    {
+      "format": 1,                          // a file with a higher number is shown, never rewritten
+      "id": "<uuid>", "name": "Garden", "icon": "leaf.fill", "color": "green", "order": 0,
+      "created": "…Z", "modified": "…Z",
+      "rules": [{ "id": "<uuid>", "sender": "…", "domain": "…", "list": "…", "subjectWords": "…", "account": "<account-id>" }],
+      "members":  [{ "message": "<local-id>", "account": "<account-id>", "messageId": "…", "emlSha256": "…", "added": "…Z", "source": "manual" | "rule:<rule-id>" }],
+      "excluded": [ same shape: taken out by hand, never re-added by a rule ]
+    }
+
+Rule fields that are absent are not checked; `color` is one of the Tasks board names. `members` and `excluded` merge as sets keyed by `message` (independent memberships, Multi-device sync above); scalar fields take the newer `modified`. The index holds a copy in `space_members`, refilled from the folder on open and after a rebuild, so a space filters the list, search, unread counts and the attachment library in SQL. A file that cannot be read is listed in the sidebar's notice and left alone. Nothing in spaces reaches a provider: deleting a space removes its file only.
+
+*Attachment library* (`AttachmentLibrary.swift`, MAIL-045): every non-inline attachment across accounts from `message_blobs` (index schema 3), filtered by kind (media type or extension), file name, sender, date, account, space and size.
+
+*Export* (`MailStore+Export.swift`, MAIL-044): a message, conversations, a space or an account into a new folder the person picks, in the mail-folder layout, originals byte for byte. Tested by export → import into a fresh store → byte comparison, and by opening the export as a mail folder.
+
 ## Background processing
 
 macOS can monitor while running. iOS background execution is opportunistic, not guaranteed instant notifications or continuous filtering. Core mail requires no custom server. Optional self-hosted relay later for continuous monitoring and push, with explicit trust boundary, secure credentials and minimal notification payload. Do not advertise guaranteed instant push until validated.
