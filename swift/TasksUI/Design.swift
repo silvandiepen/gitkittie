@@ -164,24 +164,3 @@ struct FlowLayout: Layout {
         return (CGSize(width: maxWidth, height: totalHeight), positions)
     }
 }
-
-extension Color {
-    /// The system colour for a board's `color:` name; the accent colour for none or an unknown one.
-    init(boardColor name: String?) {
-        switch name {
-        case "blue": self = .blue
-        case "indigo": self = .indigo
-        case "purple": self = .purple
-        case "pink": self = .pink
-        case "red": self = .red
-        case "orange": self = .orange
-        case "yellow": self = .yellow
-        case "green": self = .green
-        case "mint": self = .mint
-        case "teal": self = .teal
-        case "brown": self = .brown
-        case "gray": self = .gray
-        default: self = .accentColor
-        }
-    }
-}

@@ -8,8 +8,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.2.0"
-    CURRENT_PROJECT_VERSION: 7
+    MARKETING_VERSION: "1.3.0"
+    CURRENT_PROJECT_VERSION: 8
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: "38MGF83L2L"
 
@@ -108,6 +108,8 @@ targets:
     sources:
       - path: ShareExtension
       - path: Shared
+      # Board colours, the same as on the home screen (the board panel).
+      - path: ../../swift/TasksUI/BoardColor.swift
     dependencies:
       - package: GitKanbanKit
         product: GitKanbanKit
@@ -159,6 +161,7 @@ targets:
           - "*.entitlements"
       - path: ActionExtension
       - path: Shared
+      - path: ../../swift/TasksUI/BoardColor.swift
     dependencies:
       - package: GitKanbanKit
         product: GitKanbanKit

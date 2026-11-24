@@ -45,6 +45,19 @@ final class ShareScreenshotUITests: XCTestCase {
         }
     }
 
+    /// The board is chosen in a panel: the form names the board, with its repository small
+    /// under it; the panel lists the boards under their repositories and ticks the chosen one.
+    func testChooseTheBoardInAPanel() throws {
+        try shareFirstPhotoToTasks()
+        keepScreenshot("form")
+        photos.buttons["shareProjectPicker"].firstMatch.tap()
+        let panel = photos.navigationBars["Board"].firstMatch
+        XCTAssertTrue(panel.waitForExistence(timeout: 10), "The board panel opens.\n\(photos.debugDescription)")
+        keepScreenshot("board-panel")
+        panel.buttons["Cancel"].tap()
+        XCTAssertTrue(photos.buttons["shareProjectPicker"].firstMatch.waitForExistence(timeout: 10), "Cancel goes back to the form")
+    }
+
     /// The same sheet is also an action in the share sheet's list, where "Save to Files" lives.
     func testAddToTasksActionOpensTheSheet() throws {
         photos.launch()

@@ -34,6 +34,7 @@ struct ReviewListView: View {
                 NavigationLink(value: request.ref) {
                     ReviewRequestRow(request: request)
                 }
+                .reviewRequestActions(request)
             }
         }
         .navigationTitle(cardID.map { "Reviews · \($0)" } ?? "Reviews")
@@ -43,6 +44,51 @@ struct ReviewListView: View {
         }
         .refreshable { await model.loadReviews() }
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+    }
+}
+
+/// What can be done with a whole request without opening it: long-press its row for every
+/// answer, or swipe — right to approve everything waiting, left to reject or ask for changes.
+/// Each decides every item still waiting, in one write.
+private struct ReviewRequestActions: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let request: ReviewRequest
+
+    func body(content: Content) -> some View {
+        let waiting = request.summary.pending
+        content
+            .contextMenu {
+                if waiting > 0 {
+                    Button("Approve All Waiting (\(waiting))", systemImage: "checkmark") { decide(.approved) }
+                    Button("Ask Changes on All Waiting", systemImage: "pencil") { decide(.changesRequested) }
+                    Button("Reject All Waiting", systemImage: "xmark", role: .destructive) { decide(.rejected) }
+                } else {
+                    Text("Nothing is waiting in this request")
+                }
+            }
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                if waiting > 0 {
+                    Button { decide(.approved) } label: { Label("Approve All", systemImage: "checkmark") }.tint(.green)
+                }
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if waiting > 0 {
+                    Button(role: .destructive) { decide(.rejected) } label: { Label("Reject All", systemImage: "xmark") }
+                    Button { decide(.changesRequested) } label: { Label("Changes", systemImage: "pencil") }.tint(.orange)
+                }
+            }
+    }
+
+    private func decide(_ status: ReviewStatus) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task { await model.decideAll(request, status: status) }
+    }
+}
+
+extension View {
+    /// Long-press and swipe actions that answer a whole review request at once.
+    func reviewRequestActions(_ request: ReviewRequest) -> some View {
+        modifier(ReviewRequestActions(request: request))
     }
 }
 

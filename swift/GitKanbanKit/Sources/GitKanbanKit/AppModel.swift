@@ -135,6 +135,8 @@ public final class AppModel {
     // MARK: Presentation
     public var selectedCard: Card?
     public var newTaskLane: Lane?
+    /// ⌘N with no board open: the sheet that asks which board the new task is for.
+    public var isChoosingBoardForNewTask = false
     public var boardViewMode: BoardViewMode = .lanes
     public var showQuickCreate = false
 
@@ -432,6 +434,18 @@ public final class AppModel {
     /// Set which boards are selected for a repo (from the browse/multi-select step).
     public func setBoards(_ boards: [SelectedBoard], for repoID: String) {
         guard let index = addedRepos.firstIndex(where: { $0.id == repoID }) else { return }
+        // A board picker hands over folders and names only: a board that was already in
+        // the list keeps the icon, colour and counts it had.
+        let known = Dictionary(addedRepos[index].boards.map { ($0.folder, $0) }, uniquingKeysWith: { first, _ in first })
+        let boards = boards.map { board -> SelectedBoard in
+            guard let old = known[board.folder] else { return board }
+            var kept = board
+            kept.icon = board.icon ?? old.icon
+            kept.color = board.color ?? old.color
+            if kept.laneCount == 0 { kept.laneCount = old.laneCount }
+            if kept.memberCount == 0 { kept.memberCount = old.memberCount }
+            return kept
+        }
         addedRepos[index].boards = boards.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         persistAddedRepos()
     }
