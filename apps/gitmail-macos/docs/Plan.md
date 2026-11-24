@@ -6,7 +6,7 @@ All of it is proposed. Nothing here is shipped.
 
 ## Before anything is built
 
-GKM-001 is Sil's: how Mail fits GitKittie (Git optional, iCloud for metadata). The open questions in Decisions.md are answered there, and the rest of the plan follows the answer. GKM-008 costs Gmail and Microsoft access; Phase 4 providers wait for it.
+Sil decided the open questions on 2026-11-24 (GKM-001, recorded in Decisions.md): Git optional with iCloud for metadata, iCloud plus any IMAP account plus Gmail at first release, pricing after the MVP tests, code in this monorepo. GKM-008 costs Gmail access before Phase 2 depends on it.
 
 ## Order of work
 
@@ -25,7 +25,7 @@ Prove the risky parts before any app exists: a real provider, durable storage, t
 | GKM-005 | Prototype storage: EML, derived Markdown, stable IDs and a rebuildable index | P1 | GKM-003 |
 | GKM-006 | Write the Mail threat model | P1 | — |
 | GKM-007 | Classifier baseline on the fixture corpus | P2 | GKM-003 |
-| GKM-008 | Cost Gmail and Microsoft access before committing to them | P2 | — |
+| GKM-008 | Cost Gmail and Microsoft access before committing to them | P1 | — |
 
 **Gate:** Real end-to-end send and receive against iCloud, durable storage that survives a crash, no secrets in logs, and Sil's answers to the open questions.
 
@@ -36,7 +36,7 @@ An everyday mail client for one provider, reliable enough to use next to Apple M
 | Card | Task | Priority | Needs |
 | --- | --- | --- | --- |
 | GKM-009 | Scaffold the macOS app and the shared Mail package | P1 | GKM-001, GKM-002, GKM-005 |
-| GKM-010 | Add an iCloud account, credentials in the Keychain | P1 | GKM-004, GKM-009 |
+| GKM-010 | Add an iCloud or IMAP account, credentials in the Keychain | P1 | GKM-004, GKM-009 |
 | GKM-011 | Import and keep mail in sync: progressive, incremental, IDLE | P1 | GKM-005, GKM-010 |
 | GKM-012 | Message list, threads and a safe reader | P1 | GKM-011, GKM-006 |
 | GKM-013 | Compose, reply, forward and drafts | P1 | GKM-012 |
@@ -59,7 +59,8 @@ What makes people switch: a calmer inbox, sender control, safe cleanup and Space
 | GKM-021 | Cleanup dashboard with exact previews | P2 | GKM-017, GKM-015 |
 | GKM-022 | Spaces: projects across accounts | P2 | GKM-017 |
 | GKM-023 | Attachment library and EML plus Markdown export | P2 | GKM-005 |
-| GKM-024 | Test the MVP with people overwhelmed by marketing mail | P1 | GKM-018, GKM-019, GKM-020, GKM-021, GKM-022 |
+| GKM-029 | Gmail adapter | P1 | GKM-008, GKM-011 |
+| GKM-024 | Test the MVP with people overwhelmed by marketing mail | P1 | GKM-018, GKM-019, GKM-020, GKM-021, GKM-022, GKM-029 |
 
 **Gate:** Important-mail recall at the agreed threshold, ambiguous items visible, every suggestion inspectable, no automatic destructive action.
 
@@ -78,11 +79,10 @@ The same mail and organisation on every Apple device.
 
 ### Phase 4 — More providers and controlled automation
 
-Gmail and Microsoft, opt-in active organisation, archive sync and integrations.
+Microsoft, opt-in active organisation, archive sync and integrations.
 
 | Card | Task | Priority | Needs |
 | --- | --- | --- | --- |
-| GKM-029 | Gmail adapter | P3 | GKM-008, GKM-011 |
 | GKM-030 | Outlook and Microsoft 365 adapter | P3 | GKM-008, GKM-011 |
 | GKM-031 | Opt-in active organisation and retention | P2 | GKM-021, GKM-017 |
 | GKM-032 | Encrypted archive export and archive sync feasibility | P3 | GKM-023, GKM-006 |
@@ -96,7 +96,7 @@ Everything the App Store and the site need before Mail is offered to anyone.
 
 | Card | Task | Priority | Needs |
 | --- | --- | --- | --- |
-| GKM-034 | Launch readiness: accessibility, legal pages, pricing and App Store | P1 | GKM-024, GKM-006 |
+| GKM-034 | Launch readiness: accessibility, legal pages, pricing and App Store | P1 | GKM-024, GKM-006, GKM-029 |
 
 **Gate:** The launch gates in Roadmap.md are met and every public claim matches a shipped feature.
 

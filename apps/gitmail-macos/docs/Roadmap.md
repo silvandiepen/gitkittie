@@ -12,7 +12,7 @@ Native UI, account onboarding, progressive import, threads, compose/reply/forwar
 
 ## 2. Differentiating MVP
 
-Read-only classifier, focused inbox and category views, sender/list management, explanations, corrections, notification filtering, cleanup preview, local search. Safe confirmed unsubscribe/manual batch actions, Spaces, attachment library, EML+Markdown export. Test with people overwhelmed by marketing. Gate: agreed important-mail recall threshold, ambiguous items visible, all suggestions inspectable, no automatic destructive actions.
+Gmail account support (MAIL-014), read-only classifier, focused inbox and category views, sender/list management, explanations, corrections, notification filtering, cleanup preview, local search. Safe confirmed unsubscribe/manual batch actions, Spaces, attachment library, EML+Markdown export. Test with people overwhelmed by marketing. Gate: agreed important-mail recall threshold, ambiguous items visible, all suggestions inspectable, no automatic destructive actions.
 
 ## 3. Multi-device and iOS/iPadOS
 
@@ -20,7 +20,7 @@ Shared core, native mobile UI, private CloudKit metadata, account authorization,
 
 ## 4. More providers and controlled automation
 
-Gmail and Outlook adapters only after GKM-008 has costed OAuth verification and any security assessment, then authentication verification, label semantics, migration and capability tests. Opt-in active organisation, dry run, audit, protected retention and reversible cleanup. Encrypted archive sync feasibility, optional Git metadata export via GitPont, Tasks integration and scoped agent access.
+Outlook and Microsoft 365 adapter after authentication verification, label semantics, migration and capability tests. Opt-in active organisation, dry run, audit, protected retention and reversible cleanup. Encrypted archive sync feasibility, optional Git metadata export via GitPont, Tasks integration and scoped agent access.
 
 ## Later
 
