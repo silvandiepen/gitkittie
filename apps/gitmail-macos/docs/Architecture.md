@@ -85,7 +85,7 @@ macOS can monitor while running. iOS background execution is opportunistic, not 
 
 ## iOS and iPadOS
 
-The iPhone and iPad app (GKM-027) uses the same two packages as the Mac (MAIL-050): GitKittieMailKit (iOS 17) and GitKittieMailProviders (iOS 18, for swift-nio-imap). Both build and pass their tests on the iOS Simulator, including the integration tests against the local GreenMail server (the simulator shares the Mac's loopback; the tests find the server's state through `SIMULATOR_HOST_HOME`). CI runs them on an iPhone simulator (`.github/workflows/swift-mail-ios.yml`). What differs, and where:
+The iPhone and iPad app (GKM-027) uses the same two packages as the Mac (MAIL-050): GitKittieMailKit (iOS 17) and GitKittieMailProviders (iOS 18, for swift-nio-imap). Both build and pass their tests on the iOS Simulator, including the integration tests against the local GreenMail server (the simulator shares the Mac's loopback; the tests find the server's state through `SIMULATOR_HOST_HOME`). CI runs them on an iPhone simulator (`.github/workflows/swift-mail-ios.yml`). The reader's WebKit tests (`WebViewSafetyTests`) run there in a hosted test target, `swift/GitKittieMailKit/TestHost` (a test-only XcodeGen app, never shipped): package tests on iOS run in an unhosted `xctest` process, where WebKit's helper processes have no app to belong to and stall on a slow simulator. What differs, and where:
 
 | Area | macOS | iOS |
 | --- | --- | --- |
