@@ -89,6 +89,8 @@ struct MessageListView: View {
         case .allMail: "All Mail"
         case .account: model.selectedAccount?.displayName ?? "Mail"
         case .folder(_, let name): name
+        case .drafts: "Drafts"
+        case .outbox: "Outbox"
         }
     }
 }

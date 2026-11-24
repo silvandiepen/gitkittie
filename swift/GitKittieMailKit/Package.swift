@@ -10,6 +10,7 @@ import PackageDescription
 // - MailClassifier   purpose, risk and urgency with reasons (GKM-007, GKM-017)
 // - MailTestSupport  the synthetic fixture corpus (GKM-003); tests only, never shipped
 // - MailMIME         RFC 5322/MIME parsing and generation, Foundation only (GKM-002, MAIL-017)
+// - MailCompose      drafts, reply/forward headers, Markdown to safe HTML, the outgoing bytes (GKM-013)
 // - MailHTML         hostile-HTML sanitizer and HTML-to-text, Foundation only (GKM-012)
 // - MailReader       what the reader shows: thread, sender and link checks, inline parts (GKM-012)
 // - MailReaderWeb    the locked-down WKWebView the reader renders HTML in (GKM-012)
@@ -25,6 +26,7 @@ let package = Package(
         .library(name: "MailStore", targets: ["MailStore"]),
         .library(name: "MailClassifier", targets: ["MailClassifier"]),
         .library(name: "MailMIME", targets: ["MailMIME"]),
+        .library(name: "MailCompose", targets: ["MailCompose"]),
         .library(name: "MailHTML", targets: ["MailHTML"]),
         .library(name: "MailReader", targets: ["MailReader"]),
         .library(name: "MailReaderWeb", targets: ["MailReaderWeb"]),
@@ -36,6 +38,7 @@ let package = Package(
         .target(name: "MailClassifier", dependencies: ["MailCore"]),
         .target(name: "MailTestSupport", dependencies: ["MailCore"], resources: [.copy("Fixtures")]),
         .target(name: "MailMIME", dependencies: ["MailCore"]),
+        .target(name: "MailCompose", dependencies: ["MailCore", "MailMIME", "MailStore"]),
         .target(name: "MailHTML"),
         .target(name: "MailReader", dependencies: ["MailCore", "MailMIME", "MailHTML", "MailStore", "MailClassifier"]),
         .target(name: "MailReaderWeb", dependencies: ["MailReader", "MailHTML"]),
@@ -44,6 +47,7 @@ let package = Package(
         .testTarget(name: "MailStoreTests", dependencies: ["MailStore", "MailTestSupport"]),
         .testTarget(name: "MailClassifierTests", dependencies: ["MailClassifier", "MailTestSupport"]),
         .testTarget(name: "MailMIMETests", dependencies: ["MailMIME"]),
+        .testTarget(name: "MailComposeTests", dependencies: ["MailCompose", "MailMIME", "MailStore", "MailTestSupport"]),
         .testTarget(name: "MailHTMLTests", dependencies: ["MailHTML", "MailTestSupport"]),
         .testTarget(name: "MailReaderTests", dependencies: ["MailReader", "MailReaderWeb", "MailStore", "MailTestSupport"]),
         .testTarget(name: "MailExtractionTests", dependencies: ["MailExtraction"]),

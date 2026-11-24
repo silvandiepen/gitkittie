@@ -1,5 +1,6 @@
 import AppKit
 import MailExtraction
+import MailCompose
 import SwiftUI
 
 @main
@@ -44,11 +45,23 @@ struct GitMailApp: App {
                 Button("Previous Conversation") { Task { await model.browser.selectPrevious() } }
                     .keyboardShortcut(.upArrow, modifiers: [.command, .option])
             }
+            ComposeCommands(model: model)
             CommandGroup(after: .toolbar) {
                 Button("Rebuild Search Index") { Task { await model.rebuildIndex() } }
                     .disabled(model.phase != .ready || model.isRebuildingIndex)
             }
         }
+
+        // One window per draft; restored with its draft after a relaunch (GKM-013).
+        WindowGroup("New Message", id: ComposeScene.id, for: DraftID.self) { $draftID in
+            ComposeWindow(draftID: draftID)
+                .environment(model)
+                .background(SolidWindow())
+                .tint(Theme.accent)
+                .preferredColorScheme(.dark)
+        }
+        .defaultSize(width: 700, height: 640)
+        .commandsRemoved()
     }
 }
 

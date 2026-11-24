@@ -10,11 +10,15 @@ enum SidebarSelection: Hashable {
     case account(MailAccountID)
     /// A provider folder of an account, as this device's sync state knows it (GKM-012).
     case folder(MailAccountID, String)
+    /// Messages being written (GKM-013).
+    case drafts
+    /// Messages waiting to be sent, or needing a decision (GKM-014).
+    case outbox
 
-    /// The mail the list shows for it.
+    /// The mail the list shows for it (drafts and the outbox have their own views).
     var scope: MailScope {
         switch self {
-        case .allMail: .allMail
+        case .allMail, .drafts, .outbox: .allMail
         case .account(let id): .account(id)
         case .folder(let id, let name): .folder(id, name)
         }
@@ -52,10 +56,20 @@ final class AppModel {
     var importReport: ImportReport?
     /// The message list, the open thread and search (GKM-012, GKM-016).
     let browser = MailBrowser()
+
+    /// The message the reader is focused on (the newest expanded one in the open thread):
+    /// what Reply, Reply All and Forward answer.
+    var openMessage: StoredMessage? {
+        guard let thread = browser.openThread else { return nil }
+        return thread.messages.last(where: { $0.isExpanded && $0.stored != nil })?.stored
+    }
     /// An error from the last action, for an alert; cleared when shown.
     var actionError: String?
 
     private(set) var selection: SidebarSelection = .allMail
+
+    /// Drafts and the outbox; nil until the store is open.
+    private(set) var sending: MailSending?
 
     private let locations: StoreLocations?
     private var store: MailStore?
@@ -87,6 +101,12 @@ final class AppModel {
             let opened = try await MailStore.open(locations ?? StoreLocations.standard())
             store = opened
             browser.attach(opened)
+            if sending == nil {
+                let sending = try MailSending(locations: opened.locations, credentials: KeychainCredentials())
+                sending.start()
+                await sending.refreshDrafts()
+                self.sending = sending
+            }
             try await reload()
             phase = .ready
             indexAttachmentTextInBackground()
@@ -141,6 +161,12 @@ final class AppModel {
         }
     }
 
+    /// The original bytes of a stored message, for Reply and Forward.
+    func originalData(of id: MailMessageID) async throws -> Data {
+        guard let store else { throw MailStoreError.messageNotFound(id.rawValue) }
+        return try await store.originalData(of: id)
+    }
+
     /// Makes the search index again from the mail folder.
     func rebuildIndex() async {
         guard let store, !isRebuildingIndex else { return }
@@ -165,7 +191,7 @@ final class AppModel {
         for account in accounts { found[account.id] = try await store.folders(account: account.id) }
         folders = found
         let stillThere: Bool = switch selection {
-        case .allMail: true
+        case .allMail, .drafts, .outbox: true
         case .account(let id): accounts.contains { $0.id == id }
         case .folder(let id, let name): found[id]?.contains(name) == true
         }

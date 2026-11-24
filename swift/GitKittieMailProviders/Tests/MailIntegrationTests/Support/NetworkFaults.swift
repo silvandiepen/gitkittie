@@ -61,6 +61,12 @@ final class FaultProxy: Sendable {
         /// server's reply and cut the connection. The server has the message; the client
         /// never learns it.
         case cutAfterEndOfData
+        /// Cut both sides the moment the client's bytes so far contain `marker`; the chunk that
+        /// completes it never reaches the server. For cutting an SMTP session at a given step
+        /// ("EHLO", "AUTH", "MAIL FROM", "RCPT TO", "DATA\r\n", a body line, "\r\n.\r\n", "QUIT").
+        case cutWhenClientSends(String)
+        /// Cut before the server's greeting reaches the client.
+        case cutBeforeGreeting
     }
 
     private let server: any Channel
@@ -75,7 +81,23 @@ final class FaultProxy: Sendable {
                 connections.withLockedValue { $0.append(child) }
                 let downstream = RelayHandler()
                 let upstream = RelayHandler()
-                if case .cutAfterEndOfData = mode {
+                switch mode {
+                case .relay:
+                    break
+                case .cutBeforeGreeting:
+                    upstream.inspect = { _ in false }
+                case .cutWhenClientSends(let marker):
+                    let wanted = Array(marker.utf8)
+                    var seen: [UInt8] = []
+                    downstream.inspect = { buffer in
+                        seen += buffer.readableBytesView
+                        // Only the tail can complete the marker; keep enough of it.
+                        let containsMarker = seen.count >= wanted.count
+                            && (0...(seen.count - wanted.count)).contains { Array(seen[$0..<($0 + wanted.count)]) == wanted }
+                        if seen.count > 4096 { seen.removeFirst(seen.count - 4096) }
+                        return !containsMarker
+                    }
+                case .cutAfterEndOfData:
                     let sawEnd = NIOLockedValueBox(false)
                     var tail: [UInt8] = []
                     downstream.inspect = { buffer in

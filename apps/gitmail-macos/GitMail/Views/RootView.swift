@@ -29,10 +29,25 @@ struct MailWindow: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 320)
         } content: {
-            MessageListView()
-                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
+            Group {
+                switch model.selection {
+                case .drafts: DraftsView()
+                case .outbox: OutboxView()
+                default: MessageListView()
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
         } detail: {
             ReaderView()
+        }
+        .toolbar { ComposeToolbar(model: model) }
+        .alert("Couldn’t do that", isPresented: Binding(
+            get: { model.sending?.lastError != nil },
+            set: { if !$0 { model.sending?.lastError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.sending?.lastError ?? "")
         }
         .alert("Something went wrong", isPresented: Binding(
             get: { model.actionError != nil },
