@@ -119,7 +119,7 @@ extension MailIndex {
         let (clause, values) = Self.attachmentClause(query)
         let statement = try database.prepare("""
             SELECT m.local_id, m.account_id, m.thread_id, m.subject, m.from_name, m.from_address, m.sort_date,
-                   b.blob, b.file_name, b.media_type, b.size, b.inline, b.content_id
+                   b.blob, b.file_name, b.media_type, b.size, b.inline, b.content_id, b.section
             FROM message_blobs b JOIN messages m ON m.local_id = b.local_id
             WHERE \(clause)
             ORDER BY m.sort_date DESC, m.local_id, b.file_name, b.blob LIMIT ? OFFSET ?
@@ -130,7 +130,8 @@ extension MailIndex {
             else { continue }
             let from = statement.text(5).map { MailAddress(name: statement.text(4), address: $0) }
             let reference = AttachmentReference(blob: blob, fileName: statement.text(8) ?? "", mediaType: statement.text(9) ?? "",
-                                                size: statement.int(10), inline: statement.int(11) != 0, contentId: statement.text(12))
+                                                size: statement.int(10), inline: statement.int(11) != 0, contentId: statement.text(12),
+                                                section: statement.text(13))
             items.append(AttachmentItem(message: id, account: MailAccountID(account), threadID: statement.text(2) ?? raw,
                                         subject: statement.text(3), from: from, date: Date(timeIntervalSince1970: statement.double(6)),
                                         reference: reference))

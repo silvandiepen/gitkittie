@@ -61,6 +61,18 @@ extension MailStore {
             let parsed = try parser.parse(message.eml)
             var matched: MailMessageID?
             for candidate in try index.candidates(account: account, messageID: parsed.messageID, fingerprint: ContentFingerprint.of(parsed)) {
+                if try index.location(of: candidate)?.isPartial == true {
+                    // The whole original of a message stored partially (GKM-036): it completes
+                    // that copy, under its id, instead of becoming a second message.
+                    if let manifest = try readManifest(candidate, account: accountName),
+                       try partialMatches(manifest, account: accountName, eml: message.eml, parsed: parsed) {
+                        _ = try write([NewMessage(eml: message.eml, parsed: parsed, remote: nil, receivedAt: manifest.received,
+                                                  completes: candidate)], account: account)
+                        matched = candidate
+                        break
+                    }
+                    continue
+                }
                 if let original = try? originalData(of: candidate), original == message.eml {
                     matched = candidate
                     break

@@ -30,6 +30,10 @@ public struct ExportResult: Equatable, Sendable {
     /// Messages left out because their original no longer matches its recorded hash: a changed
     /// original is the person's to look at, never exported as if it were the message.
     public var failed: [MailMessageID]
+    /// Partial messages left out (GKM-036, MAIL-062): their original is not downloaded yet, and
+    /// what is stored of them is not the message. Complete them first (MailSync's
+    /// `OnDemandFetcher.complete`), then export again.
+    public var partial: [MailMessageID] = []
 }
 
 extension MailStore {
@@ -62,7 +66,11 @@ extension MailStore {
             for id in ids {
                 // Files only, nothing parsed: the original is checked against the hash its
                 // Markdown recorded and copied as it is.
-                let emlURL = try url(of: id)
+                let (emlURL, isPartial) = try fileLocation(of: id)
+                guard !isPartial else {
+                    result.partial.append(id)
+                    continue
+                }
                 let markdownURL = emlURL.deletingPathExtension().appendingPathExtension("md")
                 let markdown = try Data(contentsOf: markdownURL)
                 let front = try DerivedMarkdown.frontMatter(of: String(decoding: markdown, as: UTF8.self))
@@ -111,6 +119,15 @@ extension MailStore {
             throw error
         }
         return result
+    }
+
+    /// The partial messages a selection covers (GKM-036): complete them before exporting, or
+    /// the export leaves them out.
+    public func partialMessages(in selection: ExportSelection) throws -> [(id: MailMessageID, account: MailAccountID)] {
+        try exportedIDs(selection).compactMap { id in
+            guard try index.location(of: id)?.isPartial == true, let account = try index.account(of: id) else { return nil }
+            return (id, account)
+        }
     }
 
     /// The stored messages a selection covers, oldest first within a thread, newest first otherwise.

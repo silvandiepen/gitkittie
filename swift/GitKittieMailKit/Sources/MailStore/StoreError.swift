@@ -28,6 +28,14 @@ public enum MailStoreError: Error, Equatable, CustomStringConvertible {
     case unsupportedSpaceFormat(Int)
     /// An export destination that is not a folder this app may write to (GKM-023).
     case exportDestinationUnavailable(String)
+    /// The message is partial (GKM-036): its original is not stored yet, so nothing may treat
+    /// what is stored as the original. Complete it first.
+    case partialMessage(String)
+    /// An attachment of a partial message that is still only at the provider (GKM-036).
+    case attachmentNotDownloaded(String)
+    /// Bytes offered to complete a partial message are not that message: header, size or a
+    /// fetched part differ (GKM-036).
+    case partialMismatch(String)
 
     public var description: String {
         switch self {
@@ -44,6 +52,9 @@ public enum MailStoreError: Error, Equatable, CustomStringConvertible {
         case .invalidSpace(let why): return why
         case .unsupportedSpaceFormat(let v): return "This space was saved by a newer version of the app (format \(v)); it can be read but not changed here."
         case .exportDestinationUnavailable(let path): return "Can’t write the export to \(path)."
+        case .partialMessage(let id): return "Message \(id) is not completely downloaded yet."
+        case .attachmentNotDownloaded(let name): return "“\(name)” is not downloaded yet."
+        case .partialMismatch(let id): return "The downloaded message does not match the partial copy of \(id)."
         }
     }
 }
