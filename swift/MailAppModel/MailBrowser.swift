@@ -479,7 +479,14 @@ final class MailBrowser {
         let folder = quickLookFolder.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var url = folder.appendingPathComponent(Self.previewName(attachment))
+        // Complete protection is an iOS data-protection class. On the Mac, writing with it fails
+        // with "permission denied" (513) on volumes without per-file data protection, which broke
+        // Quick Look and Save in the attachment library; the cache folder is already private.
+        #if os(iOS)
         try data.write(to: url, options: [.atomic, .completeFileProtection])
+        #else
+        try data.write(to: url, options: [.atomic])
+        #endif
         #if os(macOS)
         var values = URLResourceValues()
         values.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload,
