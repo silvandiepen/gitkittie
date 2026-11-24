@@ -1,0 +1,23 @@
+Return-Path: <sam.okafor@example.org>
+Received: from smtp.example.org (smtp.example.org [192.0.2.10])
+ by mx.example.net with ESMTPS id 4Xa1; Tue, 17 Nov 2026 18:02:11 +0100
+Authentication-Results: mx.example.net;
+ spf=pass smtp.mailfrom=example.org;
+ dkim=pass header.d=example.org;
+ dmarc=pass header.from=example.org
+From: Sam Okafor <sam.okafor@example.org>
+To: Alex Morgan <alex.morgan@example.net>
+Subject: Dinner on Friday?
+Date: Tue, 17 Nov 2026 18:02:07 +0100
+Message-ID: <c1f0a2b4-dinner@mail.example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Hi Alex,
+
+Are you free on Friday evening? Mira and I were thinking of trying the new
+ramen place near the station. Around 19:30?
+
+Let me know,
+Sam

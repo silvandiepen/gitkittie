@@ -1,0 +1,26 @@
+From: Boekhouding Zonnewerf <facturen@zonnewerf.example.org>
+To: alex.morgan@example.net
+Subject: Factuur 2026-0412 van Zonnewerf
+Date: Mon, 02 Nov 2026 07:00:00 +0100
+Message-ID: <factuur-2026-0412@zonnewerf.example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="fz-0412"
+
+--fz-0412
+Content-Type: text/plain; charset=utf-8
+
+Beste Alex,
+
+In de bijlage vind je factuur 2026-0412 voor het onderhoud van je
+zonnepanelen. Totaal te betalen: EUR 129,00, uiterlijk op 30 november 2026.
+
+Met vriendelijke groet,
+Zonnewerf
+
+--fz-0412
+Content-Type: application/pdf; name="factuur-2026-0412.pdf"
+Content-Disposition: attachment; filename="factuur-2026-0412.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJSBzeW50aGV0aWMgaW52b2ljZSBwbGFjZWhvbGRlcgolJUVPRgo=
+--fz-0412--

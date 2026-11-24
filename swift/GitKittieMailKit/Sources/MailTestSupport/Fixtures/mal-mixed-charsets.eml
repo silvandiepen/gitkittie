@@ -1,0 +1,23 @@
+From: Jonas Weber <jonas.weber@example.com>
+To: Alex Morgan <alex.morgan@example.net>
+Subject: =?ISO-8859-1?Q?Fotos_vom_Ausflug_?= =?UTF-8?B?bmFjaCBLw7ZsbiDwn5O3?=
+X-Mailer-Note: Grüße aus Köln
+Date: Sun, 22 Nov 2026 12:12:12 +0100
+Message-ID: <jw-charsets-1@mail.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="cs-mix"
+
+--cs-mix
+Content-Type: text/plain; charset=ISO-8859-1
+Content-Transfer-Encoding: quoted-printable
+
+Hallo Alex, hier sind die Fotos. Der Dom war gro=DFartig!
+Gr=FC=DFe, Jonas
+
+--cs-mix
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: base64
+
+PHA+SGFsbG8gQWxleCwgaGllciBzaW5kIGRpZSBGb3Rvcy4gRGVyIERvbSB3YXIgZ3Jvw59hcnRp
+ZyEg8J+TtzwvcD4=
+--cs-mix--

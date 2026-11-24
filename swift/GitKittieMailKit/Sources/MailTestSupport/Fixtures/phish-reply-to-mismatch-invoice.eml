@@ -1,0 +1,17 @@
+Authentication-Results: mx.example.net;
+ spf=fail smtp.mailfrom=larkspur.example.com;
+ dkim=none;
+ dmarc=fail header.from=larkspur.example.com
+From: Larkspur Coffee Roasters <billing@larkspur.example.com>
+Reply-To: Accounts <payments@larkspur-billing.example.net>
+To: alex.morgan@example.net
+Subject: Invoice LK-99120 overdue - payment required today
+Date: Tue, 24 Nov 2026 05:10:00 +0000
+Message-ID: <inv-99120@larkspur.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Dear customer,
+
+Invoice LK-99120 for EUR 842.00 is overdue. Reply with your payment
+confirmation today to avoid collection costs. Our bank details have changed.

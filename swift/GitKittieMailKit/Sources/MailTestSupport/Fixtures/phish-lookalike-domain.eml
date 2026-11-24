@@ -1,0 +1,13 @@
+From: CloudVault <no-reply@c1oudvault.example.com>
+To: alex.morgan@example.net
+Subject: Your password expires today
+Date: Sun, 22 Nov 2026 22:22:22 +0000
+Message-ID: <pw-exp-1@c1oudvault.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Your CloudVault password expires today. Keep your current password:
+
+https://login.c1oudvault.example.com/keep-password
+
+CloudVault Team

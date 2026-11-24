@@ -1,0 +1,21 @@
+Authentication-Results: mx.example.net;
+ spf=pass smtp.mailfrom=larkspur.example.com;
+ dkim=pass header.d=larkspur.example.com;
+ dmarc=pass header.from=larkspur.example.com
+From: Larkspur Coffee Roasters <receipts@larkspur.example.com>
+To: alex.morgan@example.net
+Subject: Your receipt from Larkspur Coffee Roasters #LK-20931
+Date: Mon, 16 Nov 2026 09:12:55 +0000
+Message-ID: <receipt-LK-20931@larkspur.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Thanks for your order, Alex.
+
+Receipt #LK-20931
+1 x Colombian Huila, 500 g        EUR 14.50
+1 x Paper filters (100)            EUR  3.95
+Shipping                           EUR  4.95
+Total paid                         EUR 23.40
+
+Paid with card ending 4242.

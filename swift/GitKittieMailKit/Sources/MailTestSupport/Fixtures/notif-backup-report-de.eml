@@ -1,0 +1,16 @@
+From: Backup-Dienst <backup@nas.home.example.net>
+To: alex.morgan@example.net
+Subject: Sicherungsbericht: Sicherung erfolgreich abgeschlossen
+Date: Mon, 23 Nov 2026 03:12:00 +0100
+Message-ID: <nas-backup-20261123@nas.home.example.net>
+Auto-Submitted: auto-generated
+Precedence: bulk
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Sicherungsauftrag "Fotos" wurde erfolgreich abgeschlossen.
+
+Dauer: 00:41:12
+Übertragen: 3,2 GB
+Fehler: 0

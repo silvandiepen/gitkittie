@@ -1,0 +1,14 @@
+Authentication-Results: mx.example.net;
+ spf=softfail smtp.mailfrom=cloudvault.example.com;
+ dkim=fail header.d=cloudvault.example.com;
+ dmarc=fail header.from=cloudvault.example.com
+From: CloudVault <security@cloudvault.example.com>
+To: alex.morgan@example.net
+Subject: Your account will be closed - confirm your password
+Date: Tue, 24 Nov 2026 01:01:01 +0000
+Message-ID: <close-1@cloudvault.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+We could not verify your account. Confirm your password within 12 hours
+to keep your files: reply to this message with your current password.
