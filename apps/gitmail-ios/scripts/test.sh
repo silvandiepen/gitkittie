@@ -20,6 +20,8 @@ xcodegen generate --quiet
 rm -rf "$RESULT_BUNDLE"
 
 # TEST_RUNNER_ variables reach the test processes in the simulator without the prefix.
+# Keep going after a failing test: the screenshots and the failure reasons matter most then.
+status=0
 TEST_RUNNER_GKM_REQUIRE_TEST_MAIL_SERVER="${GKM_REQUIRE_TEST_MAIL_SERVER:-}" \
 xcodebuild test \
   -quiet \
@@ -27,9 +29,28 @@ xcodebuild test \
   -scheme GitMail \
   -destination "$DESTINATION" \
   -derivedDataPath "$DERIVED_DATA_PATH" \
-  -resultBundlePath "$RESULT_BUNDLE"
+  -resultBundlePath "$RESULT_BUNDLE" || status=$?
 
-if [[ -n "$SCREENSHOTS" ]]; then
-  mkdir -p "$SCREENSHOTS"
-  xcrun xcresulttool export attachments --path "$RESULT_BUNDLE" --output-path "$SCREENSHOTS"
+if [[ -d "$RESULT_BUNDLE" ]]; then
+  if [[ -n "$SCREENSHOTS" ]]; then
+    mkdir -p "$SCREENSHOTS"
+    xcrun xcresulttool export attachments --path "$RESULT_BUNDLE" --output-path "$SCREENSHOTS" || true
+  fi
+  if (( status != 0 )); then
+    echo "--- why tests failed ---"
+    xcrun xcresulttool get test-results tests --path "$RESULT_BUNDLE" 2>/dev/null \
+      | python3 -c '
+import json, sys
+def walk(node, path):
+    name = node.get("name", "")
+    if node.get("nodeType") == "Failure Message":
+        print(f"{path}: {name}")
+    for child in node.get("children", []):
+        walk(child, f"{path} > {name}" if name else path)
+data = json.load(sys.stdin)
+for root in data.get("testNodes", []):
+    walk(root, "")
+' || true
+  fi
 fi
+exit $status
