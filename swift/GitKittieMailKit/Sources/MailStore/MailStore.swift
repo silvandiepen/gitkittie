@@ -211,7 +211,8 @@ public actor MailStore {
 
     public func flags(of id: MailMessageID) throws -> MessageFlags {
         guard let account = try index.account(of: id) else { throw MailStoreError.messageNotFound(id.rawValue) }
-        return try mapping(for: SafePath.component(account.rawValue)).flags(of: id)
+        // What the window shows: the provider's flags with open changes laid over (GKM-015).
+        return try effectiveState(of: id, mapping: mapping(for: SafePath.component(account.rawValue))).flags
     }
 
     /// Records the provider flags for a message (the sync calls this), or a local change such
@@ -347,7 +348,7 @@ public actor MailStore {
     public func record(_ location: RemoteLocation, for id: MailMessageID, account: MailAccountID) throws {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         try mapping.record(location, for: id)
-        try index.setMailboxes(Set(mapping.locations(of: id).map(\.mailbox)), for: id, account: account)
+        try refreshIndex([id], account: account, mapping: mapping)
         reclassifyIfClassified(id) // a move into or out of Junk is the provider's verdict
     }
 
@@ -356,10 +357,11 @@ public actor MailStore {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         let id = try mapping.localID(at: location)
         try mapping.forget(location)
-        if let id {
-            try index.setMailboxes(Set(mapping.locations(of: id).map(\.mailbox)), for: id, account: account)
-            reclassifyIfClassified(id)
-        }
+        guard let id else { return }
+        // Open moves out of that folder cannot happen any more and must not bring it back.
+        try supersedeLocationRows(of: id, leaving: location.mailbox, mapping: mapping, now: Date())
+        try refreshIndex([id], account: account, mapping: mapping)
+        reclassifyIfClassified(id)
     }
 
     /// The mailboxes this device has seen for the account.
@@ -373,6 +375,7 @@ public actor MailStore {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         let orphaned = try mapping.setUIDValidity(uidValidity, mailbox: mailbox)
         try index.setMembers(mapping.localIDs(inMailbox: mailbox), ofMailbox: mailbox, account: account)
+        try reapplyOverlay(account: account, mapping: mapping, touching: mailbox)
         return orphaned
     }
 
@@ -430,6 +433,8 @@ public actor MailStore {
                   FileManager.default.fileExists(atPath: folder.appendingPathComponent("sync.sqlite").path) else { continue }
             let mapping = try mapping(for: name)
             try index.restore(flags: mapping.allFlags(), locations: mapping.allMemberships(), account: MailAccountID(name))
+            // Changes not at the provider yet stay visible after a rebuild (GKM-015).
+            try reapplyOverlay(account: MailAccountID(name), mapping: mapping)
         }
     }
 

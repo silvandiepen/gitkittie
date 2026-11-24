@@ -19,9 +19,13 @@ extension MailStore {
     /// in the mail folder. Returns the removed folder names.
     @discardableResult
     public func replaceSyncedFolders(_ folders: [SyncedFolder], account: MailAccountID) throws -> [String] {
-        let removed = try mapping(for: SafePath.component(account.rawValue)).replaceFolders(folders)
+        let mapping = try mapping(for: SafePath.component(account.rawValue))
+        let removed = try mapping.replaceFolders(folders)
         // The index's folder memberships follow the mapping.
-        for name in removed { try index.setMembers([], ofMailbox: name, account: account) }
+        for name in removed {
+            try index.setMembers([], ofMailbox: name, account: account)
+            try reapplyOverlay(account: account, mapping: mapping, touching: name)
+        }
         return removed
     }
 
@@ -43,9 +47,16 @@ extension MailStore {
 
     /// Saves the provider's flags for stored messages, and the read and flagged state the list
     /// and search show (the same `flags` table as ``setFlags(_:for:)``).
+    ///
+    /// Open changes made here (GKM-015) stay laid over them, unless the provider changed the same
+    /// flag after this device last saw it: then the provider wins (MAIL-035).
     public func setFlags(_ flags: [MailMessageID: MailMessageFlags], account: MailAccountID) throws {
-        try mapping(for: SafePath.component(account.rawValue)).setSyncFlags(flags)
-        for (id, flag) in flags { try index.setFlags(MessageFlags(seen: flag.seen, flagged: flag.flagged), for: id) }
+        let mapping = try mapping(for: SafePath.component(account.rawValue))
+        try mapping.setSyncFlags(flags)
+        try reconcileFlagRows(with: flags, mapping: mapping, now: Date())
+        for id in flags.keys.sorted() {
+            try index.setFlags(effectiveState(of: id, mapping: mapping).flags, for: id)
+        }
     }
 
     /// The provider's flags as last synced; messages never synced are missing from the result.

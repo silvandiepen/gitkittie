@@ -190,9 +190,9 @@ An agent reading mail is reading text written by strangers. Any instruction in a
 | A bulk action affects more than the preview showed | Preview is the exact set; revalidate against current provider state before executing; protected items (starred, pinned, linked, uncertain) excluded | GKM-021, GKM-031 |
 | Automatic permanent purge | None in the MVP; retention is opt-in per account, category or rule, uses Trash first, and is audited | GKM-031 |
 | Two devices running the same retention rule | One coordinating device; destructive operations pause offline until reconciled | GKM-031, GKM-028 |
-| Stale cache resurrecting deleted mail | Reconcile provider changes before destructive operations; tombstones in metadata sync | GKM-011, GKM-026 |
+| Stale cache resurrecting deleted mail | Reconcile provider changes before destructive operations; tombstones in metadata sync. Built for actions: a queued move or delete of a message that left its folder at the provider is superseded, never replayed (MAIL-035) | GKM-011, GKM-015, GKM-026 |
 | Account disconnect wiping local files | Offer keep / export / remove with plain consequences | GKM-010 |
-| Ordinary trash and move mistakes | Undo for every everyday action; explain provider Trash limits | GKM-015 |
+| Ordinary trash and move mistakes | Undo for every everyday action; explain provider Trash limits. Built: Undo/Redo for every action (MAIL-037); delete permanently only in Trash, after a confirmation that says the local copy stays; nothing ever expunged from All Mail (MAIL-036) | GKM-015 |
 
 ## Status (GKM-012, GKM-016, 2026-11-24)
 

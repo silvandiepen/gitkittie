@@ -43,6 +43,8 @@ struct MailWindow: View {
             ReaderView()
         }
         .toolbar { ComposeToolbar(model: model) }
+        // Undo for actions, the Delete Permanently confirmation and action notices (GKM-015).
+        .mailActionChrome(model)
         .onChange(of: model.attention.badgeCount, initial: true) { _, count in DockBadge.show(count) }
         .alert("Couldn’t do that", isPresented: Binding(
             get: { model.sending?.lastError != nil },

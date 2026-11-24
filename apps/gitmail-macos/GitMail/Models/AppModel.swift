@@ -64,12 +64,14 @@ final class AppModel {
     /// What the last import did, for a notice; cleared when shown.
     var importReport: ImportReport?
     /// The message list, the open thread and search (GKM-012, GKM-016).
-    let browser = MailBrowser()
+    let browser: MailBrowser
     /// Spaces (GKM-022) and the attachment library (GKM-023).
     let spaces = SpacesModel()
     let library = AttachmentLibraryModel()
     /// What the last export did, for a notice; cleared when shown (GKM-023).
     var exportReport: ExportReport?
+    /// Everyday actions with Undo, sent through each account's action journal (GKM-015).
+    let actions: MailActions
 
     /// The message the reader is focused on (the newest expanded one in the open thread):
     /// what Reply, Reply All and Forward answer.
@@ -104,9 +106,14 @@ final class AppModel {
          services: AccountServices = .live, notifications: (any MailNotificationPosting)? = nil) {
         self.locations = locations
         self.extractor = extractor
-        self.sync = AccountSync(services: services)
+        let sync = AccountSync(services: services)
+        let browser = MailBrowser()
+        self.sync = sync
+        self.browser = browser
+        self.actions = MailActions(sync: sync, browser: browser)
         self.attention = MailAttention(poster: notifications)
         sync.onStoreChanged = { [weak self] in await self?.refreshAfterSync() }
+        browser.onActionsQueued = { [weak self] accounts in await self?.sync.actionsQueued(for: accounts) }
     }
 
     /// The open store, for the account intents.
@@ -134,6 +141,7 @@ final class AppModel {
             let opened = try await MailStore.open(locations ?? folder.locations())
             store = opened
             browser.attach(opened)
+            actions.attach(opened)
             spaces.attach(opened)
             library.attach(opened, browser: browser)
             await browser.setScope(selection.scope)
