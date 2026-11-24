@@ -33,6 +33,8 @@ let package = Package(
         .library(name: "MailReader", targets: ["MailReader"]),
         .library(name: "MailReaderWeb", targets: ["MailReaderWeb"]),
         .library(name: "MailExtraction", targets: ["MailExtraction"]),
+        // Test-only: the fixture corpus, for the iOS test host (TestHost/); never linked by an app.
+        .library(name: "MailTestSupport", targets: ["MailTestSupport"]),
         .library(name: "MailUnsubscribe", targets: ["MailUnsubscribe"]),
     ],
     targets: [
