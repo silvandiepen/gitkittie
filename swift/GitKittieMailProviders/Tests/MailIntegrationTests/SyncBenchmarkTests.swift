@@ -89,7 +89,8 @@ final class SyncBenchmarkTests: XCTestCase {
 
             func pass(_ name: String) async throws -> PassResult {
                 let coordinator = SyncCoordinator(account: Self.account, connector: connector, store: store, log: log)
-                return try await Self.measure(name, coordinator: coordinator, commands: commands, serverPID: serverPID)
+                return try await Self.measure(name, coordinator: coordinator, commands: commands, serverPID: serverPID,
+                                              minimumFree: keepFree / 2)
             }
 
             var results: [PassResult] = []
@@ -201,7 +202,7 @@ final class SyncBenchmarkTests: XCTestCase {
     }
 
     private static func measure(_ name: String, coordinator: SyncCoordinator, commands: NIOLockedValueBox<Int>,
-                         serverPID: pid_t?) async throws -> PassResult {
+                         serverPID: pid_t?, minimumFree: Int64) async throws -> PassResult {
         var result = PassResult(name: name)
         let io = StoreIOStatistics.snapshot()
         let usage = ProcessMetrics.usage()
@@ -215,23 +216,33 @@ final class SyncBenchmarkTests: XCTestCase {
             for await progress in coordinator.updates where progress.imported >= 200 { return clock.now - start }
             return nil
         }
-        // Memory and progress, four times a second.
-        let sampler = Task { () -> (peak: Int64, samples: [(Duration, Int)]) in
+        let sync = Task { try await coordinator.syncOnce() }
+        // Memory and progress, four times a second; the disk is shared, so stop the sync before
+        // it runs out (the volume can fill from elsewhere while this runs).
+        let sampler = Task { () -> (peak: Int64, samples: [(Duration, Int)], stoppedForDisk: Bool) in
             var peak: Int64 = 0
             var samples: [(Duration, Int)] = []
             while !Task.isCancelled {
                 peak = max(peak, ProcessMetrics.footprint())
                 samples.append((clock.now - start, await coordinator.progress.imported))
+                if ProcessMetrics.freeSpace(at: FileManager.default.temporaryDirectory) < minimumFree {
+                    sync.cancel()
+                    return (peak, samples, true)
+                }
                 try? await Task.sleep(for: .milliseconds(250))
             }
-            return (peak, samples)
+            return (peak, samples, false)
         }
 
-        try await coordinator.syncOnce()
-        result.seconds = Self.seconds(clock.now - start)
+        let outcome = await sync.result
+        let elapsed = clock.now - start
         sampler.cancel()
+        let sampled = await sampler.value
+        if sampled.stoppedForDisk { throw DiskTooFull(minimumFree: minimumFree) }
+        try outcome.get()
+        result.seconds = Self.seconds(elapsed)
         firstVisible.cancel()
-        let (peak, samples) = await sampler.value
+        let (peak, samples, _) = sampled
         result.peakFootprint = max(peak, ProcessMetrics.footprint())
         result.imported = await coordinator.progress.imported
         if result.imported >= 200, let visible = await firstVisible.value { result.firstVisibleSeconds = Self.seconds(visible) }
@@ -252,6 +263,11 @@ final class SyncBenchmarkTests: XCTestCase {
         result.io = StoreIOStatistics.snapshot() - io
         result.imapCommands = commands.withLockedValue { $0 } - commandsBefore
         return result
+    }
+
+    struct DiskTooFull: Error, CustomStringConvertible {
+        var minimumFree: Int64
+        var description: String { "stopped: less than \(SyncBenchmarkTests.mb(minimumFree)) free on the disk" }
     }
 
     // MARK: - The mailbox at the server
