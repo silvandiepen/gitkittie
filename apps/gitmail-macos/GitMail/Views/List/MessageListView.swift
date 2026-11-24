@@ -1,3 +1,4 @@
+import MailClassifier
 import MailCore
 import MailStore
 import SwiftUI
@@ -35,7 +36,7 @@ struct MessageListView: View {
                 } label: {
                     Label("Filters", systemImage: browser.filters.isEmpty ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
                 }
-                .help("Filter by account, person, date, attachments, folder or unread")
+                .help("Filter by account, category, person, date, attachments, folder or unread")
             }
         }
     }
@@ -44,7 +45,7 @@ struct MessageListView: View {
         if model.isEmpty {
             NoMailView()
         } else if browser.rows.isEmpty {
-            QuietNote(browser.isSearching ? "No messages match." : "No messages here.")
+            QuietNote(browser.isSearching ? "No messages match." : browser.scope.category?.emptyNote ?? "No messages here.")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollViewReader { proxy in
@@ -87,6 +88,7 @@ struct MessageListView: View {
     private var title: String {
         switch model.selection {
         case .allMail: "All Mail"
+        case .category(let category): category.title
         case .account: model.selectedAccount?.displayName ?? "Mail"
         case .folder(_, let name): name
         case .drafts: "Drafts"

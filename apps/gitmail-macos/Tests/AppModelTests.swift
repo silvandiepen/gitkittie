@@ -43,6 +43,7 @@ final class AppModelTests: XCTestCase {
         try await seed()
         let model = AppModel(locations: locations)
         await model.open()
+        await model.select(.allMail) // the window opens on Focused (GKM-018); these tests are about All Mail
         let browser = model.browser
         XCTAssertFalse(model.isEmpty)
         XCTAssertEqual(model.accounts.map(\.displayName), ["Home", "Work"])
@@ -87,6 +88,7 @@ final class AppModelTests: XCTestCase {
         try await seed()
         let model = AppModel(locations: locations)
         await model.open()
+        await model.select(.allMail) // the window opens on Focused (GKM-018); these tests are about All Mail
         let browser = model.browser
         await browser.select(try XCTUnwrap(browser.rows.first?.id))
         var thread = try XCTUnwrap(browser.openThread)
@@ -110,6 +112,7 @@ final class AppModelTests: XCTestCase {
         try await seed()
         let model = AppModel(locations: locations)
         await model.open()
+        await model.select(.allMail) // the window opens on Focused (GKM-018); these tests are about All Mail
         let browser = model.browser
         await browser.selectNext()
         XCTAssertEqual(browser.selectedRowID, browser.rows[0].id)
@@ -126,6 +129,7 @@ final class AppModelTests: XCTestCase {
         try await seed()
         let model = AppModel(locations: locations)
         await model.open()
+        await model.select(.allMail) // the window opens on Focused (GKM-018); these tests are about All Mail
         let browser = model.browser
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
@@ -166,6 +170,7 @@ final class AppModelTests: XCTestCase {
 
         let model = AppModel(locations: locations)
         await model.open()
+        await model.select(.allMail) // the window opens on Focused (GKM-018); these tests are about All Mail
         let browser = model.browser
         let photos = try XCTUnwrap(browser.rows.first { $0.latest.subject == "Photos" })
         await browser.select(photos.id)
@@ -201,6 +206,7 @@ final class AppModelTests: XCTestCase {
 
         let model = AppModel(locations: locations)
         await model.open()
+        await model.select(.allMail) // the window opens on Focused (GKM-018); these tests are about All Mail
         await model.importMessages(from: [root.appendingPathComponent("Export")])
         XCTAssertEqual(model.importReport, ImportReport(imported: 2, duplicates: 0, skipped: ["broken.eml"]))
         XCTAssertEqual(model.accounts.map(\.displayName), ["On My Mac"])
@@ -226,6 +232,7 @@ final class AppModelTests: XCTestCase {
 
         let model = AppModel(locations: locations, extractor: IsolatedTextExtractor(endpoint: listener.endpoint, timeout: .seconds(10)))
         await model.open()
+        await model.select(.allMail) // the window opens on Focused (GKM-018); these tests are about All Mail
         await model.waitForAttachmentText()
         await model.browser.search("utrecht platform")
         XCTAssertEqual(subjects(model.browser), ["Travel"])
@@ -235,6 +242,7 @@ final class AppModelTests: XCTestCase {
         try await seed()
         let model = AppModel(locations: locations)
         await model.open()
+        await model.select(.allMail) // the window opens on Focused (GKM-018); these tests are about All Mail
         let before = model.browser.rows
         await model.rebuildIndex()
         XCTAssertNil(model.actionError)

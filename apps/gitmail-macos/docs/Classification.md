@@ -65,3 +65,24 @@ Separate unread from attention. Focused inbox and important trustworthy alerts c
 - Cleanup preview matches execution and protected items survive.
 - Unsubscribe approved and suspicious endpoints never contacted automatically.
 - Remote images blocked by default; no duplicated rule/retention actions across devices.
+
+## What exists (GKM-017, GKM-018)
+
+**Classifier** (`MailClassifier`, rule set `gkm-rules-2`). Steps 1–4 above, deterministic, no model and no network. Organisation domains come from the bundled Public Suffix List. Changes from the GKM-007 baseline, each with fixtures and tests:
+
+- The provider's junk folder (`Junk`, `[Gmail]/Spam`, …) counts as its spam verdict; over IMAP that is how a verdict arrives.
+- A link that shows the sender's own site but goes through a mailing service's click tracker is tracking (`content.tracked-link`), not deception, when the message is bulk mail and claims nothing about an account or a payment. Otherwise a mismatch is still phishing.
+- A person posting to a discussion list (`List-Post`, not `NO`; no role address, no one-click unsubscribe, no offer) is a conversation (`list.discussion`).
+- Security templates only count when a function sent the message (role address, list or automation headers); a person mentioning a password, or replying about anything, is having a conversation. The claim still counts for risk.
+- "Your order" with an offer in the subject and no order number in the body is a promotion (`template.offer-not-order`).
+- Transactions carry urgency (MAIL-040), so only the ones to act on reach Focused. Urgency is decided after corrections, so "Not phishing" restores it.
+- A bare public suffix is no organisation: never trusted, never a lookalike.
+
+Accuracy: 63/63 on the corpus (56 GKM-003 fixtures plus 7 for the weaknesses), both through the classifier and end to end through the store. The corpus agrees with the rules by construction; real-world accuracy needs the GKM-024 held-out set. Spam without a provider verdict is still weak (two scam phrases or a junk folder).
+
+**Storage** (MAIL-038, MAIL-039). The store classifies each message when it is stored, read-only, and keeps the verdict in the index. Corrections and rules live in device metadata, apart from the index. Tests prove the mail folder, the provider flags and folders are unchanged by classifying, correcting and ruling.
+
+**Views and attention** (MAIL-040, MAIL-041). Sidebar: Focused, Transactions, Updates, Subscriptions, Promotions, Quarantine, All Mail; a `Category` search chip and `category:` in the search field. The reader says where a message is and why ("Why?"), and offers Move to …, Not Phishing / Not Junk, Report as Phishing, Undo, per-list notifications, and, after a purpose correction only, a rule for this sender or list.
+
+**Not yet:** a local model (step 5); spaces in notification settings (GKM-022); opening a message from its notification; verified `authserv-id`s (GKM-004 for iCloud, GKM-029 for Gmail), so in the app authentication is "no evidence" and the trusted-sender list stays empty, which leaves lookalike checks to the sender warnings in the reader.
+

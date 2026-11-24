@@ -1,8 +1,9 @@
+import MailClassifier
 import MailCore
 import SwiftUI
 
-/// The filter chips under the search field (GKM-016): account, person, date, attachments,
-/// folder, unread, flagged. An active chip is a tinted fill; nothing has an outline.
+/// The filter chips under the search field (GKM-016): account, category (GKM-018), person,
+/// date, attachments, folder, unread, flagged. An active chip is a tinted fill; nothing has an outline.
 struct SearchFilterBar: View {
     @Environment(AppModel.self) private var model
     @State private var person = ""
@@ -41,6 +42,21 @@ struct SearchFilterBar: View {
                     .menuIndicator(.hidden)
                     .fixedSize()
                 }
+
+                Menu {
+                    Button("Any Category") { update { $0.category = nil } }
+                    Divider()
+                    ForEach(MailCategory.allCases, id: \.self) { category in
+                        Button(category.title) { update { $0.category = category } }
+                    }
+                } label: {
+                    Chip(title: filters.category?.title ?? "Category", systemImage: filters.category?.systemImage ?? "square.stack",
+                         isActive: filters.category != nil)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
 
                 Button { editingPerson = true } label: {
                     Chip(title: filters.participant.isEmpty ? "Person" : filters.participant, systemImage: "at",

@@ -6,7 +6,8 @@ import SwiftUI
 @main
 struct GitMailApp: App {
     // Attachment text for search comes from the sandboxed GitMailExtractor.xpc, never this process.
-    @State private var model = AppModel(extractor: IsolatedTextExtractor(serviceName: "app.hakobs.gitmail.extractor"))
+    @State private var model = AppModel(extractor: IsolatedTextExtractor(serviceName: "app.hakobs.gitmail.extractor"),
+                                        notifications: UserNotificationPoster())
 
     var body: some Scene {
         WindowGroup {

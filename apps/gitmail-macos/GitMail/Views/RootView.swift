@@ -41,6 +41,7 @@ struct MailWindow: View {
             ReaderView()
         }
         .toolbar { ComposeToolbar(model: model) }
+        .onChange(of: model.attention.badgeCount, initial: true) { _, count in DockBadge.show(count) }
         .alert("Couldn’t do that", isPresented: Binding(
             get: { model.sending?.lastError != nil },
             set: { if !$0 { model.sending?.lastError = nil } }

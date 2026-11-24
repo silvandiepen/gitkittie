@@ -34,6 +34,9 @@ targets:
         product: MailCore
       - package: GitKittieMailKit
         product: MailStore
+      # Purpose, risk and urgency, and the category views (GKM-017, GKM-018).
+      - package: GitKittieMailKit
+        product: MailClassifier
       - package: GitKittieMailKit
         product: MailMIME
       - package: GitKittieMailKit
@@ -140,6 +143,9 @@ targets:
         product: MailCore
       - package: GitKittieMailKit
         product: MailStore
+      # Purpose, risk and urgency, and the category views (GKM-017, GKM-018).
+      - package: GitKittieMailKit
+        product: MailClassifier
       - package: GitKittieMailKit
         product: MailMIME
       - package: GitKittieMailKit

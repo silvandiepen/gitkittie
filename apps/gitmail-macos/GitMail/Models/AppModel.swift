@@ -1,4 +1,5 @@
 import Foundation
+import MailClassifier
 import MailCore
 import MailExtraction
 import MailStore
@@ -7,6 +8,8 @@ import Observation
 /// What the sidebar has selected.
 enum SidebarSelection: Hashable {
     case allMail
+    /// Focused and the category views (GKM-018).
+    case category(MailCategory)
     case account(MailAccountID)
     /// A provider folder of an account, as this device's sync state knows it (GKM-012).
     case folder(MailAccountID, String)
@@ -19,6 +22,7 @@ enum SidebarSelection: Hashable {
     var scope: MailScope {
         switch self {
         case .allMail, .drafts, .outbox: .allMail
+        case .category(let category): .category(category)
         case .account(let id): .account(id)
         case .folder(let id, let name): .folder(id, name)
         }
@@ -66,7 +70,8 @@ final class AppModel {
     /// An error from the last action, for an alert; cleared when shown.
     var actionError: String?
 
-    private(set) var selection: SidebarSelection = .allMail
+    /// Focused is where the window opens (GKM-018).
+    private(set) var selection: SidebarSelection = .category(.focused)
 
     /// Drafts and the outbox; nil until the store is open.
     private(set) var sending: MailSending?
@@ -79,14 +84,18 @@ final class AppModel {
     private var extraction: Task<Void, Never>?
     /// Accounts' sync and setup services (GKM-010, GKM-011; AppModel+Accounts.swift).
     let sync: AccountSync
+    /// Category counts, the badge, background classification and notifications (GKM-017,
+    /// GKM-018; AppModel+Classification.swift).
+    let attention: MailAttention
 
     /// `locations` nil means the mail folder the person chose, or the app's standard folders
     /// (`MailFolderLocation`).
     init(locations: StoreLocations? = nil, extractor: (any AttachmentTextExtracting)? = nil,
-         services: AccountServices = .live) {
+         services: AccountServices = .live, notifications: (any MailNotificationPosting)? = nil) {
         self.locations = locations
         self.extractor = extractor
         self.sync = AccountSync(services: services)
+        self.attention = MailAttention(poster: notifications)
         sync.onStoreChanged = { [weak self] in await self?.refreshAfterSync() }
     }
 
@@ -115,6 +124,8 @@ final class AppModel {
             let opened = try await MailStore.open(locations ?? folder.locations())
             store = opened
             browser.attach(opened)
+            await browser.setScope(selection.scope)
+            try await attention.attach(opened)
             if let current = sending, sendingFolder != opened.locations.mailFolder {
                 // Another mail folder was chosen: its drafts and outbox are its own.
                 await current.stop()
@@ -132,6 +143,7 @@ final class AppModel {
             await sync.start(accounts, store: opened)
             await registerForSending(accounts)
             indexAttachmentTextInBackground()
+            attention.classifyInBackground { [weak self] in await self?.browser.reload() }
         } catch {
             phase = .failed(String(describing: error))
         }
@@ -152,6 +164,7 @@ final class AppModel {
         let report = await MailImporter.importMessages(from: urls, into: store)
         importReport = report
         do { try await reload() } catch { actionError = String(describing: error) }
+        await attention.refresh(accounts: accounts, arrivals: .skip)
         indexAttachmentTextInBackground()
     }
 
@@ -199,6 +212,7 @@ final class AppModel {
             try await store.rebuildIndex()
             try await reload()
             indexAttachmentTextInBackground()
+            attention.classifyInBackground { [weak self] in await self?.browser.reload() }
         } catch {
             actionError = String(describing: error)
         }
@@ -222,6 +236,7 @@ final class AppModel {
             actionError = String(describing: error)
         }
         await browser.reload()
+        await attention.refresh(accounts: accounts, arrivals: .notify)
     }
 
     private func reload() async throws {
@@ -232,16 +247,17 @@ final class AppModel {
         for account in accounts { found[account.id] = try await store.folders(account: account.id) }
         folders = found
         let stillThere: Bool = switch selection {
-        case .allMail, .drafts, .outbox: true
+        case .allMail, .category, .drafts, .outbox: true
         case .account(let id): accounts.contains { $0.id == id }
         case .folder(let id, let name):
             // A folder with stored mail, or one the sync knows at the provider (may be empty).
             found[id]?.contains(name) == true || sync.folders[id]?.contains { $0.name == name } == true
         }
         if !stillThere {
-            selection = .allMail
-            await browser.setScope(.allMail)
+            selection = .category(.focused)
+            await browser.setScope(selection.scope)
         }
         await browser.reload()
+        await attention.refresh(accounts: accounts, arrivals: .leave)
     }
 }

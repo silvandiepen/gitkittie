@@ -1,4 +1,5 @@
 import Foundation
+import MailClassifier
 import MailCore
 import MailReader
 import MailStore
@@ -9,16 +10,23 @@ enum MailScope: Hashable {
     case allMail
     case account(MailAccountID)
     case folder(MailAccountID, String)
+    /// Focused, Transactions, … across every account (GKM-018).
+    case category(MailCategory)
 
     var account: MailAccountID? {
         switch self {
-        case .allMail: nil
+        case .allMail, .category: nil
         case .account(let id), .folder(let id, _): id
         }
     }
 
     var folder: String? {
         if case .folder(_, let name) = self { return name }
+        return nil
+    }
+
+    var category: MailCategory? {
+        if case .category(let category) = self { return category }
         return nil
     }
 }
@@ -60,6 +68,8 @@ struct SearchFilters: Equatable {
     var folder: String?
     var unreadOnly = false
     var flaggedOnly = false
+    /// The category chip (GKM-018).
+    var category: MailCategory?
 
     var isEmpty: Bool { self == SearchFilters() }
 }
@@ -117,6 +127,8 @@ struct ThreadMessage: Identifiable {
     var remoteImagesLoaded = false
     var showsPlainText = false
     var loadError: String?
+    /// Why the classifier put it where it is (GKM-017); nil until classified.
+    var verdict: StoredVerdict?
 }
 
 /// The open conversation: its messages oldest first, the newest (or the search hit) expanded.
@@ -193,6 +205,7 @@ final class MailBrowser {
         query.hasAttachment = query.hasAttachment || filters.hasAttachment
         query.unreadOnly = query.unreadOnly || filters.unreadOnly
         query.flaggedOnly = query.flaggedOnly || filters.flaggedOnly
+        query.category = filters.category ?? query.category ?? scope.category
         return query
     }
 
@@ -297,6 +310,7 @@ final class MailBrowser {
                 allowed = await preferences.allowsRemoteImages(from: address)
             }
             message.stored = stored
+            message.verdict = try await store.verdict(of: message.id)
             message.remoteImagesLoaded = allowed
             message.content = ReaderContent.make(from: stored, allowRemoteImages: allowed, preferPlainText: message.showsPlainText)
             message.loadError = nil
@@ -338,6 +352,23 @@ final class MailBrowser {
     func senderAllowsRemoteImages(_ address: String?) async -> Bool {
         guard let address, let preferences else { return false }
         return await preferences.allowsRemoteImages(from: address)
+    }
+
+    /// After a correction or a rule changed verdicts: the list (a message may have left this
+    /// view) and the open messages' reasons.
+    func refreshAfterClassificationChange() async {
+        guard let store else { return }
+        if var thread = openThread {
+            do {
+                for index in thread.messages.indices where thread.messages[index].stored != nil {
+                    thread.messages[index].verdict = try await store.verdict(of: thread.messages[index].id)
+                }
+            } catch {
+                actionError = String(describing: error)
+            }
+            if openThread?.id == thread.id { openThread = thread }
+        }
+        await refreshAfterFlagChange()
     }
 
     // MARK: Flags
