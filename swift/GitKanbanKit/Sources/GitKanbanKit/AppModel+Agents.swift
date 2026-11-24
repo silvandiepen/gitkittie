@@ -320,8 +320,10 @@ extension AppModel {
         case "list_reviews":
             return json(try await board.listReviews(state: string("state"), card: string("card")))
         case "create_review":
-            guard let rawItems = args["items"] as? [[String: Any]], !rawItems.isEmpty else {
-                throw AgentBoardError("\"items\" must be a list with at least one item.")
+            let rawItems = args["items"] as? [[String: Any]] ?? []
+            let rawQuestions = args["questions"] as? [[String: Any]] ?? []
+            guard !rawItems.isEmpty || !rawQuestions.isEmpty else {
+                throw AgentBoardError("Give \"items\" (files to judge) or \"questions\" (choices to make), with at least one entry.")
             }
             let uploads = try rawItems.map { raw -> AgentBoard.ReviewUpload in
                 func text(_ key: String) -> String? { (raw[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
@@ -341,9 +343,10 @@ extension AppModel {
                                          pickOne: raw["pick_one"] as? Bool ?? false, note: text("note"), revises: text("revises")),
                     data: data, preview: preview)
             }
+            let questions = try rawQuestions.map(Self.agentQuestion)
             let result = try await board.createReview(request: string("request"), card: string("card"), title: string("title"),
                                                       question: string("question"), notes: string("notes"), uploads: uploads,
-                                                      agent: try required("agent"))
+                                                      questions: questions, agent: try required("agent"))
             await agentReviewsDidChange(repo, selected.folder)
             return json(result)
         case "handle_review_item":
@@ -376,6 +379,30 @@ extension AppModel {
         default:
             throw AgentBoardError("Unknown tool \(name).")
         }
+    }
+}
+
+extension AppModel {
+    /// A question as `create_review` receives it.
+    nonisolated static func agentQuestion(_ raw: [String: Any]) throws -> Review.NewQuestion {
+        func text(_ key: String, in dict: [String: Any] = raw) -> String? {
+            (dict[key] as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        }
+        guard let id = text("id"), let question = text("question") else {
+            throw AgentBoardError("Every question needs \"id\" and \"question\".")
+        }
+        let rawSelect = text("select")?.lowercased() ?? QuestionSelect.one.rawValue
+        guard let select = QuestionSelect(rawValue: rawSelect) else {
+            throw AgentBoardError("\"select\" of question \"\(id)\" is one or many.")
+        }
+        let options = try (raw["options"] as? [[String: Any]] ?? []).map { option -> ReviewQuestionOption in
+            guard let optionID = text("id", in: option), let label = text("label", in: option) else {
+                throw AgentBoardError("Every option of question \"\(id)\" needs \"id\" and \"label\".")
+            }
+            return ReviewQuestionOption(id: optionID, label: label, detail: text("detail", in: option))
+        }
+        return Review.NewQuestion(id: id, question: question, detail: text("detail"), select: select,
+                                  allowsOther: raw["other"] as? Bool ?? false, options: options)
     }
 }
 
@@ -478,15 +505,15 @@ enum AgentTools {
                 inputSchema: #"{"type": "object", "properties": {\#(board), \#(card), \#(fields), "body": {"type": "string", "description": "The whole new Markdown body (everything below the frontmatter). Omit to keep it."}, "lane": {"type": "string", "description": "Lane id, name or status to move the card to."}, "activity": {"type": "string", "description": "What happened, as one sentence; written to the activity log with the time and your handle."}, \#(agent)}, "required": ["board", "card", "agent"]}"#),
         MCPTool(name: "claim_card", description: "Claim a card before implementing it: records you as the owner with a lease, moves it to In Progress. Refused when another owner holds an unexpired claim.",
                 inputSchema: #"{"type": "object", "properties": {\#(board), \#(card), \#(agent), "hours": {"type": "number", "description": "Lease length, default 24."}, "working_branch": {"type": "string"}}, "required": ["board", "card", "agent"]}"#),
-        MCPTool(name: "list_reviews", description: "The board's asset review requests and the reviewer's decisions and comments. state: to_handle (default; items the reviewer decided that you have not acted on yet), pending (still waiting for the reviewer), all.",
+        MCPTool(name: "list_reviews", description: "The board's review requests: the reviewer's decisions on files, answers to questions, and comments. state: to_handle (default; items the reviewer decided and questions the reviewer answered that you have not acted on yet), pending (still waiting for the reviewer), all. An answered question gives \"answer\" (the chosen option ids), \"answer_labels\" and, when the reviewer wrote one, \"answer_other\".",
                 inputSchema: #"{"type": "object", "properties": {\#(board), "state": {"type": "string", "enum": ["to_handle", "pending", "all"]}, "card": {"type": "string", "description": "Only requests of this card."}}, "required": ["board"]}"#),
-        MCPTool(name: "create_review", description: "Ask the reviewer to judge files (images, models, audio, video): writes the files and the request. Give \"title\" for a new request, or \"request\" to add items to an existing one (a redo: set \"revises\" to the item it replaces). Large files can instead be committed in the board's repository under <board>/review/<request>/.",
-                inputSchema: #"{"type": "object", "properties": {\#(board), "request": {"type": "string", "description": "Id of an existing request to add items to."}, "card": {"type": "string", "description": "The card the request belongs to."}, "title": {"type": "string"}, "question": {"type": "string", "description": "What the reviewer should decide, in one line."}, "notes": {"type": "string"}, "items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "file_name": {"type": "string"}, "content_base64": {"type": "string"}, "preview_file_name": {"type": "string", "description": "A PNG shown for a model or video."}, "preview_base64": {"type": "string"}, "kind": {"type": "string", "enum": ["image", "model", "audio", "animation", "video", "other"]}, "group": {"type": "string", "description": "Items in one group are shown side by side."}, "pick_one": {"type": "boolean", "description": "The reviewer chooses one item of the group."}, "note": {"type": "string"}, "revises": {"type": "string"}}, "required": ["id", "file_name", "content_base64"]}}, \#(agent)}, "required": ["board", "items", "agent"]}"#),
-        MCPTool(name: "handle_review_item", description: "Record that you acted on a decided review item (shipped the approved file, dropped the rejected one, submitted the redo). When that leaves the request with nothing pending and nothing to handle, the request is finished and its folder is removed, unless keep is true.",
-                inputSchema: #"{"type": "object", "properties": {\#(board), "request": {"type": "string"}, "item": {"type": "string"}, "shipped_to": {"type": "string", "description": "Where an approved file now lives."}, "keep": {"type": "boolean", "description": "Leave a finished request in place. Default false."}}, "required": ["board", "request", "item"]}"#),
-        MCPTool(name: "close_review", description: "Remove a finished review request and its files. Refused while items are waiting for the reviewer or decided but not handled, unless force is true.",
+        MCPTool(name: "create_review", description: "Ask the reviewer to judge files (images, models, audio, video) or to answer questions: writes the files and the request. Use \"questions\" for a decision between options (single choice with select one, several with select many; other: true lets the reviewer write an answer of their own); never send options as files to approve. Give \"title\" for a new request, or \"request\" to add items or questions to an existing one (a redo: set \"revises\" to the item it replaces). Ids are unique across a request's items and questions. Large files can instead be committed in the board's repository under <board>/review/<request>/.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "request": {"type": "string", "description": "Id of an existing request to add items or questions to."}, "card": {"type": "string", "description": "The card the request belongs to."}, "title": {"type": "string"}, "question": {"type": "string", "description": "What the reviewer should do, in one line."}, "notes": {"type": "string"}, "items": {"type": "array", "description": "Files to judge.", "items": {"type": "object", "properties": {"id": {"type": "string"}, "file_name": {"type": "string"}, "content_base64": {"type": "string"}, "preview_file_name": {"type": "string", "description": "A PNG shown for a model or video."}, "preview_base64": {"type": "string"}, "kind": {"type": "string", "enum": ["image", "model", "audio", "animation", "video", "other"]}, "group": {"type": "string", "description": "Items in one group are shown side by side."}, "pick_one": {"type": "boolean", "description": "The reviewer chooses one item of the group."}, "note": {"type": "string"}, "revises": {"type": "string"}}, "required": ["id", "file_name", "content_base64"]}}, "questions": {"type": "array", "description": "Questions to answer, shown as a form.", "items": {"type": "object", "properties": {"id": {"type": "string"}, "question": {"type": "string", "description": "The question, in one line."}, "detail": {"type": "string", "description": "Markdown: background the reviewer needs."}, "select": {"type": "string", "enum": ["one", "many"], "description": "one (default): a single answer. many: any number of options."}, "other": {"type": "boolean", "description": "Let the reviewer write an answer of their own. Default false."}, "options": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "label": {"type": "string", "description": "The option, in a few words."}, "detail": {"type": "string", "description": "Markdown: what choosing it means and what it costs."}}, "required": ["id", "label"]}}}, "required": ["id", "question", "options"]}}, \#(agent)}, "required": ["board", "agent"]}"#),
+        MCPTool(name: "handle_review_item", description: "Record that you acted on a decided review item (shipped the approved file, dropped the rejected one, submitted the redo) or on an answered question (pass the question's id as item). An answer is fixed once handled. When that leaves the request with nothing pending and nothing to handle, the request is finished and its folder is removed, unless keep is true.",
+                inputSchema: #"{"type": "object", "properties": {\#(board), "request": {"type": "string"}, "item": {"type": "string", "description": "The item's or the question's id."}, "shipped_to": {"type": "string", "description": "Where an approved file now lives."}, "keep": {"type": "boolean", "description": "Leave a finished request in place. Default false."}}, "required": ["board", "request", "item"]}"#),
+        MCPTool(name: "close_review", description: "Remove a finished review request and its files. Refused while items or questions are waiting for the reviewer, or decided or answered but not handled, unless force is true.",
                 inputSchema: #"{"type": "object", "properties": {\#(board), "request": {"type": "string"}, "force": {"type": "boolean"}}, "required": ["board", "request"]}"#),
-        MCPTool(name: "wait_for_reviews", description: "Wait until the reviewer has decided something you have not handled yet, then return it (as list_reviews with state to_handle). Returns an empty list when the time is up; call again to keep listening.",
+        MCPTool(name: "wait_for_reviews", description: "Wait until the reviewer has decided or answered something you have not handled yet, then return it (as list_reviews with state to_handle). Returns an empty list when the time is up; call again to keep listening.",
                 inputSchema: #"{"type": "object", "properties": {\#(board), "card": {"type": "string"}, "timeout_seconds": {"type": "number", "description": "How long to wait, up to 240. Default 120."}}, "required": ["board"]}"#),
         MCPTool(name: "list_docs", description: "The board's documentation pages: README.md (the text under its configuration) and the Markdown files in docs/. Plans, specs and decisions about the project live here.",
                 inputSchema: #"{"type": "object", "properties": {\#(board)}, "required": ["board"]}"#),

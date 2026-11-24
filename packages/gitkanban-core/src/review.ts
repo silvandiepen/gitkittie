@@ -10,9 +10,15 @@ import { parseFrontmatter, serializeFrontmatter } from './frontmatter.js'
  * each other:
  *
  * - agent: top-level fields, and `id/file/preview/kind/group/pick/note/revises`,
- *   `handled_at`, `shipped_to` on items
- * - reviewer: `status`, `decided_by`, `decided_at` on items
+ *   `handled_at`, `shipped_to` on items; `id/question/detail/select/other/options`
+ *   and `handled_at` on questions
+ * - reviewer: `status`, `decided_by`, `decided_at` on items; `answer`,
+ *   `answer_other`, `answered_by`, `answered_at` on questions
  * - both: `comments` (append-only)
+ *
+ * A request holds items (files to judge), questions (choices to make), or both. A
+ * question is single choice (`select: one`, at most one answer in all) or multiple
+ * choice (`select: many`), optionally with an answer of the reviewer's own (`other`).
  *
  * Every write here re-parses the current text and changes only the reviewer's
  * fields, so unknown keys and the agent's fields round-trip untouched.
@@ -51,6 +57,33 @@ export interface ReviewItem {
   fps?: number
 }
 
+export type QuestionSelect = 'one' | 'many'
+
+export interface ReviewQuestionOption {
+  id: string
+  label: string
+  /** Markdown: what choosing it means, and what it costs. */
+  detail?: string
+}
+
+export interface ReviewQuestion {
+  id: string
+  question: string
+  /** Markdown under the question. */
+  detail?: string
+  select: QuestionSelect
+  /** The reviewer may write an answer of their own. */
+  other: boolean
+  options: ReviewQuestionOption[]
+  /** Chosen option ids, in option order; at most one for `select: one`. */
+  answer: string[]
+  answerOther?: string
+  answeredBy?: string
+  answeredAt?: string
+  comments: ReviewComment[]
+  handledAt?: string
+}
+
 export interface ReviewRequest {
   id: string
   project?: string
@@ -60,18 +93,23 @@ export interface ReviewRequest {
   requestedBy?: string
   requestedAt?: string
   items: ReviewItem[]
+  questions: ReviewQuestion[]
   /** Free-form notes below the frontmatter. */
   body: string
 }
 
 export interface ReviewSummary {
+  /** Items and questions. */
   total: number
+  /** Items without a decision and questions without an answer. */
   pending: number
   approved: number
   rejected: number
   changesRequested: number
-  /** Decided by the reviewer but not yet acted on by the agent (`handled_at` unset). */
+  /** Decided or answered by the reviewer but not yet acted on by the agent (`handled_at` unset). */
   awaitingAgent: number
+  questions: number
+  answered: number
 }
 
 function str(value: unknown): string | undefined {
@@ -144,6 +182,48 @@ function parseItem(value: unknown, index: number): ReviewItem | null {
   }
 }
 
+function parseQuestion(value: unknown, index: number): ReviewQuestion | null {
+  if (!value || typeof value !== 'object') return null
+  const r = value as Record<string, unknown>
+  const question = str(r.question)
+  if (!question) return null
+  const select: QuestionSelect = str(r.select)?.toLowerCase() === 'many' ? 'many' : 'one'
+  const options: ReviewQuestionOption[] = (Array.isArray(r.options) ? r.options : []).flatMap((entry, i) => {
+    if (entry && typeof entry === 'object') {
+      const o = entry as Record<string, unknown>
+      const id = str(o.id) ?? `option-${i + 1}`
+      return [{ id, label: str(o.label) ?? id, detail: str(o.detail) }]
+    }
+    // A bare `- iCloud only` is an option whose label is its id.
+    const id = str(entry)
+    return id ? [{ id, label: id }] : []
+  })
+  const ids = options.map((o) => o.id)
+  const raw = Array.isArray(r.answer) ? r.answer.map(str) : [str(r.answer)]
+  let answer = raw.filter((id): id is string => id !== undefined && ids.includes(id))
+  if (select === 'one') answer = answer.slice(0, 1)
+  const other = r.other === true || ['true', 'yes', 'on'].includes(str(r.other)?.toLowerCase() ?? '')
+  return {
+    id: str(r.id) ?? `question-${index + 1}`,
+    question,
+    detail: str(r.detail),
+    select,
+    other,
+    options,
+    answer: ids.filter((id) => answer.includes(id)),
+    answerOther: other ? str(r.answer_other) : undefined,
+    answeredBy: str(r.answered_by),
+    answeredAt: str(r.answered_at),
+    comments: parseComments(r.comments),
+    handledAt: str(r.handled_at),
+  }
+}
+
+/** Answered: a time, and an option or an own answer. */
+export function isQuestionAnswered(question: ReviewQuestion): boolean {
+  return question.answeredAt !== undefined && (question.answer.length > 0 || question.answerOther !== undefined)
+}
+
 /**
  * Parse a `review.md`. `fallbackId` (usually the request folder name) is used when
  * the frontmatter has no `id`.
@@ -152,6 +232,9 @@ export function parseReview(text: string, fallbackId = 'review'): ReviewRequest 
   const { data, body } = parseFrontmatter(text)
   const items = Array.isArray(data.items)
     ? data.items.map(parseItem).filter((item): item is ReviewItem => item !== null)
+    : []
+  const questions = Array.isArray(data.questions)
+    ? data.questions.map(parseQuestion).filter((q): q is ReviewQuestion => q !== null)
     : []
   const id = str(data.id) ?? fallbackId
   return {
@@ -163,6 +246,7 @@ export function parseReview(text: string, fallbackId = 'review'): ReviewRequest 
     requestedBy: str(data.requested_by),
     requestedAt: str(data.requested_at),
     items,
+    questions,
     body,
   }
 }
@@ -175,6 +259,17 @@ export function summarizeReview(review: ReviewRequest): ReviewSummary {
     rejected: 0,
     changesRequested: 0,
     awaitingAgent: 0,
+    questions: review.questions.length,
+    answered: 0,
+  }
+  for (const question of review.questions) {
+    summary.total += 1
+    if (isQuestionAnswered(question)) {
+      summary.answered += 1
+      if (!question.handledAt) summary.awaitingAgent += 1
+    } else {
+      summary.pending += 1
+    }
   }
   for (const item of review.items) {
     if (item.status === 'pending') summary.pending += 1
@@ -231,6 +326,64 @@ export function applyReviewDecision(text: string, decision: ReviewDecision): str
       item.decided_at = decision.at
     }
   })
+}
+
+export class ReviewQuestionNotFoundError extends Error {
+  constructor(readonly questionId: string) {
+    super(`No question with id "${questionId}"`)
+    this.name = 'ReviewQuestionNotFoundError'
+  }
+}
+
+export interface ReviewAnswer {
+  questionId: string
+  /** Chosen option ids. */
+  choices: string[]
+  /** The reviewer's own answer, where the question allows one. */
+  other?: string
+  /** Appended to the question's comments when given. */
+  comment?: string
+  by: string
+  /** ISO-8601 timestamp. */
+  at: string
+}
+
+/**
+ * Answer a question, or change the answer while the agent has not acted on it. Only
+ * `answer`, `answer_other`, `answered_by` and `answered_at` change (and a comment is
+ * appended when given). Checked against the question as the file has it: known option
+ * ids only, one choice in all for `select: one`, an own answer only where `other` allows.
+ */
+export function applyReviewAnswer(text: string, answer: ReviewAnswer): string {
+  const { data, body } = parseFrontmatter(text)
+  const questions = Array.isArray(data.questions) ? (data.questions as unknown[]) : []
+  const index = questions.findIndex(
+    (entry, i) => entry && typeof entry === 'object' && (str((entry as RawItem).id) ?? `question-${i + 1}`) === answer.questionId,
+  )
+  const raw = questions[index] as RawItem | undefined
+  const question = raw ? parseQuestion(raw, index) : null
+  if (!raw || !question) throw new ReviewQuestionNotFoundError(answer.questionId)
+  if (question.handledAt) throw new Error(`The agent has already acted on the answer to "${answer.questionId}"`)
+  const known = question.options.map((o) => o.id)
+  const unknown = answer.choices.find((id) => !known.includes(id))
+  if (unknown !== undefined) throw new Error(`"${unknown}" is not an option of this question`)
+  const own = answer.other?.trim() || undefined
+  if (own !== undefined && !question.other) throw new Error('This question has no room for an answer of your own')
+  const picked = known.filter((id) => answer.choices.includes(id))
+  if (picked.length === 0 && own === undefined) throw new Error('Choose an option or write an answer')
+  if (question.select === 'one' && picked.length + (own === undefined ? 0 : 1) > 1) {
+    throw new Error('This question takes one answer')
+  }
+  raw.answer = picked
+  raw.answer_other = own ?? null
+  raw.answered_by = answer.by
+  raw.answered_at = answer.at
+  const note = answer.comment?.trim()
+  if (note) {
+    const existing = Array.isArray(raw.comments) ? raw.comments : []
+    raw.comments = [...existing, { by: answer.by, at: answer.at, text: note }]
+  }
+  return serializeFrontmatter(data, body)
 }
 
 /** Append a comment to one item. Existing comments are never rewritten. */

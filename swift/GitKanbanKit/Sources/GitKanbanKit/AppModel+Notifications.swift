@@ -123,6 +123,15 @@ extension AppModel {
         return open.filter { !seen.contains($0) }
     }
 
+    /// What a request asks of the reviewer, for a notification: "3 items to review",
+    /// "2 questions to answer", "1 item and 1 question waiting".
+    nonisolated static func waitingLine(_ summary: ReviewSummary) -> String {
+        let items = summary.pendingItems, questions = summary.unanswered
+        if questions == 0 { return "\(items) item\(items == 1 ? "" : "s") to review" }
+        if items == 0 { return "\(questions) question\(questions == 1 ? "" : "s") to answer" }
+        return "\(summary.waitingDescription) waiting"
+    }
+
     /// The inbox was loaded: announce requests that newly need an answer.
     func reviewInboxDidLoad() async {
         let open = openReviewRequests
@@ -140,9 +149,8 @@ extension AppModel {
         }
         if requests.count <= 3 {
             for request in requests {
-                let waiting = request.summary.pending
                 await post(title: "\(board(request)): \(request.title)",
-                           body: request.question ?? "\(waiting) item\(waiting == 1 ? "" : "s") to review",
+                           body: request.question ?? Self.waitingLine(request.summary),
                            category: NotificationCategory.reviews, id: "review|\(request.ref.id)")
             }
         } else {

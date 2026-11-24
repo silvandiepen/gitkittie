@@ -101,6 +101,29 @@ offering recovery from history) is **Open** and tracked on the board.
 
 ---
 
+### 7. Questions in review requests
+
+**Decision:** A review request can carry `questions:` next to (or instead of) `items:`. Each has a
+question, Markdown `detail`, `options` (id, label, Markdown detail), `select: one | many` and
+`other: true` for an own answer. The reviewer writes `answer` (option ids), `answer_other`,
+`answered_by`, `answered_at`; the agent writes `handled_at`. Both append `comments`.
+
+**Context:** Agents asked product decisions as files to approve, one tiny `.md` per option in a
+pick-one group (GKM-001). Options showed as document icons, "pick one" was not enforced, and
+approve/reject per option is the wrong interaction for a question (GKT-001).
+
+**Rationale:** A question is answered, not judged. One choice is enforced where the answer is
+written (`Review.applyAnswer`), not only in the views, and a file with two answers to a one-choice
+question reads as its first. An answer can change until the agent marks it handled; after that it
+is fixed, so the agent never acts on an answer that later moved under it. Bulk "approve all"
+actions touch files only. The view (`swift/TasksUI/ReviewQuestionView.swift`) is shared by the
+Mac and iPhone apps: on the Mac a request's questions read as a form above its files; on iPhone
+and iPad each question is one page of the request's slides, questions first.
+
+**Status:** Accepted.
+
+---
+
 ## Open questions
 
 - **OAuth sign-in:** move from a pasted personal access token to provider OAuth. (Open — PAT-only
