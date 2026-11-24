@@ -30,8 +30,6 @@ struct CleanupDetailView: View {
                         Samples(group: group)
                         if let preview = cleanup.preview {
                             PreviewSection(preview: preview)
-                        } else if let rule = cleanup.rulePreview {
-                            RulePreviewSection(preview: rule)
                         } else {
                             Actions(group: group)
                         }
@@ -107,12 +105,15 @@ private struct Actions: View {
                 .fixedSize()
             }
             if group.id.isSenderOrList {
-                Menu("Always List Under") {
-                    Button(MailCategory.promotions.title) { Task { await model.cleanup.previewRule(.promotion) } }
-                    Button(MailCategory.subscriptions.title) { Task { await model.cleanup.previewRule(.subscription) } }
+                HStack(spacing: 8) {
+                    Button("Mute…") { Task { await model.proposeSenderRule(.mute, for: group.id) } }
+                    Menu("Always List Under") {
+                        Button(MailCategory.promotions.title) { Task { await model.proposeSenderRule(.category(.promotion), for: group.id) } }
+                        Button(MailCategory.subscriptions.title) { Task { await model.proposeSenderRule(.category(.subscription), for: group.id) } }
+                    }
+                    .fixedSize()
                 }
-                .fixedSize()
-                .help("A rule for this sender or list. It changes the category here, never your mail at the provider.")
+                .help("A rule for this sender or list, previewed in Senders. It changes where mail shows here, not at your provider.")
             }
         }
     }
@@ -222,41 +223,6 @@ private struct PreviewSection: View {
     }
 }
 
-/// What a category rule would change. It changes nothing at the provider.
-private struct RulePreviewSection: View {
-    @Environment(AppModel.self) private var model
-    let preview: CategoryRulePreview
-
-    var body: some View {
-        let cleanup = model.cleanup
-        let category = MailCategory.home(purpose: preview.purpose, risk: .none, urgency: .normal)
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Always list under \(category.title)").font(.title3.weight(.semibold))
-                Text("A rule for this \(preview.scope.isList ? "list" : "sender") on this Mac. \(CleanupText.messages(preview.affected.count)) move to \(category.title) here; nothing changes at your mail provider, and your own corrections stay.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                if let replaced = preview.replaces {
-                    Text("It replaces your rule that lists it under \(MailCategory.home(purpose: replaced.purpose, risk: .none, urgency: .normal).title).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(preview.affected) { message in
-                    MessageLine(message: message, note: nil) { Task { await cleanup.open(message) } }
-                }
-            }
-            HStack {
-                Button("Cancel") { cleanup.cancelRule() }
-                Spacer()
-                Button("Make Rule") { Task { await cleanup.confirmRule() } }
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-    }
-}
-
 private struct RunResult: View {
     @Environment(AppModel.self) private var model
     let run: (run: CleanupRun, title: String)
@@ -320,12 +286,5 @@ extension CleanupGroupID {
         case .sender, .list: true
         default: false
         }
-    }
-}
-
-extension ClassificationRule.Scope {
-    var isList: Bool {
-        if case .list = self { return true }
-        return false
     }
 }

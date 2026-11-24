@@ -60,12 +60,6 @@ extension AppModel {
         }
     }
 
-    /// After a category rule made from the cleanup dashboard (GKM-021).
-    func refreshAfterClassificationChange() async {
-        await browser.refreshAfterClassificationChange()
-        await attention.refresh(accounts: accounts, arrivals: .leave)
-    }
-
     private func changeClassification(_ change: (MailStore) async throws -> Any?) async {
         guard let store = mailStore else { return }
         do {

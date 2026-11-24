@@ -237,17 +237,6 @@ public struct CleanupDifference: Hashable, Sendable, CustomStringConvertible {
     }
 }
 
-/// What a category rule from the dashboard would change (MailStore.previewCategoryRule).
-public struct CategoryRulePreview: Sendable {
-    public var group: CleanupGroupID
-    public var scope: ClassificationRule.Scope
-    public var purpose: MailPurpose
-    /// The messages whose category changes, newest first.
-    public var affected: [MessageSummary]
-    /// Your earlier rule for the same sender or list, which the new one replaces.
-    public var replaces: ClassificationRule?
-}
-
 public enum CleanupError: Error, Equatable, CustomStringConvertible {
     /// Between the preview and Run, something changed; nothing ran. Preview again.
     case previewChanged([CleanupDifference])
@@ -256,8 +245,6 @@ public enum CleanupError: Error, Equatable, CustomStringConvertible {
     /// The journal did not take every change; the batch was undone (should never happen: the
     /// state was checked in the same step).
     case incomplete(expected: Int, applied: Int)
-    /// Category rules are for one sender or list, to Promotions or Subscriptions.
-    case unsupportedRule
 
     public var description: String {
         switch self {
@@ -267,7 +254,6 @@ public enum CleanupError: Error, Equatable, CustomStringConvertible {
         case .nothingToRun: return "Nothing to run: every message is excluded or protected."
         case .incomplete(let expected, let applied):
             return "Nothing was changed: only \(applied) of \(expected) changes could be made, so the batch was undone."
-        case .unsupportedRule: return "A category rule needs one sender or one list."
         }
     }
 }

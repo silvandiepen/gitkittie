@@ -45,22 +45,17 @@ final class CleanupModel {
     private(set) var lastRun: (run: CleanupRun, title: String)?
     /// Messages that changed between the preview and Run; nothing ran.
     private(set) var changedSincePreview: [CleanupDifference] = []
-    /// A category rule waiting for confirmation.
-    private(set) var rulePreview: CategoryRulePreview?
     /// True while a sample is open in the reader instead of the preview.
     var isReadingSample = false
     /// What went wrong, for a notice.
     var notice: String?
 
-    /// Called after a category rule changed verdicts (the list, counts and badge refresh).
-    @ObservationIgnored var onClassificationChanged: (() async -> Void)?
     /// The clock, for tests.
     @ObservationIgnored var now: () -> Date = Date.init
 
     @ObservationIgnored private var store: MailStore?
     @ObservationIgnored private let actions: MailActions
     @ObservationIgnored private let browser: MailBrowser
-    @ObservationIgnored private(set) var pendingRuleUndo: Task<Void, Never>?
 
     init(actions: MailActions, browser: MailBrowser) {
         self.actions = actions
@@ -114,7 +109,6 @@ final class CleanupModel {
             notice = "This account’s folders aren’t known yet. Wait for the first sync to finish."
             return
         }
-        rulePreview = nil
         confirming = nil
         changedSincePreview = []
         do {
@@ -197,59 +191,6 @@ final class CleanupModel {
         await analyse()
     }
 
-    // MARK: Category rules (the classifier's rules, MAIL-039)
-
-    /// What "Always list under …" would change for the selected sender or list.
-    func previewRule(_ purpose: MailPurpose) async {
-        guard let store, let selectedGroup else { return }
-        cancelPreview()
-        do { rulePreview = try await store.previewCategoryRule(selectedGroup, purpose: purpose) } catch { notice = String(describing: error) }
-    }
-
-    func cancelRule() { rulePreview = nil }
-
-    /// Makes the rule you previewed; Undo removes it and puts back the rule it replaced.
-    func confirmRule() async {
-        guard let store, let preview = rulePreview else { return }
-        rulePreview = nil
-        do {
-            let rule = try await store.addRule(preview.scope, purpose: preview.purpose, account: preview.group.account)
-            registerRuleUndo(rule, replaced: preview.replaces)
-        } catch {
-            notice = String(describing: error)
-        }
-        if let changed = onClassificationChanged { await changed() }
-        await analyse()
-    }
-
-    /// Waits for a rule's undo, for tests.
-    func waitForRuleUndo() async { await pendingRuleUndo?.value }
-
-    private func registerRuleUndo(_ rule: ClassificationRule, replaced: ClassificationRule?) {
-        guard let undo = actions.undoManager else { return }
-        // Its own group, as MailActions does: the window may not group by event.
-        undo.beginUndoGrouping()
-        undo.registerUndo(withTarget: self) { target in
-            MainActor.assumeIsolated {
-                target.pendingRuleUndo = Task { await target.takeBack(rule, restoring: replaced) }
-            }
-        }
-        undo.setActionName("Category Rule")
-        undo.endUndoGrouping()
-    }
-
-    private func takeBack(_ rule: ClassificationRule, restoring replaced: ClassificationRule?) async {
-        guard let store else { return }
-        do {
-            try await store.removeRule(id: rule.id)
-            if let replaced { try await store.addRule(replaced.scope, purpose: replaced.purpose, account: replaced.account) }
-        } catch {
-            notice = String(describing: error)
-        }
-        if let changed = onClassificationChanged { await changed() }
-        await analyse()
-    }
-
     // MARK: Helpers
 
     /// The folders an account's messages can be moved to (MAIL-036 order and rules).
@@ -281,7 +222,6 @@ final class CleanupModel {
         selectedGroup = nil
         group = nil
         cancelPreview()
-        rulePreview = nil
         isReadingSample = false
     }
 }

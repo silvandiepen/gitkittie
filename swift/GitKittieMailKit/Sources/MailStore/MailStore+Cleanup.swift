@@ -135,40 +135,6 @@ extension MailStore {
         return CleanupRun(batch: batch, messages: chosen.map(\.id))
     }
 
-    // MARK: - Category rules
-
-    /// What "Always list under Promotions/Subscriptions" would do for a sender or list: the
-    /// classifier rule it makes (MAIL-039, `addRule`; no new rule type) and exactly the messages
-    /// whose category it changes. A rule changes nothing at the provider (MAIL-007); your
-    /// corrections of a purpose still win and Quarantine stays Quarantine, so those are not listed.
-    public func previewCategoryRule(_ group: CleanupGroupID, purpose: MailPurpose) throws -> CategoryRulePreview {
-        guard purpose == .promotion || purpose == .subscription else { throw CleanupError.unsupportedRule }
-        let scope: ClassificationRule.Scope
-        let members: [(id: MailMessageID, account: MailAccountID)]
-        switch group.kind {
-        case .sender(let address):
-            scope = .sender(address)
-            members = try index.messages(fromAddresses: [address], account: group.account)
-        case .list(let list):
-            scope = .list(list)
-            members = try index.messages(inList: list, account: group.account)
-        default:
-            throw CleanupError.unsupportedRule
-        }
-        var affected: [MailMessageID] = []
-        for member in members {
-            guard let verdict = try index.verdict(of: member.id) else { continue }
-            let c = verdict.classification
-            guard c.purpose != purpose, !c.risk.isQuarantined else { continue }
-            // Your correction of the purpose beats a rule; one of the risk only does not.
-            if c.reasons.contains(.userOverride), try correction(of: member.id)?.purpose != nil { continue }
-            affected.append(member.id)
-        }
-        let summaries = try index.summaries(ids: affected).sorted { ($0.date, $0.id) > ($1.date, $1.id) }
-        let replaces = try classificationRules().last { $0.account == group.account && $0.scope == scope }
-        return CategoryRulePreview(group: group, scope: scope, purpose: purpose, affected: summaries, replaces: replaces)
-    }
-
     // MARK: - Groups
 
     struct CleanupMember {

@@ -458,39 +458,25 @@ final class CleanupTests: XCTestCase {
         } catch CleanupError.nothingToRun {}
     }
 
-    // MARK: - Category rules
+    // MARK: - Sender and list rules
 
-    func testACategoryRuleIsPreviewedExactlyAndUndone() async throws {
+    func testSenderSuggestionsGoThroughTheSendersRulePreview() async throws {
         let model = try await open()
         let store = try XCTUnwrap(model.mailStore)
         let before = try await snapshot(store)
-        try await store.correct(id("plain3"), purpose: .promotion)
         await model.cleanup.select(listGroup)
-        await model.cleanup.previewRule(.subscription)
-        XCTAssertNil(model.cleanup.notice)
-        let preview = try XCTUnwrap(model.cleanup.rulePreview)
-        XCTAssertEqual(Set(preview.affected.map(\.id)),
-                       Set(["plain1", "plain2", "flagged", "spaced", "recent", "replied", "answered", "archived", "suspicious"].map { id($0) }),
-                       "not your purpose correction, not Quarantine; a correction of risk only does not keep the purpose")
+        await model.proposeSenderRule(.mute, for: listGroup)
 
-        await model.cleanup.confirmRule()
-        for message in preview.affected {
-            let verdict = try await store.verdict(of: message.id)
-            XCTAssertEqual(verdict?.home, .subscriptions)
-        }
-        let corrected = try await store.verdict(of: id("plain3"))
-        XCTAssertEqual(corrected?.home, .promotions, "your correction wins")
-        let quarantined = try await store.verdict(of: id("spam"))
-        XCTAssertEqual(quarantined?.home, .quarantine)
-        let ruled = try await snapshot(store)
-        XCTAssertEqual(ruled, before, "a rule changes nothing at the provider")
-
-        model.actions.undoManager?.undo()
-        await model.cleanup.waitForRuleUndo()
-        let rules = try await store.classificationRules()
-        XCTAssertTrue(rules.isEmpty)
-        let back = try await store.verdict(of: id("plain1"))
-        XCTAssertEqual(back?.home, .promotions)
+        XCTAssertEqual(model.selection, .senders, "the rule is previewed where rules live")
+        let pending = try XCTUnwrap(model.senders.pending)
+        let rule = try XCTUnwrap(pending.rules.first)
+        XCTAssertEqual(rule.scope.listID, list)
+        XCTAssertEqual(rule.action, .mute)
+        XCTAssertFalse(pending.preview.changed.isEmpty)
+        let saved = try await store.senderRules()
+        XCTAssertTrue(saved.isEmpty, "nothing is saved until you apply it")
+        let after = try await snapshot(store)
+        XCTAssertEqual(after, before)
     }
 
     // MARK: - Offer end dates
