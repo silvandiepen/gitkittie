@@ -1,6 +1,7 @@
 import Foundation
 import MailAccounts
 import MailCore
+import MailOutbox
 import MailProvider
 import MailStore
 import MailSync
@@ -49,6 +50,7 @@ extension AppModel {
         }
         try? await reloadAfterAccountChange()
         await sync.start(account, store: store)
+        await registerForSending([account])
         return account
     }
 
@@ -73,7 +75,10 @@ extension AppModel {
             try? await reloadAfterAccountChange()
         }
         await sync.stop(id)
-        if let current = accounts.first(where: { $0.id == id }) { await sync.start(current, store: store) }
+        if let current = accounts.first(where: { $0.id == id }) {
+            await sync.start(current, store: store)
+            await registerForSending([current])
+        }
     }
 
     /// Disconnects an account: stops its sync, removes its password from the Keychain and this
@@ -81,6 +86,7 @@ extension AppModel {
     func removeAccount(_ id: MailAccountID, _ removal: AccountRemoval) async throws {
         guard let store = mailStore else { return }
         await sync.stop(id)
+        await unregisterFromSending(id)
         if case .exportThenRemove(let destination) = removal {
             // The copy first; if it fails, nothing is removed.
             try await store.exportAccount(id, to: destination)
@@ -126,8 +132,48 @@ extension SidebarSelection {
     /// The account the selection belongs to, if any.
     var account: MailAccountID? {
         switch self {
-        case .allMail: nil
+        case .allMail, .drafts, .outbox: nil
         case .account(let id), .folder(let id, _): id
+        }
+    }
+}
+
+// MARK: - Sending (GKM-014)
+
+extension AppModel {
+    /// Makes connected accounts available to the outbox: the same servers, trust and Keychain
+    /// item (service, account id) as setup and sync, so what was verified is what sends.
+    func registerForSending(_ accounts: [MailAccount]) async {
+        guard let registry = sending?.registry else { return }
+        for account in accounts {
+            guard let connection = account.connection else {
+                await registry.remove(account.id)
+                continue
+            }
+            let connections = sync.services.connections
+            let sentFolder = sync.folders[account.id]?.first { $0.role == "sent" }?.name
+            await registry.register(SendingAccountSettings(
+                account: account,
+                smtp: connections.endpoint(connection.smtp),
+                imap: connections.endpoint(connection.imap),
+                credential: CredentialReference(service: sync.services.credentials.service, account: account.id.rawValue,
+                                                username: connection.smtp.username),
+                sentCopy: Self.sentCopyPolicy(connection.kind),
+                sentFolder: sentFolder))
+        }
+    }
+
+    func unregisterFromSending(_ id: MailAccountID) async {
+        await sending?.registry.remove(id)
+    }
+
+    /// Gmail files every submission in Sent itself; iCloud is not known yet (MAIL-023);
+    /// other IMAP hosts keep nothing.
+    static func sentCopyPolicy(_ kind: MailAccountKind) -> SentCopyPolicy {
+        switch kind {
+        case .gmail: .providerFiles
+        case .iCloud: .detect
+        case .imap: .append
         }
     }
 }

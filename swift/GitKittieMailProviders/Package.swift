@@ -9,6 +9,7 @@ import PackageDescription
 // - MailNet        transport shared by the adapters: TLS (swift-nio-ssl), timeouts
 // - MailIMAP       IMAP adapter on Apple's swift-nio-imap codec
 // - MailSMTP       SMTP submission, our own client on SwiftNIO (implicit TLS and STARTTLS)
+// - MailOutbox     the durable outbox: journal, at-most-once sending, Sent reconciliation (GKM-014)
 // - MailAccounts   account setup: provider presets, verification, the Keychain (GKM-010)
 // - MailSync       the sync coordinator: progressive import, cursors, IDLE (GKM-011)
 // - MailSpikeKit   the GKM-004 end-to-end scenario; `gkmail-spike` runs it against an account
@@ -29,6 +30,7 @@ let package = Package(
         .library(name: "MailProvider", targets: ["MailProvider"]),
         .library(name: "MailIMAP", targets: ["MailIMAP"]),
         .library(name: "MailSMTP", targets: ["MailSMTP"]),
+        .library(name: "MailOutbox", targets: ["MailOutbox"]),
         .library(name: "MailAccounts", targets: ["MailAccounts"]),
         .library(name: "MailSync", targets: ["MailSync"]),
         .executable(name: "gkmail-spike", targets: ["MailSpike"]),
@@ -76,6 +78,16 @@ let package = Package(
             swiftSettings: protocolSettings
         ),
         .target(
+            name: "MailOutbox",
+            dependencies: [
+                "MailProvider", "MailSMTP", "MailIMAP",
+                .product(name: "MailCore", package: "GitKittieMailKit"),
+                .product(name: "MailStore", package: "GitKittieMailKit"),
+                .product(name: "MailCompose", package: "GitKittieMailKit"),
+            ],
+            swiftSettings: protocolSettings
+        ),
+        .target(
             name: "MailAccounts",
             dependencies: [
                 "MailProvider", "MailIMAP", "MailSMTP",
@@ -118,6 +130,16 @@ let package = Package(
             swiftSettings: protocolSettings
         ),
         .testTarget(
+            name: "MailOutboxTests",
+            dependencies: [
+                "MailOutbox", "MailProvider",
+                .product(name: "MailCore", package: "GitKittieMailKit"),
+                .product(name: "MailCompose", package: "GitKittieMailKit"),
+                .product(name: "MailMIME", package: "GitKittieMailKit"),
+            ],
+            swiftSettings: protocolSettings
+        ),
+        .testTarget(
             name: "MailSMTPTests",
             dependencies: ["MailSMTP", "MailProvider", .product(name: "NIOEmbedded", package: "swift-nio")],
             swiftSettings: protocolSettings
@@ -136,9 +158,10 @@ let package = Package(
         .testTarget(
             name: "MailIntegrationTests",
             dependencies: [
-                "MailProvider", "MailIMAP", "MailSMTP", "MailSpikeKit", "MailAccounts", "MailSync",
+                "MailProvider", "MailIMAP", "MailSMTP", "MailSpikeKit", "MailOutbox", "MailAccounts", "MailSync",
                 .product(name: "MailCore", package: "GitKittieMailKit"),
                 .product(name: "MailMIME", package: "GitKittieMailKit"),
+                .product(name: "MailCompose", package: "GitKittieMailKit"),
                 .product(name: "MailStore", package: "GitKittieMailKit"),
                 .product(name: "NIOConcurrencyHelpers", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),

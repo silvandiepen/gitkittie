@@ -1,6 +1,7 @@
 import XCTest
 import MailAccounts
 import MailCore
+import MailOutbox
 import MailProvider
 import MailStore
 import MailSync
@@ -167,6 +168,13 @@ final class AccountTests: XCTestCase {
         let saved = try XCTUnwrap(try credentials.secret(for: account.id))
         saved.withValue { XCTAssertEqual($0, user.password) }
 
+        // The outbox can send from it, with the same Keychain item.
+        let registered = await model.sending?.registry.all() ?? []
+        XCTAssertEqual(registered.map(\.accountID), [account.id])
+        XCTAssertEqual(registered.first?.credential.service, credentials.service)
+        XCTAssertEqual(registered.first?.credential.account, account.id.rawValue)
+        XCTAssertEqual(registered.first?.credential.username, user.address)
+
         try await waitUntil("three messages listed") { model.messages.count == 3 }
         XCTAssertEqual(Set(model.messages.compactMap(\.subject)), ["One", "Two", "Three"])
         try await waitUntil("the folder list") { model.sync.folders[account.id]?.contains { $0.name == "INBOX" } == true }
@@ -184,6 +192,8 @@ final class AccountTests: XCTestCase {
         try await model.removeAccount(account.id, .removeMail)
         XCTAssertEqual(model.accounts, [])
         XCTAssertNil(try credentials.secret(for: account.id), "the Keychain item goes with the account")
+        let afterRemoval = await model.sending?.registry.all() ?? []
+        XCTAssertEqual(afterRemoval.count, 0, "and so does sending from it")
         XCTAssertEqual(model.messages, [])
         XCTAssertEqual(model.totalCount, 0)
     }

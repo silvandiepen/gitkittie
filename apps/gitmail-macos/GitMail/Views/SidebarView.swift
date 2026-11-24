@@ -35,6 +35,8 @@ struct SidebarView: View {
                 .tag(SidebarSelection.allMail)
             }
 
+            SendingSidebarSection()
+
             AccountsSidebarSection(sheet: $sheet)
         }
         .scrollContentBackground(.hidden)

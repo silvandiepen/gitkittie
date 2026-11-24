@@ -9,6 +9,10 @@ enum SidebarSelection: Hashable {
     case account(MailAccountID)
     /// One folder of an account at the provider, by the provider's name for it.
     case folder(MailAccountID, String)
+    /// Messages being written (GKM-013).
+    case drafts
+    /// Messages waiting to be sent, or needing a decision (GKM-014).
+    case outbox
 }
 
 /// The single UI-facing state object. It owns the store and turns what the store holds into
@@ -35,6 +39,11 @@ final class AppModel {
     private(set) var selection: SidebarSelection = .allMail
     private(set) var selectedMessageID: MailMessageID?
     private(set) var searchText = ""
+
+    /// Drafts and the outbox; nil until the store is open.
+    private(set) var sending: MailSending?
+    /// The mail folder `sending` belongs to.
+    @ObservationIgnored private var sendingFolder: URL?
 
     private let locations: StoreLocations?
     private var store: MailStore?
@@ -74,9 +83,22 @@ final class AppModel {
             let folder = MailFolderLocation(defaults: sync.services.defaults)
             let opened = try await MailStore.open(locations ?? folder.locations())
             store = opened
+            if let current = sending, sendingFolder != opened.locations.mailFolder {
+                // Another mail folder was chosen: its drafts and outbox are its own.
+                await current.stop()
+                sending = nil
+            }
+            if sending == nil {
+                let sending = try MailSending(locations: opened.locations, credentials: KeychainCredentials())
+                sending.start()
+                await sending.refreshDrafts()
+                self.sending = sending
+                sendingFolder = opened.locations.mailFolder
+            }
             try await reload()
             phase = .ready
             await sync.start(accounts, store: opened)
+            await registerForSending(accounts)
         } catch {
             phase = .failed(String(describing: error))
         }
@@ -106,6 +128,12 @@ final class AppModel {
             openMessage = nil
             actionError = String(describing: error)
         }
+    }
+
+    /// The original bytes of a stored message, for Reply and Forward.
+    func originalData(of id: MailMessageID) async throws -> Data {
+        guard let store else { throw MailStoreError.messageNotFound(id.rawValue) }
+        return try await store.originalData(of: id)
     }
 
     /// Makes the search index again from the mail folder.

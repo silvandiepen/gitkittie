@@ -1,4 +1,5 @@
 import AppKit
+import MailCompose
 import SwiftUI
 
 @main
@@ -17,13 +18,23 @@ struct GitMailApp: App {
                 .task { await model.open() }
         }
         .commands {
-            // One window is the mail; there is nothing new to make yet.
-            CommandGroup(replacing: .newItem) {}
+            ComposeCommands(model: model)
             CommandGroup(after: .toolbar) {
                 Button("Rebuild Search Index") { Task { await model.rebuildIndex() } }
                     .disabled(model.phase != .ready || model.isRebuildingIndex)
             }
         }
+
+        // One window per draft; restored with its draft after a relaunch (GKM-013).
+        WindowGroup("New Message", id: ComposeScene.id, for: DraftID.self) { $draftID in
+            ComposeWindow(draftID: draftID)
+                .environment(model)
+                .background(SolidWindow())
+                .tint(Theme.accent)
+                .preferredColorScheme(.dark)
+        }
+        .defaultSize(width: 700, height: 640)
+        .commandsRemoved()
     }
 }
 

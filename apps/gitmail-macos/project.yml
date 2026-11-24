@@ -17,7 +17,7 @@ packages:
   # The UI-independent mail core: models, the store, the classifier (MAIL-015).
   GitKittieMailKit:
     path: ../../swift/GitKittieMailKit
-  # Account setup, the Keychain and the sync coordinator on the IMAP/SMTP adapters (GKM-010, GKM-011).
+  # The provider adapters, the outbox (MAIL-017; GKM-014), account setup and sync (GKM-010, GKM-011).
   GitKittieMailProviders:
     path: ../../swift/GitKittieMailProviders
 
@@ -34,8 +34,14 @@ targets:
         product: MailCore
       - package: GitKittieMailKit
         product: MailStore
+      - package: GitKittieMailKit
+        product: MailMIME
+      - package: GitKittieMailKit
+        product: MailCompose
       - package: GitKittieMailProviders
         product: MailProvider
+      - package: GitKittieMailProviders
+        product: MailOutbox
       - package: GitKittieMailProviders
         product: MailAccounts
       - package: GitKittieMailProviders
@@ -89,8 +95,14 @@ targets:
         product: MailCore
       - package: GitKittieMailKit
         product: MailStore
+      - package: GitKittieMailKit
+        product: MailMIME
+      - package: GitKittieMailKit
+        product: MailCompose
       - package: GitKittieMailProviders
         product: MailProvider
+      - package: GitKittieMailProviders
+        product: MailOutbox
       - package: GitKittieMailProviders
         product: MailAccounts
       - package: GitKittieMailProviders
