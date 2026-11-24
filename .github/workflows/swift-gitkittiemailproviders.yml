@@ -1,0 +1,39 @@
+name: Swift GitKittieMailProviders
+
+on:
+  pull_request:
+    branches: [main, development]
+    paths:
+      - swift/GitKittieMailProviders/**
+      - swift/GitKittieMailKit/**
+      - .github/workflows/swift-gitkittiemailproviders.yml
+  push:
+    branches: [main, development]
+    paths:
+      - swift/GitKittieMailProviders/**
+      - swift/GitKittieMailKit/**
+      - .github/workflows/swift-gitkittiemailproviders.yml
+  workflow_dispatch:
+
+jobs:
+  test:
+    # swift-nio-imap 0.5 needs Swift 6.2 (Xcode 26).
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: swift/GitKittieMailProviders
+    steps:
+      - uses: actions/checkout@v6
+      - name: Swift version
+        run: swift --version
+      - name: Build
+        run: swift build --build-tests
+      - name: Start the local test mail server (GreenMail, loopback only)
+        run: scripts/test-mail-server.sh start
+      - name: Test (unit and integration)
+        env:
+          GKM_REQUIRE_TEST_MAIL_SERVER: "1"
+        run: swift test
+      - name: Stop the test mail server
+        if: always()
+        run: scripts/test-mail-server.sh stop

@@ -9,8 +9,10 @@ import PackageDescription
 // - MailStore        EML + Markdown files, blobs, the rebuildable index (GKM-005)
 // - MailClassifier   purpose, risk and urgency with reasons (GKM-007, GKM-017)
 // - MailTestSupport  the synthetic fixture corpus (GKM-003); tests only, never shipped
+// - MailMIME         RFC 5322/MIME parsing and generation, Foundation only (GKM-002, MAIL-017)
 //
-// Protocol targets (IMAP, SMTP, MIME) are added by GKM-002 once the libraries are chosen.
+// The provider adapters (IMAP, SMTP) live in swift/GitKittieMailProviders: they need
+// swift-nio-imap, which needs Swift 6.2 and macOS 15 / iOS 18 (MAIL-017).
 let package = Package(
     name: "GitKittieMailKit",
     platforms: [.macOS(.v14), .iOS(.v17)],
@@ -18,14 +20,17 @@ let package = Package(
         .library(name: "MailCore", targets: ["MailCore"]),
         .library(name: "MailStore", targets: ["MailStore"]),
         .library(name: "MailClassifier", targets: ["MailClassifier"]),
+        .library(name: "MailMIME", targets: ["MailMIME"]),
     ],
     targets: [
         .target(name: "MailCore"),
         .target(name: "MailStore", dependencies: ["MailCore"]),
         .target(name: "MailClassifier", dependencies: ["MailCore"]),
         .target(name: "MailTestSupport", dependencies: ["MailCore"], resources: [.copy("Fixtures")]),
+        .target(name: "MailMIME", dependencies: ["MailCore"]),
         .testTarget(name: "MailCoreTests", dependencies: ["MailCore"]),
         .testTarget(name: "MailStoreTests", dependencies: ["MailStore", "MailTestSupport"]),
         .testTarget(name: "MailClassifierTests", dependencies: ["MailClassifier", "MailTestSupport"]),
+        .testTarget(name: "MailMIMETests", dependencies: ["MailMIME"]),
     ]
 )
