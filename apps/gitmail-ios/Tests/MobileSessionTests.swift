@@ -83,7 +83,8 @@ final class MobileSessionTests: XCTestCase {
             .compactMap { $0 as? URL }.first { $0.pathExtension == "eml" })
         try FileManager.default.removeItem(at: eml)
         try? FileManager.default.removeItem(at: eml.deletingPathExtension().appendingPathExtension("md"))
-        XCTAssertTrue(MailFolderCheck.needsRebuild(mailFolder: locations.mailFolder, indexedCount: try await store.messageCount()))
+        let indexed = try await store.messageCount()
+        XCTAssertTrue(MailFolderCheck.needsRebuild(mailFolder: locations.mailFolder, indexedCount: indexed))
 
         await session.checkMailFolder(store)
         let count = try await store.messageCount()
