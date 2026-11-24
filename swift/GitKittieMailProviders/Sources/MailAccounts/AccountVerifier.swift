@@ -27,6 +27,8 @@ public enum AccountSetupError: Error, Sendable, Equatable, CustomStringConvertib
     case timedOut(MailServerRole, host: String)
     case refused(MailServerRole, host: String, detail: String)
     case keychain(String)
+    /// The person cancelled setup; nothing was saved.
+    case cancelled
 
     public var description: String { message }
 
@@ -62,12 +64,15 @@ public enum AccountSetupError: Error, Sendable, Equatable, CustomStringConvertib
             "The \(role.name) (\(host)) refused the connection: \(detail)"
         case .keychain(let detail):
             detail
+        case .cancelled:
+            "Cancelled. Nothing was saved."
         }
     }
 
     /// Maps a provider failure on one server onto what the person sees.
     public static func from(_ error: any Error, role: MailServerRole, server: MailServerSettings,
                             kind: MailAccountKind) -> AccountSetupError {
+        if error is CancellationError || Task.isCancelled { return .cancelled }
         guard let error = error as? MailProviderError else {
             return .refused(role, host: server.host, detail: String(describing: error))
         }
