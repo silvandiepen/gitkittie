@@ -22,8 +22,11 @@ struct LocalMailServer {
 
     static func require() async throws -> LocalMailServer {
         let environment = ProcessInfo.processInfo.environment
+        // In the iOS Simulator the home folder is the app's container; the server's state is in
+        // the Mac's home, which the simulator names in SIMULATOR_HOST_HOME (loopback is shared).
+        let home = environment["SIMULATOR_HOST_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
         let state = environment["GKM_TEST_MAIL_SERVER_DIR"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Caches/GitKittieMail/test-mail-server")
+            ?? URL(fileURLWithPath: home).appendingPathComponent("Library/Caches/GitKittieMail/test-mail-server")
         let server = (try? Data(contentsOf: state.appendingPathComponent("tls/ca.pem"))).map { LocalMailServer(caPEM: $0) }
         guard let server, await server.isRunning() else {
             if environment["GKM_REQUIRE_TEST_MAIL_SERVER"] == "1" { throw MissingLocalMailServer() }

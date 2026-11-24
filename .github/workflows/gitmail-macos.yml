@@ -8,6 +8,9 @@ on:
       - swift/GitKittieMailKit/**
       - swift/GitKittieMailProviders/**
       - swift/GitKittieUI/**
+      # The app model the iPhone app shares (MAIL-067), and the test helper.
+      - swift/MailAppModel/**
+      - swift/MailAppTestSupport/**
       - .github/workflows/gitmail-macos.yml
   push:
     branches: [main, development]
@@ -16,6 +19,9 @@ on:
       - swift/GitKittieMailKit/**
       - swift/GitKittieMailProviders/**
       - swift/GitKittieUI/**
+      # The app model the iPhone app shares (MAIL-067), and the test helper.
+      - swift/MailAppModel/**
+      - swift/MailAppTestSupport/**
       - .github/workflows/gitmail-macos.yml
   workflow_dispatch:
 
