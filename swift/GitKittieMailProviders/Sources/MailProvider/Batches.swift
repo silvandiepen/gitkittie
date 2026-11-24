@@ -21,3 +21,15 @@ extension MailProviderError {
         return false
     }
 }
+
+/// Flags that changed in a folder since a CONDSTORE checkpoint (GKM-015).
+public struct FlagChanges: Sendable, Hashable {
+    /// The folder's HIGHESTMODSEQ when the changes were read: the next checkpoint.
+    public var highestModSeq: UInt64
+    public var flags: [RemoteMessageID: MessageFlags]
+
+    public init(highestModSeq: UInt64, flags: [RemoteMessageID: MessageFlags]) {
+        self.highestModSeq = highestModSeq
+        self.flags = flags
+    }
+}

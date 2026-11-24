@@ -39,6 +39,17 @@ public protocol MailboxSession: AnyObject {
     func setFlags(_ flags: MessageFlags, _ change: FlagChange, on ids: [RemoteMessageID]) async throws
     /// Moves messages. Returns the new ids when the server reports them (UIDPLUS), keyed by old id.
     func move(_ ids: [RemoteMessageID], to folder: String) async throws -> [RemoteMessageID: RemoteMessageID]
+    /// Copies messages; the originals stay. Returns the new ids when the server reports them
+    /// (UIDPLUS), keyed by old id. Used where a move must never expunge the source: Gmail's
+    /// All Mail, where an expunge can delete the message for good (MAIL-036).
+    func copy(_ ids: [RemoteMessageID], to folder: String) async throws -> [RemoteMessageID: RemoteMessageID]
+    /// Removes exactly these messages from their folder for good (IMAP: \Deleted, then
+    /// UID EXPUNGE of these UIDs only). Throws `unsupported` when the server can only expunge
+    /// every \Deleted message at once.
+    func expunge(_ ids: [RemoteMessageID]) async throws
+    /// CONDSTORE (RFC 7162): the flags of every message in the folder whose flags changed after
+    /// `modSeq`, and the folder's HIGHESTMODSEQ. Throws `unsupported` without CONDSTORE.
+    func flagChanges(in folder: String, uidValidity: UInt32, since modSeq: UInt64) async throws -> FlagChanges
     /// Stores a message in a folder (a Sent copy, a draft). Returns its id when the server
     /// reports it (UIDPLUS).
     func append(_ rawMessage: Data, to folder: String, flags: MessageFlags) async throws -> RemoteMessageID?
