@@ -1,0 +1,26 @@
+Authentication-Results: mx.example.net;
+ spf=pass smtp.mailfrom=fernway.example.com;
+ dkim=pass header.d=fernway.example.com;
+ dmarc=pass header.from=fernway.example.com
+From: Fernway Support <support@help.fernway.example.com>
+Reply-To: Fernway Support <support@help.fernway.example.com>
+To: Alex Morgan <alex.morgan@example.net>
+Subject: Re: [Ticket #48213] Tent pole arrived bent
+Date: Mon, 16 Nov 2026 14:30:12 +0000
+Message-ID: <ticket-48213-reply-2@help.fernway.example.com>
+In-Reply-To: <ticket-48213@mail.example.net>
+References: <ticket-48213@mail.example.net>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hi Alex,
+
+Thanks for the photos. I'm sorry the pole arrived bent. I've arranged a
+replacement pole at no cost; it ships from our warehouse tomorrow and you
+don't need to return the damaged one.
+
+If anything else is wrong with the tent, just reply to this email.
+
+Best,
+Ingrid
+Fernway Outdoor Support

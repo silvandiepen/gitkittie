@@ -8,8 +8,9 @@ import SwiftUI
 // Asset review on the Mac. A board has review requests when its review folder (its
 // `review_path`, or `review/` inside the board) holds `<request>/review.md` folders.
 // This screen shows every board's requests at once: the list on the left, the chosen
-// request on the right, and "Next Waiting" to work through them. Decisions and comments
-// are written back into `review.md` through the board's source.
+// request on the right, and "Next Waiting" to work through them. Questions read as a form
+// at the top of a request; items follow. Decisions, answers and comments are written back
+// into `review.md` through the board's source.
 
 struct ReviewsScreen: View {
     @Environment(AppModel.self) private var model
@@ -80,13 +81,13 @@ struct ReviewsScreen: View {
         .onChange(of: model.reviewsFocusBoard) { _, _ in selected = startingRequest }
         .alert("Comment on \(commenting?.title ?? "")", isPresented: Binding(get: { commenting != nil }, set: { if !$0 { commenting = nil } })) {
             TextField("Comment", text: $commentText)
-            Button("Add to All Items") {
+            Button("Add to All Files") {
                 if let request = commenting { let text = commentText; Task { await model.commentAll(request, text: text) } }
                 commenting = nil
             }
             Button("Cancel", role: .cancel) { commenting = nil }
         } message: {
-            Text("The comment is added to every item of this request, for the agent to read.")
+            Text("The comment is added to every file of this request, for the agent to read.")
         }
         .confirmationDialog("Remove “\(removing?.title ?? "")”?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             Button("Remove Request", role: .destructive) {
@@ -97,22 +98,31 @@ struct ReviewsScreen: View {
                 removing = nil
             }
         } message: {
-            Text("The request and its \(removing?.items.count ?? 0) files are deleted from the board. Your answers go with it; git keeps the history.")
+            Text(removing.map { $0.items.isEmpty ? "The request is deleted from the board." : "The request and its \($0.items.count) files are deleted from the board." } ?? ""
+                 + " Your answers go with it; git keeps the history.")
         }
     }
 
-    /// What can be done with a whole request, from a right-click on it.
+    /// What can be done with a whole request, from a right-click on it. Deciding at once is
+    /// for files only: each question needs its own answer, so they are left out.
     @ViewBuilder private func requestMenu(_ request: ReviewRequest) -> some View {
-        let waiting = request.summary.pending
-        Button("Approve All Waiting (\(waiting))", systemImage: "checkmark") { Task { await model.decideAll(request, status: .approved) } }
-            .disabled(waiting == 0)
-        Button("Ask Changes on All Waiting", systemImage: "pencil") { Task { await model.decideAll(request, status: .changesRequested) } }
-            .disabled(waiting == 0)
-        Button("Reject All Waiting", systemImage: "xmark") { Task { await model.decideAll(request, status: .rejected) } }
-            .disabled(waiting == 0)
-        Divider()
-        Button("Comment on All…", systemImage: "text.bubble") { commentText = ""; commenting = request }
-        Divider()
+        let s = request.summary
+        let waiting = s.pendingItems
+        if s.items > 0 {
+            Button("Approve All Waiting Files (\(waiting))", systemImage: "checkmark") { Task { await model.decideAll(request, status: .approved) } }
+                .disabled(waiting == 0)
+            Button("Ask Changes on All Waiting Files", systemImage: "pencil") { Task { await model.decideAll(request, status: .changesRequested) } }
+                .disabled(waiting == 0)
+            Button("Reject All Waiting Files", systemImage: "xmark") { Task { await model.decideAll(request, status: .rejected) } }
+                .disabled(waiting == 0)
+            Divider()
+            Button("Comment on All Files…", systemImage: "text.bubble") { commentText = ""; commenting = request }
+            Divider()
+        }
+        if s.unanswered > 0 {
+            Text("\(s.unanswered) question\(s.unanswered == 1 ? "" : "s") to answer in the request")
+            Divider()
+        }
         ReviewLinkButtons(request: request, file: nil)
         Divider()
         Button("Remove Request…", systemImage: "trash", role: .destructive) { removing = request }
@@ -121,7 +131,7 @@ struct ReviewsScreen: View {
     private var subtitle: String {
         let waiting = model.pendingReviewTotal
         if model.isLoadingReviewInbox, !model.hasLoadedReviewInbox { return "Looking for reviews…" }
-        return waiting == 0 ? "Nothing is waiting" : "\(waiting) item\(waiting == 1 ? "" : "s") waiting"
+        return waiting == 0 ? "Nothing is waiting" : "\(waiting) waiting"
     }
 
     private var list: some View {
@@ -213,7 +223,8 @@ private struct ReviewRequestRow: View {
         if s.approved > 0 { parts.append("\(s.approved) approved") }
         if s.changesRequested > 0 { parts.append("\(s.changesRequested) changes") }
         if s.rejected > 0 { parts.append("\(s.rejected) rejected") }
-        if parts.isEmpty || (parts.count == 1 && request.card != nil) { parts.append("\(s.total) item\(s.total == 1 ? "" : "s")") }
+        if s.items > 0, s.approved + s.changesRequested + s.rejected == 0 { parts.append("\(s.items) file\(s.items == 1 ? "" : "s")") }
+        if let questions = s.questionsDescription { parts.append(questions) }
         return parts.joined(separator: " · ")
     }
 }
@@ -230,6 +241,7 @@ private struct ReviewDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
                     header(request)
+                    if !request.questions.isEmpty { questions(request) }
                     ForEach(request.groups) { group in
                         VStack(alignment: .leading, spacing: 10) {
                             if let name = group.name {
@@ -261,6 +273,19 @@ private struct ReviewDetailView: View {
                 }
             }
         }
+    }
+
+    /// The request's questions as a form: one after another, each answered on its own.
+    private func questions(_ request: ReviewRequest) -> some View {
+        VStack(alignment: .leading, spacing: 36) {
+            ForEach(request.questions) { question in
+                ReviewQuestionView(question: question, isSaving: model.isSaving) { choices, other, comment in
+                    await model.answer(request, question: question, choices: choices, other: other, comment: comment)
+                }
+            }
+        }
+        .frame(maxWidth: 680, alignment: .leading)
+        .padding(.bottom, request.items.isEmpty ? 0 : 10)
     }
 
     private func header(_ request: ReviewRequest) -> some View {

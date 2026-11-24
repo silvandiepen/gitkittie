@@ -1,0 +1,22 @@
+From: Zonnewerf Facturen <facturen@zonnewerf-betalingen.example.net>
+To: alex.morgan@example.net
+Subject: Factuur 2026-0999 openstaand - laatste herinnering
+Date: Tue, 24 Nov 2026 06:06:06 +0100
+Message-ID: <fz-0999@zonnewerf-betalingen.example.net>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="fz-0999"
+
+--fz-0999
+Content-Type: text/plain; charset=utf-8
+
+Beste klant,
+
+Factuur 2026-0999 staat nog open. Open de bijlage voor de betaalgegevens.
+
+--fz-0999
+Content-Type: application/octet-stream; name="factuur-2026-0999.pdf.exe"
+Content-Disposition: attachment; filename="factuur-2026-0999.pdf.exe"
+Content-Transfer-Encoding: base64
+
+c3ludGhldGljIGZpeHR1cmUgcGxhY2Vob2xkZXIgLSBub3QgYW4gZXhlY3V0YWJsZQo=
+--fz-0999--

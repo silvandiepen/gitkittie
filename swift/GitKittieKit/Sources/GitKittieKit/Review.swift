@@ -71,13 +71,88 @@ public struct ReviewItem: Equatable, Sendable, Identifiable, Hashable {
     public var awaitingAgent: Bool { status != .pending && handledAt == nil }
 }
 
+/// A choice the agent asks the reviewer to make: one of the options (`select: one`) or any
+/// of them (`select: many`), optionally with an answer of the reviewer's own (`other`).
+public enum QuestionSelect: String, CaseIterable, Sendable, Codable {
+    case one, many
+}
+
+public struct ReviewQuestionOption: Equatable, Sendable, Identifiable, Hashable {
+    public var id: String
+    public var label: String
+    /// Markdown: what choosing it means, and what it costs.
+    public var detail: String?
+    public init(id: String, label: String, detail: String? = nil) { self.id = id; self.label = label; self.detail = detail }
+}
+
+/// A question in a review request. The agent writes the question and its options; the
+/// reviewer writes the answer (`answer`, `answer_other`, `answered_by`, `answered_at`).
+public struct ReviewQuestion: Equatable, Sendable, Identifiable, Hashable {
+    public var id: String
+    public var question: String
+    /// Markdown under the question.
+    public var detail: String?
+    public var select: QuestionSelect
+    /// The reviewer may write an answer of their own.
+    public var allowsOther: Bool
+    public var options: [ReviewQuestionOption]
+    /// The chosen options' ids, in option order. At most one for `select: one`.
+    public var answer: [String]
+    public var answerOther: String?
+    public var answeredBy: String?
+    public var answeredAt: String?
+    public var comments: [ReviewComment]
+    public var handledAt: String?
+
+    public var isAnswered: Bool { answeredAt != nil && (!answer.isEmpty || answerOther != nil) }
+    /// Answered by the reviewer, not yet acted on by the agent.
+    public var awaitingAgent: Bool { isAnswered && handledAt == nil }
+    /// The chosen options, in option order.
+    public var chosen: [ReviewQuestionOption] { options.filter { answer.contains($0.id) } }
+    /// The answer in words: the chosen labels and the reviewer's own answer.
+    public var answerText: String? {
+        let parts = chosen.map(\.label) + [answerOther].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+}
+
 public struct ReviewSummary: Equatable, Sendable {
+    /// Items and questions.
     public var total = 0
+    /// Items without a decision and questions without an answer: what waits for the reviewer.
     public var pending = 0
     public var approved = 0
     public var rejected = 0
     public var changesRequested = 0
+    /// Items decided and questions answered that the agent has not acted on yet.
     public var awaitingAgent = 0
+    public var questions = 0
+    public var answered = 0
+
+    public var items: Int { total - questions }
+    public var unanswered: Int { questions - answered }
+    /// Items still waiting for a decision (questions left out).
+    public var pendingItems: Int { pending - unanswered }
+
+    /// What is waiting, in words: "3 items", "1 question", "2 items and 1 question".
+    public var waitingDescription: String { Self.describe(items: pendingItems, questions: unanswered) }
+
+    /// Items and questions in words: "3 items", "1 question", "2 items and 1 question".
+    public static func describe(items: Int, questions: Int) -> String {
+        let parts = [
+            items > 0 ? "\(items) item\(items == 1 ? "" : "s")" : nil,
+            questions > 0 ? "\(questions) question\(questions == 1 ? "" : "s")" : nil,
+        ].compactMap { $0 }
+        return parts.isEmpty ? "Nothing" : parts.joined(separator: " and ")
+    }
+
+    /// The questions in a request list's row: "3 questions, 1 answered"; `nil` without any.
+    public var questionsDescription: String? {
+        guard questions > 0 else { return nil }
+        let count = "\(questions) question\(questions == 1 ? "" : "s")"
+        if answered == 0 { return count }
+        return answered == questions ? "\(count), \(questions == 1 ? "answered" : "all answered")" : "\(count), \(answered) answered"
+    }
 }
 
 /// One review request: a folder with a `review.md` and the assets under review.
@@ -92,6 +167,7 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
     public var requestedBy: String?
     public var requestedAt: String?
     public var items: [ReviewItem]
+    public var questions: [ReviewQuestion] = []
     public var body: String
     /// Which repository or folder the request was loaded from (the app's id for it).
     /// Two sources can hold the same folder path, so a request is told apart by both.
@@ -112,6 +188,12 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
             case .changesRequested: s.changesRequested += 1
             }
             if item.awaitingAgent { s.awaitingAgent += 1 }
+        }
+        s.total += questions.count
+        s.questions = questions.count
+        for question in questions {
+            if question.isAnswered { s.answered += 1 } else { s.pending += 1 }
+            if question.awaitingAgent { s.awaitingAgent += 1 }
         }
         return s
     }
@@ -156,14 +238,26 @@ public struct ReviewGroup: Identifiable, Sendable, Hashable {
 
 public enum ReviewError: Error, LocalizedError, Equatable {
     case itemNotFound(String)
+    case questionNotFound(String)
     case emptyComment
     case malformed
+    case emptyAnswer
+    case unknownOption(String)
+    case oneChoiceOnly
+    case otherNotAllowed
+    case alreadyHandled(String)
 
     public var errorDescription: String? {
         switch self {
         case .itemNotFound(let id): return "No review item with id \"\(id)\"."
+        case .questionNotFound(let id): return "No question with id \"\(id)\"."
         case .emptyComment: return "A review comment needs text."
         case .malformed: return "The review file has no readable frontmatter."
+        case .emptyAnswer: return "Choose an option or write an answer."
+        case .unknownOption(let id): return "\"\(id)\" is not an option of this question."
+        case .oneChoiceOnly: return "This question takes one answer."
+        case .otherNotAllowed: return "This question has no room for an answer of your own."
+        case .alreadyHandled(let id): return "The agent has already acted on the answer to \"\(id)\", so it can no longer change."
         }
     }
 }
@@ -180,6 +274,8 @@ public enum Review {
         let map = node?.mapping
         let rawItems = map?["items"]?.sequence.map(Array.init) ?? []
         let items = rawItems.enumerated().compactMap { parseItem($0.element, index: $0.offset) }
+        let rawQuestions = map?["questions"]?.sequence.map(Array.init) ?? []
+        let questions = rawQuestions.enumerated().compactMap { parseQuestion($0.element, index: $0.offset) }
         let id = string(map?["id"]) ?? fallbackID
         return ReviewRequest(
             folder: folder,
@@ -191,18 +287,66 @@ public enum Review {
             requestedBy: string(map?["requested_by"]),
             requestedAt: string(map?["requested_at"]),
             items: items,
+            questions: questions,
             body: yaml == nil ? text : body
         )
+    }
+
+    private static func parseComments(_ node: Node?) -> [ReviewComment] {
+        (node?.sequence.map(Array.init) ?? []).compactMap { entry in
+            guard let c = entry.mapping, let text = string(c["text"]) else { return nil }
+            return ReviewComment(by: string(c["by"]) ?? "unknown", at: string(c["at"]) ?? "", text: text, image: string(c["image"]))
+        }
+    }
+
+    /// A question needs its text; options without a label show their id. The answer is read
+    /// as the model allows it: only ids of its options, and at most one for `select: one`.
+    private static func parseQuestion(_ node: Node, index: Int) -> ReviewQuestion? {
+        guard let map = node.mapping, let text = string(map["question"]) else { return nil }
+        let select = string(map["select"]).flatMap { QuestionSelect(rawValue: $0.lowercased()) } ?? .one
+        let options: [ReviewQuestionOption] = (map["options"]?.sequence.map(Array.init) ?? []).enumerated().compactMap { offset, entry in
+            if let option = entry.mapping {
+                let id = string(option["id"]) ?? "option-\(offset + 1)"
+                return ReviewQuestionOption(id: id, label: string(option["label"]) ?? id, detail: string(option["detail"]))
+            }
+            // A bare `- iCloud only` is an option whose label is its id.
+            return string(entry).map { ReviewQuestionOption(id: $0, label: $0) }
+        }
+        let ids = Set(options.map(\.id))
+        var answer = answerIDs(map["answer"]).filter(ids.contains)
+        if select == .one { answer = Array(answer.prefix(1)) }
+        let allowsOther = bool(map["other"])
+        return ReviewQuestion(
+            id: string(map["id"]) ?? "question-\(index + 1)",
+            question: text,
+            detail: string(map["detail"]),
+            select: select,
+            allowsOther: allowsOther,
+            options: options,
+            answer: options.map(\.id).filter(answer.contains),
+            answerOther: allowsOther ? string(map["answer_other"]) : nil,
+            answeredBy: string(map["answered_by"]),
+            answeredAt: string(map["answered_at"]),
+            comments: parseComments(map["comments"]),
+            handledAt: string(map["handled_at"])
+        )
+    }
+
+    /// `answer: [a, b]`, or a single `answer: a`.
+    private static func answerIDs(_ node: Node?) -> [String] {
+        if let list = node?.sequence { return list.compactMap { string($0) } }
+        return string(node).map { [$0] } ?? []
+    }
+
+    private static func bool(_ node: Node?) -> Bool {
+        ["true", "yes", "on"].contains(string(node)?.lowercased() ?? "")
     }
 
     private static func parseItem(_ node: Node, index: Int) -> ReviewItem? {
         guard let map = node.mapping, let file = string(map["file"]) else { return nil }
         let kind = string(map["kind"]).flatMap(ReviewKind.init(rawValue:)) ?? ReviewKind.forFile(file)
         let status = string(map["status"]).flatMap(ReviewStatus.init(rawValue:)) ?? .pending
-        let comments: [ReviewComment] = (map["comments"]?.sequence.map(Array.init) ?? []).compactMap { entry in
-            guard let c = entry.mapping, let text = string(c["text"]) else { return nil }
-            return ReviewComment(by: string(c["by"]) ?? "unknown", at: string(c["at"]) ?? "", text: text, image: string(c["image"]))
-        }
+        let comments = parseComments(map["comments"])
         return ReviewItem(
             id: string(map["id"]) ?? "item-\(index + 1)",
             file: file,
@@ -242,8 +386,8 @@ public enum Review {
         return try mutateItem(text, itemID: itemID) { item in
             item["status"] = scalar(status.rawValue)
             if status == .pending {
-                item["decided_by"] = Node("null", Tag(.null))
-                item["decided_at"] = Node("null", Tag(.null))
+                item["decided_by"] = null
+                item["decided_at"] = null
             } else {
                 item["decided_by"] = scalar(by)
                 item["decided_at"] = scalar(stamp)
@@ -256,19 +400,45 @@ public enum Review {
     public static func appendComment(
         _ text: String, itemID: String, by: String, body: String, image: String? = nil, at: Date = Date()
     ) throws -> String {
-        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw ReviewError.emptyComment }
-        var pairs = [
-            (scalar("by"), scalar(by)),
-            (scalar("at"), scalar(timestamp(at))),
-            (scalar("text"), scalar(trimmed)),
-        ]
-        if let image, !image.isEmpty { pairs.append((scalar("image"), scalar(image))) }
-        let comment = Node.mapping(Node.Mapping(pairs))
-        return try mutateItem(text, itemID: itemID) { item in
-            var list = item["comments"]?.sequence.map(Array.init) ?? []
-            list.append(comment)
-            item["comments"] = Node.sequence(Node.Sequence(list))
+        let comment = try commentNode(by: by, body: body, image: image, at: at)
+        return try mutateItem(text, itemID: itemID) { append(comment, to: &$0) }
+    }
+
+    /// Append a comment to one question. Existing comments are never rewritten.
+    public static func appendQuestionComment(
+        _ text: String, questionID: String, by: String, body: String, at: Date = Date()
+    ) throws -> String {
+        let comment = try commentNode(by: by, body: body, image: nil, at: at)
+        return try mutateQuestion(text, questionID: questionID) { append(comment, to: &$0) }
+    }
+
+    /// Answer a question, or change the answer while the agent has not acted on it yet.
+    /// Only `answer`, `answer_other`, `answered_by` and `answered_at` change (and a comment
+    /// is appended when one is given). The answer is checked against the question as the
+    /// file has it: known option ids only, one choice in all for `select: one` (an option or
+    /// the reviewer's own answer), an own answer only where `other` allows it.
+    public static func applyAnswer(
+        _ text: String, questionID: String, choices: [String], other: String?, comment: String? = nil,
+        by: String, at: Date = Date()
+    ) throws -> String {
+        let stamp = timestamp(at)
+        let own = other?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let note = try comment?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            .map { try commentNode(by: by, body: $0, image: nil, at: at) }
+        return try mutateQuestion(text, questionID: questionID) { raw in
+            guard let question = parseQuestion(.mapping(raw), index: 0) else { throw ReviewError.malformed }
+            guard question.handledAt == nil else { throw ReviewError.alreadyHandled(questionID) }
+            let known = question.options.map(\.id)
+            if let unknown = choices.first(where: { !known.contains($0) }) { throw ReviewError.unknownOption(unknown) }
+            if own != nil, !question.allowsOther { throw ReviewError.otherNotAllowed }
+            let picked = known.filter(choices.contains)
+            if picked.isEmpty, own == nil { throw ReviewError.emptyAnswer }
+            if question.select == .one, picked.count + (own == nil ? 0 : 1) > 1 { throw ReviewError.oneChoiceOnly }
+            raw["answer"] = .sequence(Node.Sequence(picked.map(scalar)))
+            raw["answer_other"] = own.map(scalar) ?? null
+            raw["answered_by"] = scalar(by)
+            raw["answered_at"] = scalar(stamp)
+            if let note { append(note, to: &raw) }
         }
     }
 
@@ -282,6 +452,13 @@ public enum Review {
             item["handled_at"] = scalar(stamp)
             if let shippedTo, !shippedTo.isEmpty { item["shipped_to"] = scalar(shippedTo) }
         }
+    }
+
+    /// Record that the agent acted on a question's answer: `handled_at`. From then on the
+    /// answer stays as it is.
+    public static func markQuestionHandled(_ text: String, questionID: String, at: Date = Date()) throws -> String {
+        let stamp = timestamp(at)
+        return try mutateQuestion(text, questionID: questionID) { $0["handled_at"] = scalar(stamp) }
     }
 
     /// An item an agent submits for review.
@@ -301,6 +478,21 @@ public enum Review {
         }
     }
 
+    /// A question an agent asks.
+    public struct NewQuestion: Sendable, Equatable {
+        public var id: String
+        public var question: String
+        public var detail: String?
+        public var select: QuestionSelect
+        public var allowsOther: Bool
+        public var options: [ReviewQuestionOption]
+        public init(id: String, question: String, detail: String? = nil, select: QuestionSelect = .one,
+                    allowsOther: Bool = false, options: [ReviewQuestionOption]) {
+            self.id = id; self.question = question; self.detail = detail; self.select = select
+            self.allowsOther = allowsOther; self.options = options
+        }
+    }
+
     private static func node(_ item: NewItem) -> Node {
         var pairs: [(Node, Node)] = [(scalar("id"), scalar(item.id)), (scalar("file"), scalar(item.file))]
         func add(_ key: String, _ value: String?) { if let value, !value.isEmpty { pairs.append((scalar(key), scalar(value))) } }
@@ -315,10 +507,29 @@ public enum Review {
         return .mapping(Node.Mapping(pairs))
     }
 
-    /// A new request's `review.md`.
+    private static func node(_ question: NewQuestion) -> Node {
+        var pairs: [(Node, Node)] = [(scalar("id"), scalar(question.id)), (scalar("question"), scalar(question.question))]
+        if let detail = question.detail?.nilIfEmpty { pairs.append((scalar("detail"), scalar(detail))) }
+        pairs.append((scalar("select"), scalar(question.select.rawValue)))
+        if question.allowsOther { pairs.append((scalar("other"), Node("true", Tag(.bool)))) }
+        let options = question.options.map { option -> Node in
+            var entry: [(Node, Node)] = [(scalar("id"), scalar(option.id)), (scalar("label"), scalar(option.label))]
+            if let detail = option.detail?.nilIfEmpty { entry.append((scalar("detail"), scalar(detail))) }
+            return .mapping(Node.Mapping(entry))
+        }
+        pairs.append((scalar("options"), .sequence(Node.Sequence(options))))
+        pairs.append((scalar("answer"), .sequence(Node.Sequence([]))))
+        for key in ["answer_other", "answered_by", "answered_at"] { pairs.append((scalar(key), null)) }
+        pairs.append((scalar("comments"), .sequence(Node.Sequence([]))))
+        pairs.append((scalar("handled_at"), null))
+        return .mapping(Node.Mapping(pairs))
+    }
+
+    /// A new request's `review.md`. A request holds items, questions, or both; a list that
+    /// is empty is left out.
     public static func render(
         id: String, project: String?, card: String?, title: String, question: String?,
-        requestedBy: String, at: Date = Date(), notes: String?, items: [NewItem]
+        requestedBy: String, at: Date = Date(), notes: String?, items: [NewItem], questions: [NewQuestion] = []
     ) throws -> String {
         var pairs: [(Node, Node)] = [(scalar("config"), scalar("review")), (scalar("id"), scalar(id))]
         func add(_ key: String, _ value: String?) { if let value, !value.isEmpty { pairs.append((scalar(key), scalar(value))) } }
@@ -328,47 +539,94 @@ public enum Review {
         add("question", question)
         add("requested_by", requestedBy)
         add("requested_at", timestamp(at))
-        pairs.append((scalar("items"), Node.sequence(Node.Sequence(items.map(node)))))
+        if !items.isEmpty || questions.isEmpty {
+            pairs.append((scalar("items"), Node.sequence(Node.Sequence(items.map(node)))))
+        }
+        if !questions.isEmpty {
+            pairs.append((scalar("questions"), Node.sequence(Node.Sequence(questions.map(node)))))
+        }
         let yaml = try Yams.serialize(node: .mapping(Node.Mapping(pairs)), width: -1, allowUnicode: true)
         let trimmed = yaml.hasSuffix("\n") ? String(yaml.dropLast()) : yaml
         let body = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return "---\n\(trimmed)\n---\n" + (body.isEmpty ? "" : "\n\(body)\n")
     }
 
-    /// Add items to an existing request (a new round). Existing items are left as they are.
-    public static func appendItems(_ text: String, _ new: [NewItem]) throws -> String {
+    /// Add items and questions to an existing request (a new round). What is there is left as it is.
+    public static func appendItems(_ text: String, _ new: [NewItem], questions: [NewQuestion] = []) throws -> String {
+        try mutateFrontmatter(text) { map in
+            if !new.isEmpty {
+                let items = map["items"]?.sequence.map(Array.init) ?? []
+                map["items"] = .sequence(Node.Sequence(items + new.map(node)))
+            }
+            if !questions.isEmpty {
+                let existing = map["questions"]?.sequence.map(Array.init) ?? []
+                map["questions"] = .sequence(Node.Sequence(existing + questions.map(node)))
+            }
+        }
+    }
+
+    private static func commentNode(by: String, body: String, image: String?, at: Date) throws -> Node {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw ReviewError.emptyComment }
+        var pairs = [
+            (scalar("by"), scalar(by)),
+            (scalar("at"), scalar(timestamp(at))),
+            (scalar("text"), scalar(trimmed)),
+        ]
+        if let image, !image.isEmpty { pairs.append((scalar("image"), scalar(image))) }
+        return Node.mapping(Node.Mapping(pairs))
+    }
+
+    private static func append(_ comment: Node, to entry: inout Node.Mapping) {
+        var list = entry["comments"]?.sequence.map(Array.init) ?? []
+        list.append(comment)
+        entry["comments"] = Node.sequence(Node.Sequence(list))
+    }
+
+    private static func mutateItem(_ text: String, itemID: String, _ change: (inout Node.Mapping) throws -> Void) throws -> String {
+        try mutateEntry(text, list: "items", id: itemID, fallback: "item", notFound: ReviewError.itemNotFound(itemID), change)
+    }
+
+    private static func mutateQuestion(_ text: String, questionID: String, _ change: (inout Node.Mapping) throws -> Void) throws -> String {
+        try mutateEntry(text, list: "questions", id: questionID, fallback: "question", notFound: ReviewError.questionNotFound(questionID), change)
+    }
+
+    /// Change one entry of the `items` or `questions` list, found by id (or by position for
+    /// one without an id, as the parser names it). Everything else is written back as it was.
+    private static func mutateEntry(
+        _ text: String, list key: String, id: String, fallback: String, notFound: ReviewError,
+        _ change: (inout Node.Mapping) throws -> Void
+    ) throws -> String {
+        try mutateFrontmatter(text) { map in
+            guard var entries = map[key]?.sequence.map(Array.init) else { throw notFound }
+            guard let index = entries.indices.first(where: { offset in
+                (string(entries[offset].mapping?["id"]) ?? "\(fallback)-\(offset + 1)") == id
+            }), var entry = entries[index].mapping else {
+                throw notFound
+            }
+            try change(&entry)
+            entries[index] = .mapping(entry)
+            map[key] = .sequence(Node.Sequence(entries))
+        }
+    }
+
+    private static func mutateFrontmatter(_ text: String, _ change: (inout Node.Mapping) throws -> Void) throws -> String {
         let (yamlText, body) = BoardMarkdown.splitFrontmatter(text)
         guard let yamlText, let root = try Yams.compose(yaml: yamlText), var map = root.mapping else {
             throw ReviewError.malformed
         }
-        var items = map["items"]?.sequence.map(Array.init) ?? []
-        items += new.map(node)
-        map["items"] = .sequence(Node.Sequence(items))
+        try change(&map)
         let yaml = try Yams.serialize(node: .mapping(map), width: -1, allowUnicode: true)
         let trimmed = yaml.hasSuffix("\n") ? String(yaml.dropLast()) : yaml
         return "---\n\(trimmed)\n---\n\(body)"
     }
 
-    private static func mutateItem(_ text: String, itemID: String, _ change: (inout Node.Mapping) -> Void) throws -> String {
-        let (yamlText, body) = BoardMarkdown.splitFrontmatter(text)
-        guard let yamlText, let root = try Yams.compose(yaml: yamlText), var map = root.mapping else {
-            throw ReviewError.malformed
-        }
-        guard var items = map["items"]?.sequence.map(Array.init) else { throw ReviewError.itemNotFound(itemID) }
-        guard let index = items.indices.first(where: { offset in
-            (string(items[offset].mapping?["id"]) ?? "item-\(offset + 1)") == itemID
-        }), var item = items[index].mapping else {
-            throw ReviewError.itemNotFound(itemID)
-        }
-        change(&item)
-        items[index] = .mapping(item)
-        map["items"] = .sequence(Node.Sequence(items))
-        let yaml = try Yams.serialize(node: .mapping(map), width: -1, allowUnicode: true)
-        let trimmed = yaml.hasSuffix("\n") ? String(yaml.dropLast()) : yaml
-        return "---\n\(trimmed)\n---\n\(body)"
-    }
+    private static var null: Node { Node("null", Tag(.null)) }
 
-    private static func scalar(_ value: String) -> Node { Node(value) }
+    /// A value as written by the app: multi-line text (Markdown) as a literal block.
+    private static func scalar(_ value: String) -> Node {
+        value.contains("\n") ? Node(value, Tag(.str), .literal) : Node(value)
+    }
 
     public static func timestamp(_ date: Date) -> String {
         let formatter = ISO8601DateFormatter()
@@ -449,4 +707,8 @@ public extension RemoteBoardStore {
             return (a.requestedAt ?? "") > (b.requestedAt ?? "")
         }
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

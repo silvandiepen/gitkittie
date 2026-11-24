@@ -106,4 +106,94 @@ final class AgentReviewTests: XCTestCase {
         } catch is AgentBoardError {}
         XCTAssertFalse(exists("Pets/review/PETS-999-x"))
     }
+
+    private func providers(id: String = "providers") -> Review.NewQuestion {
+        Review.NewQuestion(id: id, question: "Which providers at first release?", detail: "Gmail needs **verification**.",
+                           select: .one, allowsOther: true,
+                           options: [ReviewQuestionOption(id: "icloud", label: "iCloud only", detail: "Smallest scope."),
+                                     ReviewQuestionOption(id: "imap", label: "iCloud and IMAP")])
+    }
+
+    func testQuestionsAreAskedAnsweredAndHandled() async throws {
+        let platforms = Review.NewQuestion(id: "platforms", question: "Where?", select: .many,
+                                           options: [ReviewQuestionOption(id: "mac", label: "Mac"), ReviewQuestionOption(id: "ios", label: "iPhone")])
+        let made = try await board.createReview(request: nil, card: "PETS-001", title: "Mail decisions", question: nil, notes: nil,
+                                                uploads: [], questions: [providers(), platforms], agent: "claude")
+        XCTAssertEqual(made["questions"] as? [String], ["providers", "platforms"])
+        let file = "Pets/review/PETS-001-mail-decisions/review.md"
+        XCTAssertTrue(exists(file))
+
+        // Unanswered questions wait for the reviewer and cannot be handled.
+        let pending = try await board.listReviews(state: "pending", card: nil)
+        XCTAssertEqual(pending.first?["pending"] as? Int, 2)
+        let listed = try XCTUnwrap(pending.first?["questions"] as? [[String: Any]])
+        XCTAssertEqual(listed.first?["select"] as? String, "one")
+        XCTAssertEqual(listed.first?["status"] as? String, "pending")
+        XCTAssertEqual((listed.first?["options"] as? [[String: Any]])?.first?["detail"] as? String, "Smallest scope.")
+        XCTAssertNil(listed.first?["answer"])
+        let nothing = try await board.listReviews(state: nil, card: nil)
+        XCTAssertTrue(nothing.isEmpty)
+        do {
+            _ = try await board.handleReviewItem(request: "PETS-001-mail-decisions", item: "providers", shippedTo: nil, keep: false)
+            XCTFail("an unanswered question cannot be handled")
+        } catch is AgentBoardError {}
+
+        // The reviewer answers one, as the app does.
+        var text = try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)
+        text = try Review.applyAnswer(text, questionID: "providers", choices: ["imap"], other: nil, comment: "Gmail later", by: "sil")
+        try write(file, text)
+
+        let toHandle = try await board.waitForReviews(card: nil, timeout: 5, interval: 1)
+        XCTAssertEqual(toHandle.count, 1)
+        XCTAssertEqual((toHandle.first?["items"] as? [Any])?.count, 0)
+        let answered = try XCTUnwrap(toHandle.first?["questions"] as? [[String: Any]])
+        XCTAssertEqual(answered.map { $0["id"] as? String }, ["providers"], "only the answered question is listed")
+        XCTAssertEqual(answered[0]["answer"] as? [String], ["imap"])
+        XCTAssertEqual(answered[0]["answer_labels"] as? [String], ["iCloud and IMAP"])
+        XCTAssertEqual(answered[0]["answered_by"] as? String, "sil")
+        XCTAssertEqual(answered[0]["to_handle"] as? Bool, true)
+        XCTAssertEqual(((answered[0]["comments"] as? [[String: Any]])?.first?["text"]) as? String, "Gmail later")
+
+        do { _ = try await board.closeReview(request: "PETS-001-mail-decisions", force: false); XCTFail("not finished") } catch is AgentBoardError {}
+
+        // Handling fixes the answer; the request stays while a question is unanswered.
+        var result = try await board.handleReviewItem(request: "PETS-001-mail-decisions", item: "providers", shippedTo: nil, keep: false)
+        XCTAssertEqual(result["pending"] as? Int, 1)
+        XCTAssertNil(result["closed"])
+        text = try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)
+        XCTAssertNotNil(Review.parse(text, folder: "f").questions[0].handledAt)
+        XCTAssertThrowsError(try Review.applyAnswer(text, questionID: "providers", choices: ["icloud"], other: nil, by: "sil"))
+
+        // The last question is answered and handled: the request is cleared away.
+        try write(file, try Review.applyAnswer(text, questionID: "platforms", choices: ["mac", "ios"], other: nil, by: "sil"))
+        result = try await board.handleReviewItem(request: "PETS-001-mail-decisions", item: "platforms", shippedTo: nil, keep: false)
+        XCTAssertEqual(result["closed"] as? Int, 1)
+        XCTAssertFalse(exists(file))
+    }
+
+    func testQuestionsAreCheckedAndJoinAnExistingRequest() async throws {
+        _ = try await board.createReview(request: nil, card: nil, title: "Dogs", question: nil, notes: nil, uploads: [upload("dog")], agent: "claude")
+        // An id is unique across the request's items and questions.
+        do {
+            _ = try await board.createReview(request: "dogs", card: nil, title: nil, question: nil, notes: nil, uploads: [],
+                                             questions: [providers(id: "dog")], agent: "claude")
+            XCTFail("id taken by an item")
+        } catch is AgentBoardError {}
+        do {
+            let empty = Review.NewQuestion(id: "q", question: "Anything?", options: [])
+            _ = try await board.createReview(request: "dogs", card: nil, title: nil, question: nil, notes: nil, uploads: [], questions: [empty], agent: "claude")
+            XCTFail("nothing to answer with")
+        } catch is AgentBoardError {}
+        do {
+            _ = try await board.createReview(request: nil, card: nil, title: "Nothing", question: nil, notes: nil, uploads: [], agent: "claude")
+            XCTFail("neither items nor questions")
+        } catch is AgentBoardError {}
+
+        _ = try await board.createReview(request: "dogs", card: nil, title: nil, question: nil, notes: nil, uploads: [],
+                                         questions: [providers()], agent: "claude")
+        let parsed = Review.parse(try String(contentsOf: root.appendingPathComponent("Pets/review/dogs/review.md"), encoding: .utf8), folder: "f")
+        XCTAssertEqual(parsed.items.map(\.id), ["dog"])
+        XCTAssertEqual(parsed.questions.map(\.id), ["providers"])
+        XCTAssertEqual(parsed.summary.pending, 2)
+    }
 }

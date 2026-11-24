@@ -207,11 +207,30 @@ extension AppModel {
         await rewriteReview(request) { try Review.appendComment($0, itemID: item.id, by: by, body: text) }
     }
 
+    /// Answer a question, or change the answer while the agent has not acted on it. The
+    /// answer is checked against the question in the file (one choice for `select: one`);
+    /// a refused answer is reported in `errorMessage` and nothing is written.
+    /// Returns whether the answer was written.
+    @discardableResult
+    public func answer(_ request: ReviewRequest, question: ReviewQuestion, choices: [String], other: String?, comment: String? = nil) async -> Bool {
+        let by = reviewerID(for: request)
+        await rewriteReview(request) {
+            try Review.applyAnswer($0, questionID: question.id, choices: choices, other: other, comment: comment, by: by)
+        }
+        return errorMessage == nil
+    }
+
+    /// Comment on a question without changing its answer.
+    public func comment(_ request: ReviewRequest, question: ReviewQuestion, text: String) async {
+        let by = reviewerID(for: request)
+        await rewriteReview(request) { try Review.appendQuestionComment($0, questionID: question.id, by: by, body: text) }
+    }
+
     // MARK: Whole requests at once
 
     /// Give every item that is still waiting the same answer, in one write. Groups where
     /// one item has to be picked are left alone when approving: approving them all would
-    /// pick nothing.
+    /// pick nothing. Questions are never answered this way: each needs its own answer.
     public func decideAll(_ request: ReviewRequest, status: ReviewStatus) async {
         let by = reviewerID(for: request)
         let waiting = request.items.filter { item in
@@ -225,6 +244,7 @@ extension AppModel {
     }
 
     /// The same comment on every item of a request (or only those still waiting), in one write.
+    /// Questions keep their own comments.
     public func commentAll(_ request: ReviewRequest, text raw: String, onlyWaiting: Bool = false) async {
         let body = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let targets = request.items.filter { !onlyWaiting || $0.status == .pending }

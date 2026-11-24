@@ -1,0 +1,1106 @@
+{
+  "version": 1,
+  "note": "GKM-003 synthetic corpus. Every address and host is a reserved example.* domain; every name is invented. purpose/risk/urgency follow apps/gitmail-macos/docs/Classification.md. parse.outcome: ok | recovered | limited.",
+  "context": {
+    "accountAddresses": [
+      "alex.morgan@example.net"
+    ],
+    "trustedAuthServIDs": [
+      "mx.example.net"
+    ],
+    "knownCorrespondents": [
+      "sam.okafor@example.org",
+      "lotte.dekker@example.org",
+      "jonas.weber@example.com",
+      "yuki.tanaka@example.net",
+      "priya.raman@studio.example.com"
+    ],
+    "trustedSenderDomains": [
+      "cloudvault.example.com",
+      "larkspur.example.com",
+      "nordbank.example.com",
+      "codeharbor.example.com",
+      "zonnewerf.example.org",
+      "fernway.example.com"
+    ]
+  },
+  "fixtures": [
+    {
+      "description": "Colleague sends a draft with multipart/alternative and a small PDF attachment.",
+      "language": "en",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "work",
+        "known-correspondent",
+        "multipart-alternative",
+        "attachment"
+      ],
+      "file": "conv-colleague-alternative.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "German reply; RFC 2047 Q-encoded ISO-8859-1 subject and a Latin-1 quoted-printable body.",
+      "language": "de",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "personal",
+        "reply",
+        "rfc2047",
+        "latin1"
+      ],
+      "file": "conv-personal-de-thread.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Greek introduction from an unfamiliar person; base64 UTF-8 body, no thread headers.",
+      "language": "el",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "personal",
+        "non-latin",
+        "unfamiliar-sender",
+        "base64"
+      ],
+      "file": "conv-personal-el-unfamiliar.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "A friend asks about dinner; plain text, known correspondent.",
+      "language": "en",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "personal",
+        "known-correspondent"
+      ],
+      "file": "conv-personal-en-dinner.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Japanese message in ISO-2022-JP with B-encoded subject and sender name; known correspondent.",
+      "language": "ja",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "personal",
+        "non-latin",
+        "iso-2022-jp",
+        "rfc2047",
+        "known-correspondent"
+      ],
+      "file": "conv-personal-ja-meeting.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Dutch reply in a family thread, quoted-printable with diacritics.",
+      "language": "nl",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "personal",
+        "reply",
+        "quoted-printable"
+      ],
+      "file": "conv-personal-nl-reply.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "A shop employee answers the user's reply to a promotional campaign; quotes the offer.",
+      "language": "en",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "reply-to-campaign",
+        "reply",
+        "mixed-content"
+      ],
+      "file": "conv-reply-to-campaign.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Human support agent replies to a ticket from a role address.",
+      "language": "en",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "support",
+        "reply",
+        "role-sender"
+      ],
+      "file": "conv-support-reply-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Dutch support reply about a repair case.",
+      "language": "nl",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "support",
+        "reply",
+        "role-sender"
+      ],
+      "file": "conv-support-reply-nl.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Stored with bare LF line endings instead of CRLF.",
+      "language": "en",
+      "purpose": "notification",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "bare-lf",
+        "code-host",
+        "list-id"
+      ],
+      "parse": {
+        "outcome": "recovered",
+        "warnings": [
+          "bare-lf-line-endings"
+        ]
+      },
+      "file": "mal-bare-lf-line-endings.eml",
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Declared boundary never appears in the body; the reader must fall back to treating the body as text.",
+      "language": "en",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "malformed-mime",
+        "broken-boundary"
+      ],
+      "parse": {
+        "outcome": "recovered",
+        "warnings": [
+          "boundary-not-found"
+        ]
+      },
+      "file": "mal-broken-boundary.eml",
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "First copy of a message whose Message-ID is reused by another fixture.",
+      "language": "en",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "duplicate-message-id",
+        "known-correspondent"
+      ],
+      "duplicateGroup": "dup-4711",
+      "file": "mal-duplicate-message-id-a.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null
+    },
+    {
+      "description": "Different content reusing another message's Message-ID, and two Message-ID headers in one message.",
+      "language": "en",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "duplicate-message-id",
+        "known-correspondent"
+      ],
+      "duplicateGroup": "dup-4711",
+      "parse": {
+        "outcome": "recovered",
+        "warnings": [
+          "duplicate-message-id-header"
+        ]
+      },
+      "file": "mal-duplicate-message-id-b.eml",
+      "providerVerdict": null
+    },
+    {
+      "description": "Empty subject and empty body: nothing to classify on, so it must stay Unknown and visible.",
+      "language": "en",
+      "purpose": "unknown",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "empty",
+        "unknown"
+      ],
+      "file": "mal-empty-body.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Adjacent encoded words that must join without a space, an ISO-8859-1 display name, and an unterminated encoded word left as literal text.",
+      "language": "nl",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "rfc2047",
+        "malformed-encoded-word",
+        "unfamiliar-sender"
+      ],
+      "parse": {
+        "outcome": "recovered",
+        "warnings": [
+          "malformed-encoded-word"
+        ]
+      },
+      "file": "mal-encoded-words.eml",
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Attachment declares 3 GiB via Content-Disposition size; the payload is a tiny placeholder. The reader must not trust or allocate for the declared size.",
+      "language": "en",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "huge-attachment",
+        "attachment",
+        "known-correspondent"
+      ],
+      "parse": {
+        "outcome": "limited",
+        "warnings": [
+          "declared-size-exceeds-limit"
+        ]
+      },
+      "file": "mal-huge-attachment-placeholder.eml",
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Truncated message: the closing boundary is missing.",
+      "language": "en",
+      "purpose": "transaction",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "malformed-mime",
+        "missing-closing-boundary",
+        "receipt"
+      ],
+      "parse": {
+        "outcome": "recovered",
+        "warnings": [
+          "missing-closing-boundary"
+        ]
+      },
+      "file": "mal-missing-closing-boundary.eml",
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "No Message-ID header at all; storage must assign a stable local identity.",
+      "language": "nl",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "missing-message-id",
+        "known-correspondent"
+      ],
+      "parse": {
+        "outcome": "recovered",
+        "warnings": [
+          "missing-message-id"
+        ]
+      },
+      "file": "mal-missing-message-id.eml",
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Two encoded words in different charsets in one subject, raw 8-bit UTF-8 in a header, Latin-1 text part and UTF-8 HTML part.",
+      "language": "de",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "mixed-charsets",
+        "rfc2047",
+        "raw-8bit-header",
+        "known-correspondent"
+      ],
+      "parse": {
+        "outcome": "recovered",
+        "warnings": [
+          "raw-8bit-header"
+        ]
+      },
+      "file": "mal-mixed-charsets.eml",
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Decompression-bomb-style structure: 60 nested multipart levels in a few kilobytes. The reader must stop at its depth limit.",
+      "language": "en",
+      "purpose": "unknown",
+      "risk": "suspicious",
+      "urgency": "normal",
+      "tags": [
+        "hostile-structure",
+        "nesting-bomb"
+      ],
+      "parse": {
+        "outcome": "limited",
+        "warnings": [
+          "nesting-limit-exceeded"
+        ]
+      },
+      "file": "mal-nested-multipart-bomb.eml",
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Attachment names with ../ traversal, an RFC 2231 percent-encoded traversal and a Windows absolute path; the reader keeps only a safe last component.",
+      "language": "en",
+      "purpose": "unknown",
+      "risk": "suspicious",
+      "urgency": "normal",
+      "tags": [
+        "hostile-structure",
+        "path-traversal",
+        "rfc2231",
+        "attachment"
+      ],
+      "parse": {
+        "outcome": "limited",
+        "warnings": [
+          "unsafe-attachment-filename"
+        ]
+      },
+      "file": "mal-path-traversal-filenames.eml",
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Body declares a charset no decoder knows; the reader must fall back and say so.",
+      "language": "nl",
+      "purpose": "notification",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "unknown-charset",
+        "auto-submitted"
+      ],
+      "parse": {
+        "outcome": "recovered",
+        "warnings": [
+          "unknown-charset"
+        ]
+      },
+      "file": "mal-unknown-charset.eml",
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Dutch appointment reminder.",
+      "language": "nl",
+      "purpose": "notification",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "reminder",
+        "auto-submitted"
+      ],
+      "file": "notif-appointment-reminder-nl.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "German machine report with Auto-Submitted and Precedence: bulk.",
+      "language": "de",
+      "purpose": "notification",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "system-report",
+        "auto-submitted",
+        "bulk"
+      ],
+      "file": "notif-backup-report-de.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Code-host issue comment in a thread (In-Reply-To + List-ID); routine.",
+      "language": "en",
+      "purpose": "notification",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "code-host",
+        "list-id",
+        "reply"
+      ],
+      "file": "notif-codeharbor-issue-comment.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Code-host style review request: carries List-ID and List-Unsubscribe but is a notification, raised to normal urgency by the review-requested reason.",
+      "language": "en",
+      "purpose": "notification",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "code-host",
+        "list-id",
+        "list-unsubscribe",
+        "review-requested"
+      ],
+      "file": "notif-codeharbor-review-requested.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Delivery status update; mentions an order but is a notification.",
+      "language": "en",
+      "purpose": "notification",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "delivery",
+        "auto-submitted"
+      ],
+      "file": "notif-delivery-update-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Display name carries a trusted address while the real sender is another domain; a forged Authentication-Results from an untrusted authserv-id claims pass.",
+      "language": "en",
+      "purpose": "security",
+      "risk": "phishing",
+      "urgency": "low",
+      "tags": [
+        "phishing",
+        "display-name-spoof",
+        "untrusted-auth-results"
+      ],
+      "file": "phish-display-name-spoof.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Dutch fake invoice from a lookalike of a known supplier, with a double-extension executable attachment.",
+      "language": "nl",
+      "purpose": "transaction",
+      "risk": "phishing",
+      "urgency": "low",
+      "tags": [
+        "phishing",
+        "fake-invoice",
+        "dangerous-attachment",
+        "lookalike-domain"
+      ],
+      "file": "phish-fake-invoice-attachment-nl.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "German account-locked lure whose link text shows the trusted bank while the href goes elsewhere.",
+      "language": "de",
+      "purpose": "security",
+      "risk": "phishing",
+      "urgency": "low",
+      "tags": [
+        "phishing",
+        "link-text-mismatch",
+        "lookalike-domain",
+        "rfc2047"
+      ],
+      "file": "phish-link-mismatch-de.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Lookalike domain (digit 1 for letter l) of a trusted sender, credential theme.",
+      "language": "en",
+      "purpose": "security",
+      "risk": "phishing",
+      "urgency": "low",
+      "tags": [
+        "phishing",
+        "lookalike-domain"
+      ],
+      "file": "phish-lookalike-domain.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Spoofed trusted sender: trusted Authentication-Results say DMARC fail, Reply-To goes to another domain, payment theme.",
+      "language": "en",
+      "purpose": "transaction",
+      "risk": "phishing",
+      "urgency": "low",
+      "tags": [
+        "phishing",
+        "reply-to-mismatch",
+        "auth-fail",
+        "fake-invoice",
+        "spoofed-trusted-sender"
+      ],
+      "file": "phish-reply-to-mismatch-invoice.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Exact trusted From address, but the account provider's own Authentication-Results report DMARC fail.",
+      "language": "en",
+      "purpose": "security",
+      "risk": "phishing",
+      "urgency": "low",
+      "tags": [
+        "phishing",
+        "auth-fail",
+        "spoofed-trusted-sender"
+      ],
+      "file": "phish-spoofed-trusted-sender.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Greek seasonal sale.",
+      "language": "el",
+      "purpose": "promotion",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "promotion",
+        "non-latin",
+        "list-unsubscribe"
+      ],
+      "file": "promo-ekptoseis-el.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Dutch one-day discount.",
+      "language": "nl",
+      "purpose": "promotion",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "promotion",
+        "list-unsubscribe"
+      ],
+      "file": "promo-korting-nl.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Campaign without any list headers (non-compliant sender); recognised by template only.",
+      "language": "en",
+      "purpose": "promotion",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "promotion",
+        "no-list-headers"
+      ],
+      "file": "promo-no-list-headers-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "German discount campaign from the shop that also sent an order confirmation.",
+      "language": "de",
+      "purpose": "promotion",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "promotion",
+        "list-id"
+      ],
+      "file": "promo-rabatt-de.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Campaign from the same shop as the receipts; must be classified differently from them.",
+      "language": "en",
+      "purpose": "promotion",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "promotion",
+        "list-id",
+        "list-unsubscribe-post",
+        "html-only",
+        "tracking-pixel"
+      ],
+      "file": "promo-sale-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Dutch login code.",
+      "language": "nl",
+      "purpose": "security",
+      "risk": "none",
+      "urgency": "high",
+      "tags": [
+        "verification-code",
+        "no-reply"
+      ],
+      "file": "sec-login-code-nl.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Account security alert from a trusted sender.",
+      "language": "en",
+      "purpose": "security",
+      "risk": "none",
+      "urgency": "high",
+      "tags": [
+        "security-alert",
+        "auth-pass"
+      ],
+      "file": "sec-new-signin-alert-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "German password reset notice from a trusted bank-like sender.",
+      "language": "de",
+      "purpose": "security",
+      "risk": "none",
+      "urgency": "high",
+      "tags": [
+        "password-reset",
+        "rfc2047"
+      ],
+      "file": "sec-password-reset-de.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Greek verification code.",
+      "language": "el",
+      "purpose": "security",
+      "risk": "none",
+      "urgency": "high",
+      "tags": [
+        "verification-code",
+        "non-latin"
+      ],
+      "file": "sec-verification-code-el.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "One-time verification code from a trusted, authenticated sender.",
+      "language": "en",
+      "purpose": "security",
+      "risk": "none",
+      "urgency": "high",
+      "tags": [
+        "verification-code",
+        "no-reply",
+        "auth-pass"
+      ],
+      "file": "sec-verification-code-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Advance-fee lottery spam with no provider verdict; content alone.",
+      "language": "en",
+      "purpose": "unknown",
+      "risk": "spam",
+      "urgency": "low",
+      "tags": [
+        "spam",
+        "advance-fee"
+      ],
+      "file": "spam-lottery-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Promotional junk that the provider already put in Junk (verdict supplied as provider input).",
+      "language": "en",
+      "purpose": "promotion",
+      "risk": "spam",
+      "urgency": "low",
+      "tags": [
+        "spam",
+        "provider-verdict"
+      ],
+      "providerVerdict": "spam",
+      "file": "spam-provider-verdict-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "duplicateGroup": null
+    },
+    {
+      "description": "Dutch weekly forum digest.",
+      "language": "nl",
+      "purpose": "subscription",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "digest",
+        "list-id",
+        "list-unsubscribe"
+      ],
+      "file": "sub-digest-nl.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "German library newsletter.",
+      "language": "de",
+      "purpose": "subscription",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "newsletter",
+        "list-id",
+        "list-unsubscribe-post"
+      ],
+      "file": "sub-newsletter-de.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Editorial newsletter with List-ID, List-Unsubscribe and RFC 8058 one-click.",
+      "language": "en",
+      "purpose": "subscription",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "newsletter",
+        "list-id",
+        "list-unsubscribe",
+        "list-unsubscribe-post"
+      ],
+      "file": "sub-newsletter-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Japanese newsletter.",
+      "language": "ja",
+      "purpose": "subscription",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "newsletter",
+        "non-latin",
+        "list-id"
+      ],
+      "file": "sub-newsletter-ja.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Dutch invoice with a PDF attachment.",
+      "language": "nl",
+      "purpose": "transaction",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "invoice",
+        "attachment"
+      ],
+      "file": "txn-invoice-nl.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "German order confirmation, encoded subject.",
+      "language": "de",
+      "purpose": "transaction",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "order",
+        "rfc2047"
+      ],
+      "file": "txn-order-confirmation-de.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Japanese order confirmation, base64 UTF-8.",
+      "language": "ja",
+      "purpose": "transaction",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "order",
+        "non-latin",
+        "base64",
+        "rfc2047"
+      ],
+      "file": "txn-order-ja.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Auto-generated subscription payment receipt; Auto-Submitted must not demote it to a notification.",
+      "language": "en",
+      "purpose": "transaction",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "receipt",
+        "auto-submitted"
+      ],
+      "file": "txn-payment-received-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Plain receipt from a known shop.",
+      "language": "en",
+      "purpose": "transaction",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "receipt"
+      ],
+      "file": "txn-receipt-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Receipt from no-reply with bulk precedence, List-Unsubscribe and a discount block. Must stay transactional.",
+      "language": "en",
+      "purpose": "transaction",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "receipt",
+        "receipt-with-offer",
+        "no-reply",
+        "bulk",
+        "tracking-pixel"
+      ],
+      "file": "txn-receipt-with-offer-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Flight booking confirmation.",
+      "language": "en",
+      "purpose": "transaction",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "travel"
+      ],
+      "file": "txn-travel-booking-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    }
+  ]
+}

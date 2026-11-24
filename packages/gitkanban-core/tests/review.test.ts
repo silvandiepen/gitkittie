@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendReviewComment,
+  applyReviewAnswer,
   applyReviewDecision,
+  isQuestionAnswered,
   kindForFile,
   parseReview,
   resolveEffectiveConfig,
   resolveReviewPath,
   reviewAssetPath,
   ReviewItemNotFoundError,
+  ReviewQuestionNotFoundError,
   summarizeReview,
 } from '../src/index.js'
 
@@ -74,7 +77,7 @@ describe('parseReview', () => {
 
   it('summarizes', () => {
     expect(summarizeReview(parseReview(REVIEW))).toEqual({
-      total: 3, pending: 1, approved: 1, rejected: 1, changesRequested: 0, awaitingAgent: 1,
+      total: 3, pending: 1, approved: 1, rejected: 1, changesRequested: 0, awaitingAgent: 1, questions: 0, answered: 0,
     })
   })
 })
@@ -128,5 +131,80 @@ describe('paths', () => {
 
   it('infers kinds from extensions', () => {
     expect(['a.PNG', 'b.usdz', 'c.wav', 'd.gif', 'e.mov', 'f.txt'].map(kindForFile)).toEqual(['image', 'model', 'audio', 'animation', 'video', 'other'])
+  })
+})
+
+const QUESTIONS = `---
+config: review
+id: GKM-001-mail-decisions
+agent_only_key: keep me
+questions:
+  - id: providers
+    question: Which providers at first release?
+    detail: "**Gmail** needs verification."
+    select: one
+    other: true
+    options:
+      - id: icloud
+        label: iCloud only
+        detail: Smallest scope.
+      - id: imap
+        label: iCloud and IMAP
+    answer: []
+    answer_other:
+    comments: []
+  - id: platforms
+    question: Where?
+    select: many
+    options:
+      - mac
+      - id: ios
+        label: iPhone
+    answer: [ios, mac, nope]
+    answered_by: sil
+    answered_at: 2026-11-24T12:00:00Z
+---
+
+Notes.
+`
+
+describe('questions', () => {
+  it('parses questions and counts them as waiting until answered', () => {
+    const review = parseReview(QUESTIONS)
+    expect(review.items).toEqual([])
+    expect(review.questions.map((q) => q.id)).toEqual(['providers', 'platforms'])
+    const [providers, platforms] = review.questions
+    expect(providers.select).toBe('one')
+    expect(providers.other).toBe(true)
+    expect(providers.options[0]).toEqual({ id: 'icloud', label: 'iCloud only', detail: 'Smallest scope.' })
+    expect(isQuestionAnswered(providers)).toBe(false)
+    expect(platforms.options[0]).toEqual({ id: 'mac', label: 'mac' })
+    expect(platforms.answer).toEqual(['mac', 'ios'])
+    expect(isQuestionAnswered(platforms)).toBe(true)
+    expect(summarizeReview(review)).toEqual({
+      total: 2, pending: 1, approved: 0, rejected: 0, changesRequested: 0, awaitingAgent: 1, questions: 2, answered: 1,
+    })
+  })
+
+  it('records an answer, enforcing one choice and keeping the rest', () => {
+    const base = { questionId: 'providers', by: 'sil', at: '2026-11-24T13:00:00Z' }
+    expect(() => applyReviewAnswer(QUESTIONS, { ...base, choices: ['icloud', 'imap'] })).toThrow(/one answer/)
+    expect(() => applyReviewAnswer(QUESTIONS, { ...base, choices: ['icloud'], other: 'Fastmail' })).toThrow(/one answer/)
+    expect(() => applyReviewAnswer(QUESTIONS, { ...base, choices: ['outlook'] })).toThrow(/not an option/)
+    expect(() => applyReviewAnswer(QUESTIONS, { ...base, choices: [] })).toThrow(/Choose/)
+    expect(() => applyReviewAnswer(QUESTIONS, { ...base, questionId: 'nope', choices: [] })).toThrow(ReviewQuestionNotFoundError)
+    expect(() => applyReviewAnswer(QUESTIONS, { ...base, questionId: 'platforms', choices: ['mac'], other: 'Web' })).toThrow(/own/)
+
+    const next = applyReviewAnswer(QUESTIONS, { ...base, choices: ['imap'], comment: 'Gmail later' })
+    const q = parseReview(next).questions[0]
+    expect(q.answer).toEqual(['imap'])
+    expect(q.answeredBy).toBe('sil')
+    expect(q.comments.map((c) => c.text)).toEqual(['Gmail later'])
+    expect(parseReview(next).questions[1]).toEqual(parseReview(QUESTIONS).questions[1])
+    expect(next).toContain('agent_only_key: keep me')
+
+    const own = applyReviewAnswer(next, { ...base, choices: [], other: ' Fastmail ' })
+    expect(parseReview(own).questions[0].answer).toEqual([])
+    expect(parseReview(own).questions[0].answerOther).toBe('Fastmail')
   })
 })

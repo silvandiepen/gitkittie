@@ -1,0 +1,22 @@
+From: Priya Raman <priya.raman@studio.example.com>
+To: Alex Morgan <alex.morgan@example.net>
+Subject: Site walkthrough video
+Date: Mon, 23 Nov 2026 17:00:00 +0100
+Message-ID: <pr-walkthrough-1@studio.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="big-1"
+
+--big-1
+Content-Type: text/plain; charset=utf-8
+
+Hi Alex, here's the walkthrough of the Hollis site. It's big, sorry!
+Priya
+
+--big-1
+Content-Type: video/quicktime; name="hollis-site-walkthrough.mov"
+Content-Disposition: attachment; filename="hollis-site-walkthrough.mov"; size=3221225472
+Content-Transfer-Encoding: base64
+
+c3ludGhldGljIHBsYWNlaG9sZGVyOiBkZWNsYXJlZCBzaXplIDMgR2lCLCByZWFsIHBheWxvYWQg
+b21pdHRlZAo=
+--big-1--

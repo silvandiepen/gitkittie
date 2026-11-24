@@ -1,0 +1,32 @@
+From: Shared Documents <documents@filedrop.example.org>
+To: alex.morgan@example.net
+Subject: Shared files for you
+Date: Tue, 24 Nov 2026 00:30:00 +0000
+Message-ID: <drop-7731@filedrop.example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="trav"
+
+--trav
+Content-Type: text/plain; charset=utf-8
+
+Three files were shared with you.
+
+--trav
+Content-Type: application/octet-stream; name="../../../../Library/LaunchAgents/com.example.agent.plist"
+Content-Disposition: attachment; filename="../../../../Library/LaunchAgents/com.example.agent.plist"
+Content-Transfer-Encoding: base64
+
+c3ludGhldGljIHBsYWNlaG9sZGVyCg==
+--trav
+Content-Type: text/plain; name="notes.txt"
+Content-Disposition: attachment; filename*=UTF-8''..%2F..%2F.ssh%2Fauthorized_keys
+Content-Transfer-Encoding: base64
+
+c3ludGhldGljIHBsYWNlaG9sZGVyCg==
+--trav
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="C:\\Windows\\System32\\drivers\\etc\\hosts"
+Content-Transfer-Encoding: base64
+
+c3ludGhldGljIHBsYWNlaG9sZGVyCg==
+--trav--

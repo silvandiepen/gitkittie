@@ -1,0 +1,11 @@
+Authentication-Results: mx.cv-alerts.example.net; dmarc=pass header.from=cloudvault.example.com
+From: "CloudVault Security <security@cloudvault.example.com>" <alerts@cv-alerts.example.net>
+To: alex.morgan@example.net
+Subject: Unusual sign-in attempt - verify your account now
+Date: Mon, 23 Nov 2026 03:03:03 +0000
+Message-ID: <x83jd9@cv-alerts.example.net>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>We blocked an unusual sign-in attempt. Verify your account within 24 hours or it will be suspended.</p>
+<p><a href="https://cv-alerts.example.net/verify">Verify now</a></p></body></html>

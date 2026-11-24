@@ -1,0 +1,21 @@
+Authentication-Results: mx.example.net;
+ spf=pass smtp.mailfrom=cloudvault.example.com;
+ dkim=pass header.d=cloudvault.example.com;
+ dmarc=pass header.from=cloudvault.example.com
+From: CloudVault Security <security@cloudvault.example.com>
+To: alex.morgan@example.net
+Subject: New sign-in to your CloudVault account
+Date: Mon, 23 Nov 2026 21:44:03 +0000
+Message-ID: <signin-alert-7781@cloudvault.example.com>
+Auto-Submitted: auto-generated
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+We noticed a new sign-in to your CloudVault account.
+
+Device: Safari on macOS
+Location: Utrecht, Netherlands (approximate)
+Time: 23 Nov 2026, 22:43 CET
+
+If this was you, there's nothing to do. If not, open the CloudVault app and
+change your password from Settings.
