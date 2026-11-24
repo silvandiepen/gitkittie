@@ -1,5 +1,6 @@
 import Foundation
 import MailCore
+import MailHTML
 
 /// An attachment as the Markdown records it: the blob that holds its bytes, and how the sender
 /// labelled it. `fileName` is cleaned for display; it is never used as a path.
@@ -10,6 +11,17 @@ public struct AttachmentReference: Codable, Hashable, Sendable {
     public var mediaType: String
     public var size: Int
     public var inline: Bool
+    /// The part's Content-ID (no angle brackets), when the HTML refers to it as `cid:`.
+    public var contentId: String?
+
+    public init(blob: String, fileName: String, mediaType: String, size: Int, inline: Bool, contentId: String? = nil) {
+        self.blob = blob
+        self.fileName = fileName
+        self.mediaType = mediaType
+        self.size = size
+        self.inline = inline
+        self.contentId = contentId
+    }
 }
 
 /// The YAML front matter of a message's `.md`. Everything here is derived from the `.eml`,
@@ -70,8 +82,12 @@ enum DerivedMarkdown {
         lines.append("")
         if let text = message.textBody {
             lines.append(text.trimmingCharacters(in: .newlines))
-        } else if message.hasHTMLBody {
-            lines.append("_This message has only an HTML body. The original is in [\(front.eml)](\(front.eml))._")
+        } else if let html = message.htmlBody {
+            // Text read out of the HTML by the same tokenizer the reader's sanitizer uses: no
+            // markup, no URLs, and "<" escaped so no Markdown viewer can render it as HTML.
+            let text = HTMLText.plainText(fromHTML: html).replacingOccurrences(of: "<", with: "&lt;")
+            if !text.isEmpty { lines.append(text); lines.append("") }
+            lines.append("_Converted from the HTML version. The original is in [\(front.eml)](\(front.eml))._")
         } else {
             lines.append("_This message has no text body._")
         }

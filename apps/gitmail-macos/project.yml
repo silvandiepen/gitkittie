@@ -42,6 +42,17 @@ targets:
         product: MailProvider
       - package: GitKittieMailProviders
         product: MailOutbox
+      # The safe reader and search (GKM-012, GKM-016).
+      - package: GitKittieMailKit
+        product: MailHTML
+      - package: GitKittieMailKit
+        product: MailReader
+      - package: GitKittieMailKit
+        product: MailReaderWeb
+      - package: GitKittieMailKit
+        product: MailExtraction
+      # Attachment text for search runs in this sandboxed helper, never in the app (ThreatModel §4).
+      - target: GitMailExtractor
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail
@@ -59,6 +70,8 @@ targets:
         com.apple.security.app-sandbox: true
         # IMAP and SMTP over TLS (GKM-010, GKM-011).
         com.apple.security.network.client: true
+        # File ▸ Import Messages… reads the .eml files and folders the user picks (GKM-012).
+        com.apple.security.files.user-selected.read-only: true
         # Account passwords and tokens, in this app's own keychain group (GKM-010).
         keychain-access-groups:
           - $(AppIdentifierPrefix)app.hakobs.gitmail
@@ -73,6 +86,39 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         LSMinimumSystemVersion: "14.0"
         NSHumanReadableCopyright: "Copyright © Sil van Diepen"
+
+  # Extracts text from PDF and plain-text attachments for search (GKM-016). Its own process,
+  # sandboxed with no entitlements at all: no network, no files; bytes in, text out over XPC,
+  # and a watchdog ends it if one document takes too long (ThreatModel §4, MAIL-031).
+  GitMailExtractor:
+    type: xpc-service
+    platform: macOS
+    sources:
+      - path: GitMailExtractor
+    dependencies:
+      - package: GitKittieMailKit
+        product: MailExtraction
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail.extractor
+        PRODUCT_NAME: GitMailExtractor
+        INFOPLIST_FILE: GitMailExtractor/Info.plist
+        CODE_SIGN_ENTITLEMENTS: GitMailExtractor/GitMailExtractor.entitlements
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+    entitlements:
+      path: GitMailExtractor/GitMailExtractor.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+    info:
+      path: GitMailExtractor/Info.plist
+      properties:
+        CFBundleDisplayName: GitKittie Mail Extractor
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        XPCService:
+          ServiceType: Application
 
   # The app model against a real store in a temporary folder. The model's sources are built
   # into the bundle, so the tests run without launching the app.
@@ -95,6 +141,12 @@ targets:
         product: MailProvider
       - package: GitKittieMailProviders
         product: MailOutbox
+      - package: GitKittieMailKit
+        product: MailHTML
+      - package: GitKittieMailKit
+        product: MailReader
+      - package: GitKittieMailKit
+        product: MailExtraction
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail.tests

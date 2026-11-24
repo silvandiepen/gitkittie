@@ -22,6 +22,8 @@ struct ComposeCommands: Commands {
             Button("Forward") { open { await model.compose(.forward) } }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(!model.canAnswer)
+            Divider()
+            MessageStateCommands(model: model)
         }
     }
 

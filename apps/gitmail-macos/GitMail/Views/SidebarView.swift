@@ -47,11 +47,12 @@ struct SidebarView: View {
                 ForEach(model.accounts) { account in
                     AccountRow(account: account)
                         .tag(SidebarSelection.account(account.id))
-                    Text("Folders appear after the first sync.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .padding(.leading, 30)
-                        .selectionDisabled()
+                    ForEach(model.folders[account.id] ?? [], id: \.self) { folder in
+                        Label(folder, systemImage: folder.caseInsensitiveCompare("INBOX") == .orderedSame ? "tray" : "folder")
+                            .font(.callout)
+                            .padding(.leading, 30)
+                            .tag(SidebarSelection.folder(account.id, folder))
+                    }
                 }
             }
         }

@@ -194,6 +194,15 @@ An agent reading mail is reading text written by strangers. Any instruction in a
 | Account disconnect wiping local files | Offer keep / export / remove with plain consequences | GKM-010 |
 | Ordinary trash and move mistakes | Undo for every everyday action; explain provider Trash limits | GKM-015 |
 
+## Status (GKM-012, GKM-016, 2026-11-24)
+
+Built and tested in `swift/GitKittieMailKit` and the app:
+
+- §1 Script execution, remote loads, tracking pixels, CSS exfiltration, forms, refresh/base/navigation: MAIL-032. `WebViewSafetyTests` load the hostile fixtures (`Fixtures/hostile-html/`) into the real reader web view with every remote URL pointed at a local listener: zero connections and no script, also without the sanitizer, and the content rule list alone blocks script-issued requests. Control runs without protection do connect and do run script. Tracking pixels are not fetched even with remote images allowed.
+- §2 Link warnings (text vs target, lookalike of the sender's domain, mixed scripts shown as `xn--`, IP hosts, user-info, blocked schemes); links open only from a sheet that shows the real destination (`ReaderContentTests`).
+- §3 The address is always shown beside the name; warnings for a name carrying another address or domain and a Reply-To elsewhere; no positive trust badge. Authentication-Results are not used yet (GKM-011/017).
+- §4 Attachment names are displayed sanitized; Quick Look opens a quarantined private copy only on click; text extraction runs in the sandboxed `GitMailExtractor.xpc` (MAIL-031). The XPC round trip is tested in process over an anonymous listener; the bundled service's isolation is configured (sandbox, no entitlements) and built, not exercised by a test, because that needs the app running.
+
 ## Open points
 
 - **Authentication-Results per provider.** Which header iCloud, Gmail and generic hosts add, and its authserv-id, must be verified against real mail during GKM-004 and GKM-029.

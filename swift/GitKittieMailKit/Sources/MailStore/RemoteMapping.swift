@@ -8,7 +8,7 @@ import MailCore
 /// Losing it costs a reconciliation pass (Message-ID and fingerprint candidates from the
 /// index), not mail.
 final class RemoteMapping {
-    static let schemaVersion = 1
+    static let schemaVersion = 2
     private let database: SQLiteDatabase
 
     init(url: URL) throws {
@@ -16,21 +16,66 @@ final class RemoteMapping {
         try database.execute("PRAGMA journal_mode = WAL")
         let version = try database.userVersion
         guard version != Self.schemaVersion else { return }
-        guard version == 0 else {
+        guard version <= Self.schemaVersion else {
             // Not a cache: never drop it silently. A newer layout needs a newer app.
             throw MailStoreError.unsupportedLayoutVersion(version)
         }
         try database.transaction {
-            try database.execute("""
-                CREATE TABLE mailboxes (name TEXT PRIMARY KEY, uid_validity INTEGER NOT NULL);
-                CREATE TABLE locations (
-                  mailbox TEXT NOT NULL, uid_validity INTEGER NOT NULL, uid INTEGER NOT NULL, local_id TEXT NOT NULL,
-                  PRIMARY KEY (mailbox, uid_validity, uid)
-                );
-                CREATE INDEX locations_by_local_id ON locations (local_id);
-                """)
+            if version == 0 {
+                try database.execute("""
+                    CREATE TABLE mailboxes (name TEXT PRIMARY KEY, uid_validity INTEGER NOT NULL);
+                    CREATE TABLE locations (
+                      mailbox TEXT NOT NULL, uid_validity INTEGER NOT NULL, uid INTEGER NOT NULL, local_id TEXT NOT NULL,
+                      PRIMARY KEY (mailbox, uid_validity, uid)
+                    );
+                    CREATE INDEX locations_by_local_id ON locations (local_id);
+                    """)
+            }
+            if version < 2 {
+                // 1 → 2: the provider flags this device last saw (GKM-012).
+                try database.execute("CREATE TABLE flags (local_id TEXT PRIMARY KEY, seen INTEGER NOT NULL, flagged INTEGER NOT NULL)")
+            }
             try database.setUserVersion(Self.schemaVersion)
         }
+    }
+
+    func flags(of id: MailMessageID) throws -> MessageFlags {
+        let statement = try database.prepare("SELECT seen, flagged FROM flags WHERE local_id = ?").bind([.text(id.rawValue)])
+        return try statement.step() ? MessageFlags(seen: statement.int(0) != 0, flagged: statement.int(1) != 0) : MessageFlags()
+    }
+
+    func setFlags(_ flags: MessageFlags, for id: MailMessageID) throws {
+        try database.prepare("INSERT OR REPLACE INTO flags (local_id, seen, flagged) VALUES (?, ?, ?)")
+            .run([.text(id.rawValue), .int(flags.seen ? 1 : 0), .int(flags.flagged ? 1 : 0)])
+    }
+
+    func allFlags() throws -> [MailMessageID: MessageFlags] {
+        let statement = try database.prepare("SELECT local_id, seen, flagged FROM flags")
+        var result: [MailMessageID: MessageFlags] = [:]
+        while try statement.step() {
+            if let id = statement.text(0).flatMap(MailMessageID.init) {
+                result[id] = MessageFlags(seen: statement.int(1) != 0, flagged: statement.int(2) != 0)
+            }
+        }
+        return result
+    }
+
+    /// Every (message, mailbox) pair on record.
+    func allMemberships() throws -> [(MailMessageID, String)] {
+        let statement = try database.prepare("SELECT DISTINCT local_id, mailbox FROM locations ORDER BY local_id, mailbox")
+        var result: [(MailMessageID, String)] = []
+        while try statement.step() {
+            if let id = statement.text(0).flatMap(MailMessageID.init), let mailbox = statement.text(1) { result.append((id, mailbox)) }
+        }
+        return result
+    }
+
+    /// The messages with a location in `mailbox`.
+    func localIDs(inMailbox mailbox: String) throws -> [MailMessageID] {
+        let statement = try database.prepare("SELECT DISTINCT local_id FROM locations WHERE mailbox = ? ORDER BY local_id").bind([.text(mailbox)])
+        var ids: [MailMessageID] = []
+        while try statement.step() { if let id = statement.text(0).flatMap(MailMessageID.init) { ids.append(id) } }
+        return ids
     }
 
     func localID(at location: RemoteLocation) throws -> MailMessageID? {
