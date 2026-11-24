@@ -205,6 +205,8 @@ Built and tested in `swift/GitKittieMailKit` and the app:
 
 - §4 Attachment library and export (GKM-023, MAIL-044, MAIL-045): the library lists from the index and never decodes or previews while listing; Quick Look uses the reader's quarantined copy; Save As writes hash-checked bytes with the quarantine attribute; file names are display text and only go into a save panel's suggestion. §7: exports copy mail-folder files only (no index, sync state, flags or extracted text) and strip server settings from `account.json`; a tampered original is reported, not exported. Decompression-bomb limits stay with GKM-015 (nothing here decompresses).
 
+- §9 Unsubscribe (GKM-020, MAIL-056, MAIL-057): offered only from stored headers with list context and no risk or sender doubt; suspicious mail gets Report as Junk and Mute. `UnsubscribeTests` (mail core) and `SendersAppTests` (app model) run a real local HTTP server that records every request: storing, classifying, listing senders, previewing rules and assessing contact nothing; a URL that is not the one offered, or any suspicious sender, is never sent; the approved request is one POST with no cookie (even one the server set) or credentials; 302s and redirects to another host are not followed, a same-host 307/308 at most twice; an authentication challenge is not answered. The app's own policy refuses the test server (plain HTTP, a local address) before connecting. Outcomes are tracked, and an accepted request stays pending until mail stops.
+
 ## Open points
 
 - **Authentication-Results per provider.** Which header iCloud, Gmail and generic hosts add, and its authserv-id, must be verified against real mail during GKM-004 and GKM-029.

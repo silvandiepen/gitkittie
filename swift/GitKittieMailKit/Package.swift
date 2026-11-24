@@ -16,6 +16,7 @@ import PackageDescription
 // - MailReaderWeb    the locked-down WKWebView the reader renders HTML in (GKM-012)
 // - MailExtraction   attachment text for search, PDF and plain text; isolated in XPC on macOS,
 //                    in process with strict limits on iOS (GKM-016, MAIL-031, MAIL-052)
+// - MailUnsubscribe  which unsubscribe to offer, and the one approved RFC 8058 request (GKM-020)
 //
 // The provider adapters (IMAP, SMTP) live in swift/GitKittieMailProviders: they need
 // swift-nio-imap, which needs Swift 6.2 and macOS 15 / iOS 18 (MAIL-017).
@@ -32,6 +33,7 @@ let package = Package(
         .library(name: "MailReader", targets: ["MailReader"]),
         .library(name: "MailReaderWeb", targets: ["MailReaderWeb"]),
         .library(name: "MailExtraction", targets: ["MailExtraction"]),
+        .library(name: "MailUnsubscribe", targets: ["MailUnsubscribe"]),
     ],
     targets: [
         .target(name: "MailCore"),
@@ -45,6 +47,8 @@ let package = Package(
         .target(name: "MailReader", dependencies: ["MailCore", "MailMIME", "MailHTML", "MailStore", "MailClassifier"]),
         .target(name: "MailReaderWeb", dependencies: ["MailReader", "MailHTML"]),
         .target(name: "MailExtraction"),
+        // Unsubscribe: what may be offered, from stored headers, and the one approved request (GKM-020).
+        .target(name: "MailUnsubscribe", dependencies: ["MailCore", "MailClassifier"]),
         .testTarget(name: "MailCoreTests", dependencies: ["MailCore"]),
         .testTarget(name: "MailStoreTests", dependencies: ["MailStore", "MailClassifier", "MailTestSupport"]),
         .testTarget(name: "MailClassifierTests", dependencies: ["MailClassifier", "MailTestSupport"]),
@@ -53,5 +57,6 @@ let package = Package(
         .testTarget(name: "MailHTMLTests", dependencies: ["MailHTML", "MailTestSupport"]),
         .testTarget(name: "MailReaderTests", dependencies: ["MailReader", "MailReaderWeb", "MailStore", "MailClassifier", "MailTestSupport"]),
         .testTarget(name: "MailExtractionTests", dependencies: ["MailExtraction"]),
+        .testTarget(name: "MailUnsubscribeTests", dependencies: ["MailUnsubscribe", "MailStore", "MailClassifier", "MailCore"]),
     ]
 )

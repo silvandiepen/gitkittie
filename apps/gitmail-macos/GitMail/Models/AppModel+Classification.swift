@@ -134,6 +134,12 @@ enum VerdictText {
     static func summary(_ verdict: StoredVerdict) -> String {
         let place = verdict.home.title
         let c = verdict.classification
+        switch verdict.disposition {
+        case .muted: return "Muted by your rule for this sender. Still in All Mail."
+        case .archived: return "In \(place), archived silently by your rule for this sender."
+        case .inbox: return "In Focused because of your rule for this sender."
+        case nil: break
+        }
         if verdict.isCorrected { return "In \(place) because you said so." }
         if c.risk == .phishing { return "In \(place): this looks like phishing." }
         if c.risk == .spam { return "In \(place): this looks like junk." }

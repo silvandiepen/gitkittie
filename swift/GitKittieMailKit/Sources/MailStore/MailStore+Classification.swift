@@ -38,6 +38,9 @@ struct ClassificationState {
     /// Per account, without corrections (those are per message).
     var contexts: [MailAccountID: ClassificationContext] = [:]
     var accountAddresses: [MailAccountID: Set<String>]?
+    /// Your sender and list rules (GKM-019), and this device's open history per sender.
+    var senderRules: SenderRuleSet?
+    var openHistory: SenderOpenHistory?
     /// The last classification that failed after its message was stored safely; the message
     /// stays unclassified (Focused) and `classifyPending` tries it again.
     var lastError: String?
@@ -115,26 +118,13 @@ extension MailStore {
         try classify(id, account: account, parsed: parsed, arrival: false)
     }
 
+    /// The verdict comes from `plan` (MailStore+Senders.swift): the classifier with your
+    /// corrections, correction-made rules and sender rules, exactly as a rule preview runs it.
     private func classify(_ id: MailMessageID, account: MailAccountID, parsed: ParsedMessage, arrival: Bool) throws {
-        var context = try classificationContext(account)
-        var input = Self.classificationInput(parsed, folders: try index.mailboxes(of: id))
-        let fingerprint = ContentFingerprint.of(parsed)
-        if let correction = try metadata().correction(account: account, messageID: parsed.messageID, fingerprint: fingerprint) {
-            // The classifier matches overrides by message id; the correction's own id stands in,
-            // so a message without a Message-ID can be corrected too.
-            let key = "gkm-correction:" + correction.id
-            input.messageID = key
-            context.overrides = [MessageOverride(messageID: key, purpose: correction.purpose, risk: correction.risk)]
-        }
-        let verdict = MailClassifier(context: context).classify(input)
-        let user: Set<ReasonCode> = [.userOverride, .userRuleList, .userRuleSender, .userRuleDomain]
-        let from = parsed.from.first?.address.lowercased()
-        let fromDomain = from.flatMap(DomainCheck.domain(ofAddress:)).map(DomainCheck.organisationDomain(of:))
-        let listID = input.value("List-ID").map(Self.listIdentity)
-        try index.saveVerdict(StoredVerdict(id: id, account: account, classification: verdict, home: verdict.home,
-                                            isCorrected: !user.isDisjoint(with: verdict.reasons), fromAddress: from, listID: listID),
-                              fromDomain: fromDomain, arrival: arrival)
-        try learn(from: parsed, verdict: verdict, id: id, account: account, fromDomain: fromDomain)
+        let planned = try plan(id, account: account, parsed: parsed, rules: senderRules())
+        try index.saveVerdict(planned.stored, fromDomain: planned.fromDomain, arrival: arrival)
+        try refreshLatest(after: planned)
+        try learn(from: parsed, verdict: planned.stored.classification, id: id, account: account, fromDomain: planned.fromDomain)
     }
 
     /// What one message teaches about the mailbox: whom you write to, and which domains pass
@@ -261,7 +251,7 @@ extension MailStore {
 
     // MARK: Context
 
-    private func metadata() throws -> ClassificationMetadata {
+    func metadata() throws -> ClassificationMetadata {
         if let metadata = classification.metadata { return metadata }
         let metadata = try ClassificationMetadata.load(from: ClassificationMetadata.url(in: locations.deviceFolder))
         classification.metadata = metadata
@@ -288,7 +278,7 @@ extension MailStore {
         classification.accountAddresses = nil
     }
 
-    private func classificationContext(_ account: MailAccountID) throws -> ClassificationContext {
+    func classificationContext(_ account: MailAccountID) throws -> ClassificationContext {
         if let context = classification.contexts[account] { return context }
         let kind = try accounts().first { $0.id == account }?.connection?.kind
         let context = ClassificationContext(
