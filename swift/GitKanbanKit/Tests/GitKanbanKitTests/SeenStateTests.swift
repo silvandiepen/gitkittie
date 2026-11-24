@@ -123,6 +123,25 @@ final class SeenStateTests: XCTestCase {
         XCTAssertEqual(model.sorted(cards(model)).map(\.fields.id), cards(model).map(\.fields.id))
     }
 
+    func testSortingByDate() async throws {
+        let model = await opened()
+        var dated = cards(model)   // PETS-1, PETS-2, PETS-3 in board order
+        func index(_ id: String) -> Int { dated.firstIndex { $0.fields.id == id }! }
+        dated[index("PETS-1")].fields.createdAt = "2026-11-02T09:00:00Z"
+        dated[index("PETS-2")].fields.createdAt = nil
+        dated[index("PETS-3")].fields.createdAt = "2026-11-20T09:00:00Z"
+        dated[index("PETS-1")].fields.due = "2026-12-01"
+        dated[index("PETS-2")].fields.due = "2026-11-25"
+        dated[index("PETS-3")].fields.due = nil
+
+        model.cardSort = .created
+        XCTAssertEqual(model.sorted(dated).map(\.fields.id), ["PETS-3", "PETS-1", "PETS-2"], "newest first, undated last")
+        model.cardSort = .oldest
+        XCTAssertEqual(model.sorted(dated).map(\.fields.id), ["PETS-1", "PETS-3", "PETS-2"], "oldest first, undated last")
+        model.cardSort = .due
+        XCTAssertEqual(model.sorted(dated).map(\.fields.id), ["PETS-2", "PETS-1", "PETS-3"], "soonest due first, no due date last")
+    }
+
     func testBoardSummaryCountsNewAndMovedCardsSinceLastOpened() async throws {
         let model = await opened()
         let summary = try XCTUnwrap(model.boardSummary(repo, "Tasks/Pets"))

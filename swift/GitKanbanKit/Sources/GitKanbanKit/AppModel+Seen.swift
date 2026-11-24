@@ -11,16 +11,20 @@ import GitKittieKit
 
 /// How cards are ordered inside a lane or stage.
 public enum CardSort: String, CaseIterable, Identifiable, Sendable {
-    case board, unseenFirst, updated, priority
+    // In the order the sort menus list them.
+    case board, created, oldest, updated, due, priority, unseenFirst
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
         case .board: "Board Order"
-        case .unseenFirst: "Unseen First"
+        case .created: "Newest First"
+        case .oldest: "Oldest First"
         case .updated: "Last Updated"
+        case .due: "Due Date"
         case .priority: "Priority"
+        case .unseenFirst: "Unseen First"
         }
     }
 }
@@ -117,6 +121,27 @@ extension AppModel {
                 let ua = isUnseen(a), ub = isUnseen(b)
                 return ua != ub ? ua : updated(a) > updated(b)
             }
+        case .created, .oldest:
+            // By `created_at`. Tasks without one go last, in their board order.
+            let newestFirst = cardSort == .created
+            return Self.stableSorted(cards) { a, b in
+                switch (BoardProgress.date(a.fields.createdAt), BoardProgress.date(b.fields.createdAt)) {
+                case let (x?, y?): return x == y ? nil : (newestFirst ? x > y : x < y)
+                case (.some, .none): return true
+                case (.none, .some): return false
+                case (.none, .none): return nil
+                }
+            }
+        case .due:
+            // Soonest due first (overdue on top). Tasks without a due date go last.
+            return Self.stableSorted(cards) { a, b in
+                switch (a.fields.due, b.fields.due) {
+                case let (x?, y?): return x == y ? nil : x < y   // yyyy-MM-dd sorts as text
+                case (.some, .none): return true
+                case (.none, .some): return false
+                case (.none, .none): return nil
+                }
+            }
         case .priority:
             let order = board?.config.priorities.map(\.id) ?? []
             func rank(_ card: Card) -> Int {
@@ -128,6 +153,12 @@ extension AppModel {
                 return ra != rb ? ra < rb : a.offset < b.offset
             }.map(\.element)
         }
+    }
+
+    /// `cards` ordered by `before`, which says whether the first goes before the second, or
+    /// nil when they are equal: equal cards keep the order they came in.
+    static func stableSorted(_ cards: [Card], by before: (Card, Card) -> Bool?) -> [Card] {
+        cards.enumerated().sorted { a, b in before(a.element, b.element) ?? (a.offset < b.offset) }.map(\.element)
     }
 
     // MARK: Boards

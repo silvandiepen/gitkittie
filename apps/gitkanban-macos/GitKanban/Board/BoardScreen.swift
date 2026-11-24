@@ -229,6 +229,11 @@ struct BoardScreen: View {
     private var filterMenu: some View {
         @Bindable var model = model
         return Menu {
+            // How the tasks in each lane are ordered; Board Order is the order you dragged them in.
+            Picker("Sort", selection: $model.cardSort) {
+                ForEach(CardSort.allCases) { Text($0.title).tag($0) }
+            }
+            Divider()
             if projects.count > 1 {
                 Picker("Project", selection: Binding(
                     get: { model.selectedProject?.id ?? "" },
@@ -274,7 +279,7 @@ struct BoardScreen: View {
                 .symbolVariant(model.hasActiveFilters ? .fill : .none)
                 .foregroundStyle(model.hasActiveFilters ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
         }
-        .help("Filter")
+        .help("Sort and filter")
     }
 
     @ViewBuilder private func filterLabel(_ text: String, _ selected: Bool) -> some View {
@@ -298,13 +303,13 @@ struct BoardScreen: View {
 
     /// Filtered columns ordered pipeline-lanes → backlog lanes → uncategorised.
     private func displayColumns(_ board: LoadedBoard) -> [Column] {
-        let filtered = board.columns.map { Column(lane: $0.lane, cards: $0.cards.filter(isShown)) }
+        let filtered = board.columns.map { Column(lane: $0.lane, cards: model.sorted($0.cards.filter(isShown))) }
         var cols = filtered.filter { !$0.lane.isBacklog } + filtered.filter { $0.lane.isBacklog }
         let uncategorised = board.uncategorised.filter(isShown)
         if !uncategorised.isEmpty {
             cols.append(Column(
                 lane: Lane(id: "_uncategorised", name: "Uncategorised", folder: "", status: ""),
-                cards: uncategorised
+                cards: model.sorted(uncategorised)
             ))
         }
         return cols
@@ -506,7 +511,10 @@ private struct LaneColumn: View {
         let shown = column.cards.filter { $0.fields.id != id }
         let own = column.cards.firstIndex { $0.fields.id == id }
         let index = own.map { position > $0 ? position - 1 : position } ?? position
-        let before = index < shown.count ? shown[index].fields.id : nil
+        // Sorted by date or priority, the place in the lane comes from the sort: a drop
+        // within the lane changes nothing, and one from another lane only moves the task.
+        if model.cardSort != .board, own != nil { return }
+        let before = model.cardSort == .board && index < shown.count ? shown[index].fields.id : nil
         if own == index { return } // dropped where it was
         BoardMotion.shared.land(id)
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
