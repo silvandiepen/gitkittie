@@ -121,6 +121,7 @@ extension RemoteMapping {
             INSERT INTO folder_state (name, path, position, uid_validity, highest_uid, history_complete, server_count)
             VALUES (?, ?, 1000000, ?, ?, ?, ?)
             ON CONFLICT(name) DO UPDATE SET uid_validity = excluded.uid_validity, highest_uid = excluded.highest_uid,
+              highest_modseq = CASE WHEN uid_validity IS excluded.uid_validity THEN highest_modseq ELSE NULL END,
               history_complete = excluded.history_complete, server_count = excluded.server_count
             """).run([
                 .text(folder), .text(String(decoding: try JSONEncoder().encode([folder]), as: UTF8.self)),

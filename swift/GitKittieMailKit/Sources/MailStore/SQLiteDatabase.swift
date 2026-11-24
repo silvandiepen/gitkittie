@@ -5,6 +5,7 @@ import SQLite3
 /// the store needs no third-party dependency. One connection, used from one actor.
 final class SQLiteDatabase {
     private var handle: OpaquePointer?
+    private var transactionDepth = 0
     let url: URL
 
     init(url: URL) throws {
@@ -40,8 +41,16 @@ final class SQLiteDatabase {
         return Statement(statement, database: self)
     }
 
-    /// Run `body` in one transaction: all of it lands, or none of it.
+    /// Run `body` in one transaction: all of it lands, or none of it. A transaction inside
+    /// another joins it.
     func transaction<T>(_ body: () throws -> T) throws -> T {
+        if transactionDepth > 0 {
+            transactionDepth += 1
+            defer { transactionDepth -= 1 }
+            return try body()
+        }
+        transactionDepth = 1
+        defer { transactionDepth = 0 }
         try execute("BEGIN IMMEDIATE")
         do {
             let result = try body()
