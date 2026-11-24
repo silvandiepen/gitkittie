@@ -46,6 +46,63 @@
       "duplicateGroup": null
     },
     {
+      "description": "A person posts to a walking club's discussion list (List-Post): a conversation, not a subscription (GKM-017 weakness).",
+      "language": "en",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "list-discussion",
+        "list-id",
+        "unfamiliar-sender"
+      ],
+      "file": "conv-list-discussion-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "A friend replies about the wifi password: the word \"password\" in a personal reply is not a security alert (GKM-017 weakness).",
+      "language": "en",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "keyword-collision",
+        "reply",
+        "unfamiliar-sender"
+      ],
+      "file": "conv-password-mention-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Dutch note from a person about the cabin's wifi password (wachtwoord), not a reply: still a conversation (GKM-017 weakness).",
+      "language": "nl",
+      "purpose": "conversation",
+      "risk": "none",
+      "urgency": "normal",
+      "tags": [
+        "keyword-collision",
+        "personal",
+        "unfamiliar-sender"
+      ],
+      "file": "conv-password-mention-nl.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
       "description": "German reply; RFC 2047 Q-encoded ISO-8859-1 subject and a Latin-1 quoted-printable body.",
       "language": "de",
       "purpose": "conversation",
@@ -344,7 +401,7 @@
       "language": "en",
       "purpose": "transaction",
       "risk": "none",
-      "urgency": "normal",
+      "urgency": "low",
       "tags": [
         "malformed-mime",
         "missing-closing-boundary",
@@ -676,6 +733,27 @@
       "duplicateGroup": null
     },
     {
+      "description": "Campaign whose links show the sender's own site but go through its mailing service's click tracker (GKM-017 weakness).",
+      "language": "en",
+      "purpose": "promotion",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "promotion",
+        "click-tracker",
+        "list-id",
+        "list-unsubscribe-post",
+        "html-only"
+      ],
+      "file": "promo-click-tracker-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
       "description": "Greek seasonal sale.",
       "language": "el",
       "purpose": "promotion",
@@ -762,6 +840,25 @@
         "tracking-pixel"
       ],
       "file": "promo-sale-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
+      "description": "Campaign saying \"your order\" and \"20% off\" with no order number: a promotion, not a receipt (GKM-017 weakness).",
+      "language": "en",
+      "purpose": "promotion",
+      "risk": "none",
+      "urgency": "low",
+      "tags": [
+        "keyword-collision",
+        "promotion",
+        "list-unsubscribe"
+      ],
+      "file": "promo-your-order-en.eml",
       "parse": {
         "outcome": "ok",
         "warnings": []
@@ -859,6 +956,27 @@
       },
       "providerVerdict": null,
       "duplicateGroup": null
+    },
+    {
+      "description": "Vague junk with no list headers that the provider filed in its Junk folder: the folder is the verdict.",
+      "language": "en",
+      "purpose": "promotion",
+      "risk": "spam",
+      "urgency": "low",
+      "tags": [
+        "spam",
+        "junk-folder"
+      ],
+      "file": "spam-junk-folder-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null,
+      "providerFolders": [
+        "Junk"
+      ]
     },
     {
       "description": "Advance-fee lottery spam with no provider verdict; content alone.",
@@ -996,7 +1114,7 @@
       "language": "de",
       "purpose": "transaction",
       "risk": "none",
-      "urgency": "normal",
+      "urgency": "low",
       "tags": [
         "order",
         "rfc2047"
@@ -1014,7 +1132,7 @@
       "language": "ja",
       "purpose": "transaction",
       "risk": "none",
-      "urgency": "normal",
+      "urgency": "low",
       "tags": [
         "order",
         "non-latin",
@@ -1030,11 +1148,29 @@
       "duplicateGroup": null
     },
     {
+      "description": "A failed card payment that needs doing now: an actionable transaction with high urgency (Focused).",
+      "language": "en",
+      "purpose": "transaction",
+      "risk": "none",
+      "urgency": "high",
+      "tags": [
+        "payment-failed",
+        "actionable"
+      ],
+      "file": "txn-payment-failed-en.eml",
+      "parse": {
+        "outcome": "ok",
+        "warnings": []
+      },
+      "providerVerdict": null,
+      "duplicateGroup": null
+    },
+    {
       "description": "Auto-generated subscription payment receipt; Auto-Submitted must not demote it to a notification.",
       "language": "en",
       "purpose": "transaction",
       "risk": "none",
-      "urgency": "normal",
+      "urgency": "low",
       "tags": [
         "receipt",
         "auto-submitted"
@@ -1052,7 +1188,7 @@
       "language": "en",
       "purpose": "transaction",
       "risk": "none",
-      "urgency": "normal",
+      "urgency": "low",
       "tags": [
         "receipt"
       ],
@@ -1069,7 +1205,7 @@
       "language": "en",
       "purpose": "transaction",
       "risk": "none",
-      "urgency": "normal",
+      "urgency": "low",
       "tags": [
         "receipt",
         "receipt-with-offer",

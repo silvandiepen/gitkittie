@@ -1,8 +1,7 @@
 import Foundation
 
 /// The classifier's domain heuristics for the reader's link and sender warnings (GKM-012), so
-/// both use one definition of "organisation domain" and "lookalike". Provisional in the same
-/// way as `DomainHeuristics`: the organisation domain needs the Public Suffix List.
+/// both use one definition of "organisation domain" (the Public Suffix List) and "lookalike".
 public enum DomainCheck {
     /// The domain of an address, lowercased (`shop.example.com` for `a@shop.example.com`).
     public static func domain(ofAddress address: String) -> String? {
@@ -19,5 +18,10 @@ public enum DomainCheck {
     /// Exactly the same organisation is not a lookalike.
     public static func lookalikeTarget(ofHost host: String, trusted: Set<String>) -> String? {
         DomainHeuristics.lookalikeTarget(of: DomainHeuristics.organisationDomain(host), trusted: trusted)
+    }
+
+    /// True for a host that is itself a public suffix (`co.uk`): no organisation owns it.
+    public static func isPublicSuffix(_ host: String) -> Bool {
+        DomainHeuristics.isPublicSuffix(host)
     }
 }

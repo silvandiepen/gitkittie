@@ -73,6 +73,7 @@ struct MessageCard: View {
             ForEach(sender?.warnings ?? [], id: \.self) { warning in
                 Notice(systemImage: "exclamationmark.shield", tint: .orange, text: warning.message)
             }
+            ClassificationPanel(message: message)
         }
     }
 

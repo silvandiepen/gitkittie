@@ -58,8 +58,16 @@ public enum StructureFlag: String, Codable, Sendable {
 public struct ProviderSignals: Sendable, Equatable {
     public enum Verdict: String, Codable, Sendable { case spam, phishing, notSpam }
     public var verdict: Verdict?
+    /// Labels or keywords the provider set (`$Junk`, a Gmail label).
     public var labels: [String]
-    public init(verdict: Verdict? = nil, labels: [String] = []) { self.verdict = verdict; self.labels = labels }
+    /// The provider folders the message is in (`Junk`, `[Gmail]/Spam`): a junk folder is the
+    /// provider's verdict.
+    public var folders: [String]
+    public init(verdict: Verdict? = nil, labels: [String] = [], folders: [String] = []) {
+        self.verdict = verdict
+        self.labels = labels
+        self.folders = folders
+    }
 }
 
 /// What the classifier knows about the mailbox and what the user decided (step 3).

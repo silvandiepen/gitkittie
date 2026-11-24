@@ -25,6 +25,8 @@ Device-local state lives outside it, in the app's Application Support container,
     <Application Support>/Mail/index.sqlite
     <Application Support>/Mail/state/<account-id>/   (sync cursors, UIDVALIDITY, IDLE state)
     <Application Support>/Mail/cache/                (downloaded bodies and attachments not pinned)
+    <Application Support>/Mail/metadata/classification.json   (your corrections and rules, GKM-017; to CloudKit with GKM-026)
+    <Application Support>/Mail/preferences/          (remote images, notifications)
 
 Each device has its own position at each provider, so sync cursors are per device; in a shared folder two devices would overwrite each other's. The index is rebuilt from the folder, so losing it costs time, not data. Keeping both out of the folder means pointing GitKittie Folder, iCloud Drive or Git at `Mail/` can never commit an index on every change or mix two devices' cursors.
 

@@ -72,6 +72,8 @@ final class SQLiteDatabase {
 
     /// The rowid of the last row inserted on this connection.
     var lastInsertRowID: Int64 { sqlite3_last_insert_rowid(handle) }
+    /// Rows the last statement inserted, updated or deleted.
+    var changes: Int { Int(sqlite3_changes(handle)) }
 
     func setUserVersion(_ version: Int) throws { try execute("PRAGMA user_version = \(version)") }
 

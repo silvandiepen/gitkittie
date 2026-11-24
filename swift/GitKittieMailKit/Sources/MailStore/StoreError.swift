@@ -14,6 +14,8 @@ public enum MailStoreError: Error, Equatable, CustomStringConvertible {
     case messageNotFound(String)
     /// The folder was written by a newer version of the app than this one.
     case unsupportedLayoutVersion(Int)
+    /// Your classification corrections were written by a newer version of the app (GKM-017).
+    case unsupportedMetadataVersion(Int)
     /// A file system call failed.
     case io(operation: String, path: String, code: Int32)
     /// SQLite reported an error.
@@ -35,6 +37,7 @@ public enum MailStoreError: Error, Equatable, CustomStringConvertible {
         case .unparseableMessage(let why): return "Not a readable message: \(why)"
         case .messageNotFound(let id): return "No message \(id)"
         case .unsupportedLayoutVersion(let v): return "The mail folder uses layout version \(v), newer than this app understands."
+        case .unsupportedMetadataVersion(let v): return "Your classification corrections use version \(v), newer than this app understands."
         case .io(let op, let path, let code): return "\(op) failed for \(path): \(String(cString: strerror(code)))"
         case .sqlite(let code, let message): return "SQLite error \(code): \(message)"
         case .spaceNotFound(let id): return "No space \(id)"
