@@ -114,7 +114,7 @@ extension AppModel {
     /// The sidebar's line for an account's sync.
     func syncStatus(_ id: MailAccountID) -> String? {
         guard let account = accounts.first(where: { $0.id == id }) else { return nil }
-        guard account.connection != nil else { return "Not connected · mail kept on this Mac" }
+        guard account.connection != nil else { return "Not connected · mail kept on \(DeviceWords.this)" }
         let lines = [SyncStatusText.line(sync.progress[id]), ActionStatusText.line(sync.replay[id])].compactMap { $0 }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }

@@ -27,6 +27,9 @@ targets:
     platform: macOS
     sources:
       - path: GitMail
+      # The UI-free app model (AppModel, the browser, accounts, sending, spaces, …), shared
+      # with the iPhone and iPad app (GKM-027, MAIL-067).
+      - path: ../../swift/MailAppModel
       # The colours every GitKittie app shares.
       - path: ../../swift/GitKittieUI
     dependencies:
@@ -143,8 +146,10 @@ targets:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: GitMail/Models
+      - path: ../../swift/MailAppModel
       - path: Tests
+      # The local GreenMail helper the iPhone app's tests share.
+      - path: ../../swift/MailAppTestSupport
       # The recording HTTP server the unsubscribe tests share with the mail core's.
       - path: ../../swift/GitKittieMailKit/Tests/MailUnsubscribeTests/RecordingHTTPServer.swift
     dependencies:
