@@ -34,6 +34,8 @@ struct SidebarView: View {
                 .tag(SidebarSelection.allMail)
             }
 
+            SendingSidebarSection()
+
             Section("Accounts") {
                 if model.accounts.isEmpty {
                     Text("No accounts yet")

@@ -7,6 +7,10 @@ import Observation
 enum SidebarSelection: Hashable {
     case allMail
     case account(MailAccountID)
+    /// Messages being written (GKM-013).
+    case drafts
+    /// Messages waiting to be sent, or needing a decision (GKM-014).
+    case outbox
 }
 
 /// The single UI-facing state object. It owns the store and turns what the store holds into
@@ -33,6 +37,9 @@ final class AppModel {
     private(set) var selection: SidebarSelection = .allMail
     private(set) var selectedMessageID: MailMessageID?
     private(set) var searchText = ""
+
+    /// Drafts and the outbox; nil until the store is open.
+    private(set) var sending: MailSending?
 
     private let locations: StoreLocations?
     private var store: MailStore?
@@ -62,6 +69,12 @@ final class AppModel {
         do {
             let opened = try await MailStore.open(locations ?? StoreLocations.standard())
             store = opened
+            if sending == nil {
+                let sending = try MailSending(locations: opened.locations, credentials: KeychainCredentials())
+                sending.start()
+                await sending.refreshDrafts()
+                self.sending = sending
+            }
             try await reload()
             phase = .ready
         } catch {
@@ -92,6 +105,12 @@ final class AppModel {
             openMessage = nil
             actionError = String(describing: error)
         }
+    }
+
+    /// The original bytes of a stored message, for Reply and Forward.
+    func originalData(of id: MailMessageID) async throws -> Data {
+        guard let store else { throw MailStoreError.messageNotFound(id.rawValue) }
+        return try await store.originalData(of: id)
     }
 
     /// Makes the search index again from the mail folder.

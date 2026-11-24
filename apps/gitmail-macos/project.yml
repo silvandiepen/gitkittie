@@ -17,6 +17,9 @@ packages:
   # The UI-independent mail core: models, the store, the classifier (MAIL-015).
   GitKittieMailKit:
     path: ../../swift/GitKittieMailKit
+  # The provider adapters and the outbox (MAIL-017; GKM-014).
+  GitKittieMailProviders:
+    path: ../../swift/GitKittieMailProviders
 
 targets:
   GitMail:
@@ -31,6 +34,14 @@ targets:
         product: MailCore
       - package: GitKittieMailKit
         product: MailStore
+      - package: GitKittieMailKit
+        product: MailMIME
+      - package: GitKittieMailKit
+        product: MailCompose
+      - package: GitKittieMailProviders
+        product: MailProvider
+      - package: GitKittieMailProviders
+        product: MailOutbox
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail
@@ -75,6 +86,14 @@ targets:
         product: MailCore
       - package: GitKittieMailKit
         product: MailStore
+      - package: GitKittieMailKit
+        product: MailMIME
+      - package: GitKittieMailKit
+        product: MailCompose
+      - package: GitKittieMailProviders
+        product: MailProvider
+      - package: GitKittieMailProviders
+        product: MailOutbox
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail.tests
