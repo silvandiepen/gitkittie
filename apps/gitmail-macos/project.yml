@@ -63,7 +63,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail
-        # The bundle is GitMail.app; people see "GitKittie Mail" (CFBundleDisplayName), as with GitBud.
+        # The app is Mail.app and shows as "Mail" in the Dock, menu bar and Finder, as Tasks shows as
+        # "Tasks"; GitKittie Mail is the product's name on the site and in the App Store. The Swift
+        # module keeps its GitMail name so imports and tests do not change.
+        PRODUCT_NAME: Mail
+        PRODUCT_MODULE_NAME: GitMail
         # Icon source: project-assets GitKittie/assets/icon_gitmail.svg (the family's construction,
         # lavender field); the PNGs in AppIcon.appiconset are rendered from it.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -88,8 +92,8 @@ targets:
     info:
       path: GitMail/Info.plist
       properties:
-        CFBundleDisplayName: GitKittie Mail
-        CFBundleName: GitKittie Mail
+        CFBundleDisplayName: Mail
+        CFBundleName: Mail
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.productivity

@@ -38,13 +38,16 @@ public struct ParsedMessage: Equatable, Sendable {
     public var headers: [ParsedHeader]
     /// True when an attachment's name had to be rewritten to be safe (a path, control characters).
     public var hasUnsafeAttachmentNames: Bool
+    /// The List-Id (RFC 2919) identifier, lowercased, without its phrase and angle brackets:
+    /// what a space rule matches a mailing list by (GKM-022).
+    public var listID: String?
 
     public var hasHTMLBody: Bool { htmlBody != nil }
 
     public init(messageID: String? = nil, inReplyTo: [String] = [], references: [String] = [],
                 from: [MailAddress] = [], to: [MailAddress] = [], cc: [MailAddress] = [], replyTo: [MailAddress] = [],
                 subject: String? = nil, date: Date? = nil, textBody: String? = nil, htmlBody: String? = nil,
-                attachments: [ParsedAttachment] = [], problems: [String] = [], headers: [ParsedHeader] = [],
+                attachments: [ParsedAttachment] = [], problems: [String] = [], listID: String? = nil, headers: [ParsedHeader] = [],
                 hasUnsafeAttachmentNames: Bool = false) {
         self.messageID = messageID
         self.inReplyTo = inReplyTo
@@ -59,6 +62,7 @@ public struct ParsedMessage: Equatable, Sendable {
         self.htmlBody = htmlBody
         self.attachments = attachments
         self.problems = problems
+        self.listID = listID
         self.headers = headers
         self.hasUnsafeAttachmentNames = hasUnsafeAttachmentNames
     }

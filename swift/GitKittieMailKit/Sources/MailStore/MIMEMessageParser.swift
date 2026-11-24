@@ -41,12 +41,26 @@ public struct MIMEMessageParser: MessageParsing {
             htmlBody: message.htmlBody,
             attachments: attachments,
             problems: message.problems,
+            listID: listIdentifier(message.headers["List-Id"]),
             headers: message.headers.fields.map { ParsedHeader(name: $0.name, value: EncodedWords.decode($0.rawValue)) },
             hasUnsafeAttachmentNames: leaves.contains { part in
                 guard let raw = part.disposition?.parameters["filename"] ?? part.contentType.parameters["name"] else { return false }
                 return isUnsafeFilename(raw)
             }
         )
+    }
+
+    /// `List-Id: Weekly news <news.example.org>` → `news.example.org` (RFC 2919: the identifier
+    /// is the part in angle brackets; a header without them is taken whole). Lowercased; nil
+    /// when empty or implausibly long.
+    static func listIdentifier(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let open = value.lastIndex(of: "<"), let close = value[open...].firstIndex(of: ">") {
+            value = String(value[value.index(after: open)..<close])
+        }
+        value = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return value.isEmpty || value.count > 255 ? nil : value
     }
 
     /// A name that tries to be a path or to hide its extension: separators, a leading dot,

@@ -4,7 +4,8 @@ import SwiftUI
 /// Focused first, then every other category one click away, then All Mail (GKM-018). Focused
 /// shows what asks for attention (unread there) in the accent; the other views show their
 /// unread count quietly; Promotions and Quarantine show how many there are, never as a call to
-/// act. All Mail is always there and always shows everything.
+/// act. All Mail is always there and always shows everything; the attachment library (GKM-023)
+/// follows it.
 struct CategorySidebarSection: View {
     @Environment(AppModel.self) private var model
 
@@ -17,6 +18,7 @@ struct CategorySidebarSection: View {
             CategoryRow(title: "All Mail", systemImage: "tray.full",
                         count: model.totalCount > 0 ? .init(text: "\(model.totalCount)", label: "\(model.totalCount) messages", emphasis: .quiet) : nil)
                 .tag(SidebarSelection.allMail)
+            AttachmentsSidebarRow()
             if let error = model.attention.lastError {
                 Button {
                     model.attention.clearError()

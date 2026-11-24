@@ -189,6 +189,31 @@ final class StoreClassificationTests: XCTestCase {
         }
     }
 
+    // MARK: Index migration
+
+    /// One linear path into schema 4: from 3 (Spaces, GKM-022) the classification tables are
+    /// added in place and the mail is classified in the background; from 1 and 2 the index is
+    /// rebuilt as before. Either way your corrections are kept.
+    func testAnOlderIndexReachesSchemaFourAndKeepsCorrections() async throws {
+        for version in [3, 2, 1] {
+            try? FileManager.default.removeItem(at: root)
+            var store = try await open()
+            let data = try Data(contentsOf: XCTUnwrap(MailFixtures.directory?.appendingPathComponent("promo-sale-en.eml")))
+            let id = try await store.ingest(data, account: account).id
+            try await store.correct(id, purpose: .conversation)
+            try await store.downgradeIndexForTesting(to: version)
+            store = try await open()
+            let count = try await store.messageCount()
+            XCTAssertEqual(count, 1, "version \(version)")
+            let schema = try await store.indexVersionForTesting()
+            XCTAssertEqual(schema, MailIndex.schemaVersion, "version \(version)")
+            try await store.classifyPending()
+            let verdict = try await store.verdict(of: id)
+            XCTAssertEqual(verdict?.classification.purpose, .conversation, "version \(version): the correction survives")
+            XCTAssertEqual(verdict?.home, .focused)
+        }
+    }
+
     // MARK: Read-only
 
     func testClassifyingAndCorrectingNeverTouchesTheProviderStateOrTheMailFolder() async throws {
@@ -411,6 +436,17 @@ private func XCTUnwrapAsync<T>(_ value: T?, _ message: String) throws -> T {
 }
 
 extension MailStore {
+    /// Makes the index look like one an older app left: version 3 without the classification
+    /// tables; versions 1 and 2 simply marked older (they had no way forward but a rebuild).
+    func downgradeIndexForTesting(to version: Int) throws {
+        if version == 3 {
+            try index.database.execute("DROP TABLE message_classes; DROP TABLE correspondents; DROP TABLE authenticated_domains;")
+        }
+        try index.database.setUserVersion(version)
+    }
+
+    func indexVersionForTesting() throws -> Int { try index.database.userVersion }
+
     func dropVerdictsForTesting() throws { try index.database.execute("DELETE FROM message_classes") }
     func markVerdictsAsRuleSetForTesting(_ version: String) throws {
         try index.database.prepare("UPDATE message_classes SET rule_version = ?").run([.text(version)])

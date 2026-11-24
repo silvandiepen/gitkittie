@@ -81,6 +81,7 @@ struct AccountsSidebarSection: View {
         if account.connection != nil {
             Button("Sync Now") { Task { await model.sync.syncNow() } }
         }
+        Button("Export Account…") { Task { await Platform.export(.account(account.id), what: account.displayName, model: model) } }
         Divider()
         Button("Remove Account…") { sheet = .remove(account) }
     }
