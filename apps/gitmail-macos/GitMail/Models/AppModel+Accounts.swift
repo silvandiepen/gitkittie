@@ -132,7 +132,7 @@ extension SidebarSelection {
     /// The account the selection belongs to, if any.
     var account: MailAccountID? {
         switch self {
-        case .allMail, .drafts, .outbox: nil
+        case .allMail, .drafts, .outbox, .space, .attachments: nil
         case .account(let id), .folder(let id, _): id
         }
     }

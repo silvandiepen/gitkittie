@@ -33,13 +33,16 @@ public struct ParsedMessage: Equatable, Sendable {
     public var attachments: [ParsedAttachment]
     /// What was malformed and how the parser recovered; empty for a clean message.
     public var problems: [String]
+    /// The List-Id (RFC 2919) identifier, lowercased, without its phrase and angle brackets:
+    /// what a space rule matches a mailing list by (GKM-022).
+    public var listID: String?
 
     public var hasHTMLBody: Bool { htmlBody != nil }
 
     public init(messageID: String? = nil, inReplyTo: [String] = [], references: [String] = [],
                 from: [MailAddress] = [], to: [MailAddress] = [], cc: [MailAddress] = [], replyTo: [MailAddress] = [],
                 subject: String? = nil, date: Date? = nil, textBody: String? = nil, htmlBody: String? = nil,
-                attachments: [ParsedAttachment] = [], problems: [String] = []) {
+                attachments: [ParsedAttachment] = [], problems: [String] = [], listID: String? = nil) {
         self.messageID = messageID
         self.inReplyTo = inReplyTo
         self.references = references
@@ -53,6 +56,7 @@ public struct ParsedMessage: Equatable, Sendable {
         self.htmlBody = htmlBody
         self.attachments = attachments
         self.problems = problems
+        self.listID = listID
     }
 }
 

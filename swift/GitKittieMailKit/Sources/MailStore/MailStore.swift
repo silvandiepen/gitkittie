@@ -80,7 +80,7 @@ public actor MailStore {
 
     private func finishOpening() throws {
         let journalWasReadable = try recoverInterruptedWrites()
-        if index.needsRebuild || !journalWasReadable { try rebuildIndex() }
+        if index.needsRebuild || !journalWasReadable { try rebuildIndex() } else { try refreshSpaceIndex() }
     }
 
     // MARK: - Writing
@@ -257,6 +257,23 @@ public actor MailStore {
                              parseProblems: parsed.problems)
     }
 
+    /// Several messages' summaries by id, in the order given; ids not stored are left out.
+    public func summaries(ids: [MailMessageID]) throws -> [MessageSummary] {
+        try index.summaries(ids: ids)
+    }
+
+    // MARK: Attachment library (GKM-023)
+
+    /// Attachments across accounts, newest message first (MAIL-045). Reads the index only.
+    public func attachments(_ query: AttachmentQuery = AttachmentQuery(), limit: Int = 200, offset: Int = 0) throws -> [AttachmentItem] {
+        try index.attachments(matching: query, limit: limit, offset: offset)
+    }
+
+    /// How many attachments match a library query, and their size in bytes.
+    public func attachmentTotals(_ query: AttachmentQuery = AttachmentQuery()) throws -> (count: Int, bytes: Int) {
+        try index.attachmentTotals(matching: query)
+    }
+
     /// The original bytes, checked against the hash recorded when they were stored.
     public func originalData(of id: MailMessageID) throws -> Data {
         let stored = try message(id)
@@ -387,6 +404,8 @@ public actor MailStore {
             }
         }
         try restoreDeviceState()
+        // Space membership is folder content (`Mail/spaces/`); its copy in the index is rebuilt too.
+        try refreshSpaceIndex()
     }
 
     /// Folders and flags are device state (the sync's own database), not folder content: after
@@ -513,7 +532,7 @@ public actor MailStore {
         return calendar.date(from: DateComponents(year: year, month: month, day: 1))
     }
 
-    private func url(of id: MailMessageID) throws -> URL {
+    func url(of id: MailMessageID) throws -> URL {
         guard let path = try index.path(of: id), let url = safeFile(path) else { throw MailStoreError.messageNotFound(id.rawValue) }
         return url
     }

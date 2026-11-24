@@ -123,7 +123,7 @@ struct SearchFilterBar: View {
     }
 }
 
-private struct Chip: View {
+struct Chip: View {
     let title: String
     let systemImage: String
     let isActive: Bool
