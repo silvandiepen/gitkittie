@@ -7,6 +7,7 @@ In development: the app shell (GKM-009), the mail store (GKM-005), the message l
 - Generate: `npm run gitmail:generate` (XcodeGen; never hand-edit the `.xcodeproj`).
 - App model tests (no app launch): `npm run gitmail:test`.
 - Mail core: `cd swift/GitKittieMailKit && swift test`.
+- iOS (GKM-025, MAIL-050..053): both Mail packages must also pass on the iOS Simulator — `xcodebuild -scheme GitKittieMailKit-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' test` (and `GitKittieMailProviders-Package`; the integration tests reach the local test server from the simulator). CI: `.github/workflows/swift-mail-ios.yml`. Keep platform code behind `#if os` only where APIs differ; iOS extracts attachment text in process (`InProcessTextExtractor`). See Architecture.md, "iOS and iPadOS".
 - `GitMail/Models` is UI-free and built into `GitMailTests` too; views live in `GitMail/Views`, the shared navy `Theme` comes from `swift/GitKittieUI`.
 - `MailStore` reads mail with MailMIME (`MIMEMessageParser`); index schema 3 holds threads (MAIL-030), flags, folders, attachment text, List-Id, attachment names and sizes, and space membership.
 - Reader (GKM-012): `MailHTML` sanitizes, `MailReader` checks links and senders, `MailReaderWeb` is the locked-down web view (MAIL-032). Views in `GitMail/Views/{List,Reader,Search}`; list, thread and search state in `GitMail/Models/MailBrowser.swift`.
