@@ -20,6 +20,7 @@ struct CategorySidebarSection: View {
                 .tag(SidebarSelection.allMail)
             AttachmentsSidebarRow()
             SendersSidebarRow()
+            CleanupSidebarRow()
             if let error = model.attention.lastError {
                 Button {
                     model.attention.clearError()

@@ -32,7 +32,7 @@ struct MailWindow: View {
             ContentColumn(selection: model.selection)
                 .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
         } detail: {
-            DetailColumn(showsSender: model.selection == .senders)
+            DetailColumn(selection: model.selection)
         }
     }
 
@@ -106,17 +106,23 @@ private struct ContentColumn: View {
         case .attachments: AttachmentLibraryView(space: nil).navigationTitle("Attachments")
         case .space(let id): SpaceView(space: id)
         case .senders: SendersListView()
+        case .cleanup: CleanupDashboardView()
         default: MessageListView()
         }
     }
 }
 
-/// The reader, or the selected sender's page in the Senders view (GKM-019).
+/// The reader, the selected sender's page in the Senders view (GKM-019), or the cleanup
+/// preview (GKM-021).
 private struct DetailColumn: View {
-    let showsSender: Bool
+    let selection: SidebarSelection
 
     var body: some View {
-        if showsSender { SenderDetailView() } else { ReaderView() }
+        switch selection {
+        case .senders: SenderDetailView()
+        case .cleanup: CleanupDetailView()
+        default: ReaderView()
+        }
     }
 }
 

@@ -23,11 +23,13 @@ enum SidebarSelection: Hashable {
     case attachments
     /// Senders and lists, their rules and unsubscribe (GKM-019, GKM-020).
     case senders
+    /// The cleanup dashboard (GKM-021).
+    case cleanup
 
     /// The mail the list shows for it (drafts and the outbox have their own views).
     var scope: MailScope {
         switch self {
-        case .allMail, .drafts, .outbox, .attachments, .senders: .allMail
+        case .allMail, .drafts, .outbox, .attachments, .senders, .cleanup: .allMail
         case .category(let category): .category(category)
         case .space(let id): .space(id)
         case .account(let id): .account(id)
@@ -76,6 +78,8 @@ final class AppModel {
     let actions: MailActions
     /// Senders and lists, their rules, and unsubscribe (GKM-019, GKM-020; Models/Senders).
     let senders: SendersModel
+    /// The cleanup dashboard: analysis and batch previews (GKM-021).
+    let cleanup: CleanupModel
 
     /// The message the reader is focused on (the newest expanded one in the open thread):
     /// what Reply, Reply All and Forward answer.
@@ -116,6 +120,7 @@ final class AppModel {
         self.browser = browser
         let actions = MailActions(sync: sync, browser: browser)
         self.actions = actions
+        self.cleanup = CleanupModel(actions: actions, browser: browser)
         self.attention = MailAttention(poster: notifications)
         self.senders = SendersModel(actions: actions, browser: browser, unsubscribe: UnsubscribeModel())
         sync.onStoreChanged = { [weak self] in await self?.refreshAfterSync() }
@@ -157,6 +162,7 @@ final class AppModel {
             store = opened
             browser.attach(opened)
             actions.attach(opened)
+            cleanup.attach(opened)
             spaces.attach(opened)
             library.attach(opened, browser: browser)
             await senders.attach(opened)
@@ -290,7 +296,7 @@ final class AppModel {
         folders = found
         await spaces.refresh(applyRules: true)
         let stillThere: Bool = switch selection {
-        case .allMail, .category, .drafts, .outbox, .attachments, .senders: true
+        case .allMail, .category, .drafts, .outbox, .attachments, .senders, .cleanup: true
         case .space(let id): spaces.space(id) != nil
         case .account(let id): accounts.contains { $0.id == id }
         case .folder(let id, let name):
