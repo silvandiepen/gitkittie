@@ -8,8 +8,11 @@ import MailCore
 /// Losing it costs a reconciliation pass (Message-ID and fingerprint candidates from the
 /// index), not mail.
 final class RemoteMapping {
-    static let schemaVersion = 2
-    private let database: SQLiteDatabase
+    /// 1: mailboxes and locations (GKM-005). 2: the provider flags this device last saw
+    /// (GKM-012). 3: the sync's folder list with a cursor per folder, the rest of the flags
+    /// (answered, draft, keywords) and counters (GKM-011; RemoteMapping+Sync.swift).
+    static let schemaVersion = 3
+    let database: SQLiteDatabase
 
     init(url: URL) throws {
         database = try SQLiteDatabase(url: url)
@@ -35,6 +38,10 @@ final class RemoteMapping {
                 // 1 → 2: the provider flags this device last saw (GKM-012).
                 try database.execute("CREATE TABLE flags (local_id TEXT PRIMARY KEY, seen INTEGER NOT NULL, flagged INTEGER NOT NULL)")
             }
+            if version < 3 {
+                // 2 → 3: the sync's folders, cursors and counters, and the remaining flags (GKM-011).
+                try migrateToSyncState()
+            }
             try database.setUserVersion(Self.schemaVersion)
         }
     }
@@ -45,7 +52,11 @@ final class RemoteMapping {
     }
 
     func setFlags(_ flags: MessageFlags, for id: MailMessageID) throws {
-        try database.prepare("INSERT OR REPLACE INTO flags (local_id, seen, flagged) VALUES (?, ?, ?)")
+        // An upsert, so the flags only the sync knows (answered, draft, keywords; schema 3) stay.
+        try database.prepare("""
+            INSERT INTO flags (local_id, seen, flagged) VALUES (?, ?, ?)
+            ON CONFLICT(local_id) DO UPDATE SET seen = excluded.seen, flagged = excluded.flagged
+            """)
             .run([.text(id.rawValue), .int(flags.seen ? 1 : 0), .int(flags.flagged ? 1 : 0)])
     }
 

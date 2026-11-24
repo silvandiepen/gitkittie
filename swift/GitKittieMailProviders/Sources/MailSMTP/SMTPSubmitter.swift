@@ -52,6 +52,26 @@ public struct SMTPSubmitter: MailSubmitter {
         }
         return outcome
     }
+
+    /// Connects, starts TLS, signs in and says goodbye, without sending anything: how account
+    /// setup checks the outgoing server before saving (GKM-010). Throws
+    /// ``MailProviderError/authenticationFailed(_:)`` when the server refuses the credentials,
+    /// `connectionFailed` when it cannot be reached or its certificate is not trusted, and
+    /// `unsupported` when it offers no STARTTLS or no usable sign-in.
+    public func verifySignIn() async throws {
+        let transaction = SMTPTransaction(submitter: self)
+        defer { transaction.channel?.close(promise: nil) }
+        do {
+            try await transaction.handshake()
+            await transaction.quit()
+            log.info("smtp", "sign-in check passed for \(endpoint)")
+        } catch let failure as SMTPFailure {
+            await transaction.quit()
+            log.warning("smtp", "sign-in check failed: \(failure.reason)")
+            if failure.isAuthentication { throw MailProviderError.authenticationFailed(failure.reason) }
+            throw failure.permanent ? MailProviderError.unsupported(failure.reason) : MailProviderError.commandFailed(failure.reason)
+        }
+    }
 }
 
 /// Where a transaction failed, which decides the outcome.
@@ -64,6 +84,8 @@ enum Phase {
 struct SMTPFailure: Error {
     var reason: String
     var permanent: Bool
+    /// The server refused the credentials (not: offered no mechanism).
+    var isAuthentication = false
 }
 
 final class SMTPTransaction {
@@ -111,25 +133,7 @@ final class SMTPTransaction {
         guard !message.recipients.isEmpty else { throw SMTPFailure(reason: "no recipients", permanent: true) }
         for recipient in message.recipients { try Self.validate(address: recipient) }
 
-        try await connect()
-        let greeting = try await expect(220, "greeting")
-        log.debug("smtp", "← \(greeting.code) greeting")
-        try await ehlo()
-
-        if endpoint.security == .startTLS {
-            guard extensions["STARTTLS"] != nil else {
-                // Never fall back to plaintext: that is exactly what a downgrade attack wants.
-                throw SMTPFailure(reason: "the server does not offer STARTTLS; refusing to continue without TLS", permanent: true)
-            }
-            try await setExpectingUpgrade()
-            try await send("STARTTLS")
-            _ = try await expect(220, "STARTTLS")
-            try await installTLS()
-            extensions = [:]
-            try await ehlo()
-        }
-
-        try await authenticate()
+        try await handshake()
 
         let payload = Self.dotStuffed(message.rawMessage)
         if let limit = extensions["SIZE"].flatMap({ Int($0) }), limit > 0, message.rawMessage.count > limit {
@@ -186,6 +190,31 @@ final class SMTPTransaction {
         return final
     }
 
+    /// Connect, greeting, EHLO, STARTTLS when asked for, sign-in.
+    func handshake() async throws {
+        let endpoint = submitter.endpoint
+        try MailNet.checkPlaintextAllowed(endpoint)
+        try await connect()
+        let greeting = try await expect(220, "greeting")
+        log.debug("smtp", "← \(greeting.code) greeting")
+        try await ehlo()
+
+        if endpoint.security == .startTLS {
+            guard extensions["STARTTLS"] != nil else {
+                // Never fall back to plaintext: that is exactly what a downgrade attack wants.
+                throw SMTPFailure(reason: "the server does not offer STARTTLS; refusing to continue without TLS", permanent: true)
+            }
+            try await setExpectingUpgrade()
+            try await send("STARTTLS")
+            _ = try await expect(220, "STARTTLS")
+            try await installTLS()
+            extensions = [:]
+            try await ehlo()
+        }
+
+        try await authenticate()
+    }
+
     private func ehlo() async throws {
         try await send("EHLO \(submitter.clientName)")
         let reply = try await nextReply("EHLO")
@@ -231,12 +260,12 @@ final class SMTPTransaction {
             reply = try await nextReply("AUTH")
         }
         guard reply.code == 235 else {
-            throw SMTPFailure(reason: "authentication failed: \(reply)", permanent: !reply.isTransientFailure)
+            throw SMTPFailure(reason: "authentication failed: \(reply)", permanent: !reply.isTransientFailure, isAuthentication: true)
         }
         log.debug("smtp", "authenticated")
     }
 
-    private func quit() async {
+    func quit() async {
         guard let channel, channel.isActive else { return }
         try? await send("QUIT")
         _ = try? await nextReply("QUIT", timeout: .seconds(5))

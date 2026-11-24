@@ -1,6 +1,8 @@
 #!/usr/bin/env zsh
 # Builds GitKittie Mail and runs its unit tests without launching the app: the test bundle
-# carries the app model's sources and runs under xctest, not inside GitMail.app.
+# carries the app model's sources and runs under xctest, not inside GitMail.app. The account
+# tests use the local test mail server when it runs (swift/GitKittieMailProviders/scripts/
+# test-mail-server.sh start) and skip otherwise.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -22,4 +24,6 @@ env -i \
   TMPDIR="${TMPDIR:-/tmp}" \
   PATH="/usr/bin:/bin:/usr/sbin:/sbin:$DEVELOPER_DIR/usr/bin" \
   DEVELOPER_DIR="$DEVELOPER_DIR" \
+  GKM_TEST_MAIL_SERVER_DIR="${GKM_TEST_MAIL_SERVER_DIR:-}" \
+  GKM_REQUIRE_TEST_MAIL_SERVER="${GKM_REQUIRE_TEST_MAIL_SERVER:-}" \
   xcrun xctest "$TEST_BUNDLE"

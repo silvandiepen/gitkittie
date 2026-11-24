@@ -4,6 +4,7 @@ import SwiftUI
 /// All Mail, then the accounts. Folders come from the provider and appear after a sync.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
+    @State private var sheet: AccountSheet?
 
     private var selection: Binding<SidebarSelection?> {
         Binding(
@@ -36,38 +37,19 @@ struct SidebarView: View {
 
             SendingSidebarSection()
 
-            Section("Accounts") {
-                if model.accounts.isEmpty {
-                    Text("No accounts yet")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 2)
-                        .selectionDisabled()
-                }
-                ForEach(model.accounts) { account in
-                    AccountRow(account: account)
-                        .tag(SidebarSelection.account(account.id))
-                    ForEach(model.folders[account.id] ?? [], id: \.self) { folder in
-                        Label(folder, systemImage: folder.caseInsensitiveCompare("INBOX") == .orderedSame ? "tray" : "folder")
-                            .font(.callout)
-                            .padding(.leading, 30)
-                            .tag(SidebarSelection.folder(account.id, folder))
-                    }
-                }
-            }
+            AccountsSidebarSection(sheet: $sheet)
         }
         .scrollContentBackground(.hidden)
         .background(Theme.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
+        .sheet(item: $sheet) { $0.view }
     }
 
     /// What to add on the left, the app's settings on the right — as in Tasks.
     private var footer: some View {
         HStack {
             Menu {
-                Button("Add Account…", systemImage: "at") {}
-                    .disabled(true)
-                Text("Adding an account isn’t available in this build yet.")
+                Button("Add Account…", systemImage: "at") { sheet = .add }
             } label: {
                 Label("Add", systemImage: "plus").font(.callout)
             }
@@ -81,6 +63,14 @@ struct SidebarView: View {
             Menu {
                 if let folder = model.mailFolder {
                     Button("Show Mail Folder in Finder", systemImage: "folder") { Platform.reveal(folder) }
+                }
+                Button("Use Another Mail Folder…", systemImage: "folder.badge.gearshape") { chooseMailFolder() }
+                if !model.usesDefaultMailFolder {
+                    Button("Use the Default Mail Folder", systemImage: "arrow.uturn.backward") { Task { await model.useMailFolder(nil) } }
+                }
+                Divider()
+                if model.sync.isRunning {
+                    Button("Sync Now", systemImage: "arrow.triangle.2.circlepath") { Task { await model.sync.syncNow() } }
                 }
                 Button("Rebuild Search Index", systemImage: "arrow.clockwise") { Task { await model.rebuildIndex() } }
                     .disabled(model.isRebuildingIndex)
@@ -97,25 +87,14 @@ struct SidebarView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
     }
-}
 
-private struct AccountRow: View {
-    let account: MailAccount
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "person.crop.circle")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .frame(width: 20)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(account.displayName).font(.body).lineLimit(1)
-                if !account.address.isEmpty, account.address != account.displayName {
-                    Text(account.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-            }
+    /// Shows another folder's mail. The current folder stays as it is.
+    private func chooseMailFolder() {
+        Task {
+            guard let url = await Platform.chooseFolder(
+                title: "Use Another Mail Folder", prompt: "Use Folder",
+                message: "GitKittie Mail shows the accounts and mail in the folder you choose. The current folder stays as it is.") else { return }
+            await model.useMailFolder(url)
         }
-        .padding(.vertical, 3)
     }
 }

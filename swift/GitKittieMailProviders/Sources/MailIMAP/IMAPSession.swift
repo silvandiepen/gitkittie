@@ -9,8 +9,8 @@ import NIOIMAP
 /// its UIDVALIDITY still matches: a UID from before a reset is never applied to whatever
 /// message has that UID now.
 public final class IMAPSession: MailboxSession {
-    private let wire: IMAPWire
-    private let log: MailLog
+    let wire: IMAPWire
+    let log: MailLog
     public private(set) var capabilities: ProviderCapabilities
     private var rawCapabilities: Set<String>
     private var selected: SelectedFolder?
@@ -127,7 +127,7 @@ public final class IMAPSession: MailboxSession {
     }
 
     @discardableResult
-    private func select(_ folder: String, refresh: Bool = false) async throws -> SelectedFolder {
+    func select(_ folder: String, refresh: Bool = false) async throws -> SelectedFolder {
         if !refresh, let selected, selected.id == folder { return selected }
         selected = nil
         let result = try await wire.run(.select(Self.mailbox(folder), []), logAs: "SELECT \(folder)")
@@ -164,7 +164,7 @@ public final class IMAPSession: MailboxSession {
     }
 
     /// Selects the folder of `ids` and makes sure they still refer to the same messages.
-    private func selectForMessages(_ ids: [RemoteMessageID]) async throws -> (folder: String, uids: [UInt32]) {
+    func selectForMessages(_ ids: [RemoteMessageID]) async throws -> (folder: String, uids: [UInt32]) {
         guard let first = ids.first else { throw MailProviderError.commandFailed("no messages given") }
         guard ids.allSatisfy({ $0.folder == first.folder && $0.uidValidity == first.uidValidity }) else {
             throw MailProviderError.commandFailed("messages from different folders in one operation")
@@ -180,28 +180,22 @@ public final class IMAPSession: MailboxSession {
     // MARK: - Messages
 
     public func changes(in folder: String, since cursor: SyncCursor?) async throws -> FolderChanges {
-        let state = try await select(folder, refresh: true)
-        let status = state.status
+        let listing = try await listing(of: folder)
+        let status = listing.status
         let isReset = cursor == nil || cursor?.uidValidity != status.uidValidity || cursor?.folder != folder
         let after = isReset ? 0 : cursor!.highestFetchedUID
         if isReset, let cursor {
             log.warning("imap", "\(folder): UIDVALIDITY changed from \(cursor.uidValidity) to \(status.uidValidity); full resync")
         }
+        // Summaries in batches: a folder with 100,000 messages is 200 commands of 500, not one
+        // response the size of the folder's metadata held in memory at once.
+        let newUIDs = listing.uids.filter { $0 > after }
         var summaries: [RemoteMessageSummary] = []
-        let nothingNew = status.messageCount == 0 || (status.uidNext.map { $0 <= after + 1 } ?? false)
-        if !nothingNew {
-            // `n:*` always includes the highest UID even when it is below n (RFC 3501 6.4.8), so
-            // filter on the UID afterwards.
-            let range = UIDRange(UID(rawValue: after + 1)...)
-            let result = try await wire.run(
-                .uidFetch(.set(UIDSetNonEmpty(range: range)), [.uid, .flags, .rfc822Size, .internalDate, .envelope], []),
-                logAs: "UID FETCH \(after + 1):* (summary) in \(folder)"
-            )
-            try Self.check(result, "UID FETCH")
-            summaries = result.fetches.compactMap { Self.summary(from: $0, folder: folder, uidValidity: status.uidValidity) }
-                .filter { $0.id.uid > after }
-                .sorted { $0.id.uid < $1.id.uid }
+        for start in stride(from: 0, to: newUIDs.count, by: Self.summaryBatchSize) {
+            let batch = newUIDs[start..<min(start + Self.summaryBatchSize, newUIDs.count)]
+            summaries += try await self.summaries(of: batch.map { RemoteMessageID(folder: folder, uidValidity: status.uidValidity, uid: $0) })
         }
+        summaries.sort { $0.id.uid < $1.id.uid }
         let highest = max(after, summaries.last?.id.uid ?? 0)
         return FolderChanges(
             isReset: isReset,
@@ -212,14 +206,12 @@ public final class IMAPSession: MailboxSession {
     }
 
     public func flags(in folder: String) async throws -> [RemoteMessageID: MessageFlags] {
-        let state = try await select(folder, refresh: true)
-        guard state.status.messageCount > 0 else { return [:] }
-        let result = try await wire.run(.uidFetch(.set(.all), [.uid, .flags], []), logAs: "UID FETCH 1:* (FLAGS) in \(folder)")
-        try Self.check(result, "UID FETCH FLAGS")
+        let listing = try await listing(of: folder)
         var flags: [RemoteMessageID: MessageFlags] = [:]
-        for fetch in result.fetches {
-            guard let summary = Self.summary(from: fetch, folder: folder, uidValidity: state.status.uidValidity) else { continue }
-            flags[summary.id] = summary.flags
+        for start in stride(from: 0, to: listing.uids.count, by: Self.summaryBatchSize) {
+            let batch = listing.uids[start..<min(start + Self.summaryBatchSize, listing.uids.count)]
+            let ids = batch.map { RemoteMessageID(folder: folder, uidValidity: listing.status.uidValidity, uid: $0) }
+            flags.merge(try await self.flags(of: ids)) { _, new in new }
         }
         return flags
     }

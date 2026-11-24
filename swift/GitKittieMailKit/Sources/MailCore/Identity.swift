@@ -58,11 +58,16 @@ public struct MailAccount: Hashable, Codable, Sendable, Identifiable {
     public var id: MailAccountID
     public var displayName: String
     public var address: String
+    /// The servers it syncs with. `nil` for an account whose mail was kept after it was
+    /// disconnected, or a folder copied in by hand: its mail is there, nothing syncs it.
+    public var connection: MailConnectionSettings?
 
-    public init(id: MailAccountID = MailAccountID(), displayName: String, address: String) {
+    public init(id: MailAccountID = MailAccountID(), displayName: String, address: String,
+                connection: MailConnectionSettings? = nil) {
         self.id = id
         self.displayName = displayName
         self.address = address
+        self.connection = connection
     }
 }
 

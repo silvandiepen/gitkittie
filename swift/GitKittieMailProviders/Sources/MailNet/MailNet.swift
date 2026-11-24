@@ -21,6 +21,10 @@ public enum MailNet {
         var configuration = TLSConfiguration.makeClientConfiguration()
         configuration.minimumTLSVersion = .tlsv12
         configuration.certificateVerification = .fullVerification
+        // Closing waits at most a second for the server's close_notify (default 5 s). Every
+        // exchange is complete by then (LOGOUT, QUIT, or a sync that was stopped), and stopping
+        // a sync or quitting the app must not hang on a server that never answers it.
+        configuration.shutdownTimeout = .seconds(1)
         switch trust {
         case .system:
             configuration.trustRoots = .default

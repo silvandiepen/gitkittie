@@ -10,14 +10,14 @@ settings:
   base:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: 1
-    SWIFT_VERSION: "5.0"
+    SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: "38MGF83L2L"
 
 packages:
   # The UI-independent mail core: models, the store, the classifier (MAIL-015).
   GitKittieMailKit:
     path: ../../swift/GitKittieMailKit
-  # The provider adapters and the outbox (MAIL-017; GKM-014).
+  # The provider adapters, the outbox (MAIL-017; GKM-014), account setup and sync (GKM-010, GKM-011).
   GitKittieMailProviders:
     path: ../../swift/GitKittieMailProviders
 
@@ -53,6 +53,10 @@ targets:
         product: MailExtraction
       # Attachment text for search runs in this sandboxed helper, never in the app (ThreatModel §4).
       - target: GitMailExtractor
+      - package: GitKittieMailProviders
+        product: MailAccounts
+      - package: GitKittieMailProviders
+        product: MailSync
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail
@@ -70,11 +74,14 @@ targets:
         com.apple.security.app-sandbox: true
         # IMAP and SMTP over TLS (GKM-010, GKM-011).
         com.apple.security.network.client: true
-        # File ▸ Import Messages… reads the .eml files and folders the user picks (GKM-012).
-        com.apple.security.files.user-selected.read-only: true
         # Account passwords and tokens, in this app's own keychain group (GKM-010).
         keychain-access-groups:
           - $(AppIdentifierPrefix)app.hakobs.gitmail
+        # Files and folders the person picks: File ▸ Import Messages… reads .eml files (GKM-012);
+        # a chosen mail folder, remembered across launches (MAIL-021, GKM-010), and the folder an
+        # account's mail is exported to when it is removed, are written. Read-write covers both.
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
     info:
       path: GitMail/Info.plist
       properties:
@@ -147,6 +154,10 @@ targets:
         product: MailReader
       - package: GitKittieMailKit
         product: MailExtraction
+      - package: GitKittieMailProviders
+        product: MailAccounts
+      - package: GitKittieMailProviders
+        product: MailSync
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitmail.tests

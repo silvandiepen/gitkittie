@@ -11,6 +11,8 @@ from `../GitKittieMailKit`.
 | `MailIMAP` | `IMAPConnector` / `IMAPSession` on Apple's swift-nio-imap codec. Implicit TLS only (993) |
 | `MailSMTP` | `SMTPSubmitter`: implicit TLS (465) or STARTTLS (587), AUTH PLAIN / LOGIN / XOAUTH2 |
 | `MailOutbox` | The durable outbox (GKM-014): a journal in device state, at-most-once sending, reconciliation of uncertain sends by Message-ID, Sent copies by provider policy, `SendingAccount` for account setup to implement |
+| `MailAccounts` | Account setup (GKM-010): provider presets (iCloud, Gmail, Fastmail, Yahoo), `AccountVerifier` (signs in to IMAP and SMTP without sending; `AccountSetupError` tells a wrong password, an unreachable server and an untrusted certificate apart), `KeychainCredentialStore`, `AccountConnections` |
+| `MailSync` | `SyncCoordinator` (GKM-011): recent mail first, then history within a storage budget, cursors checkpointed after durable writes, byte-exact re-mapping after UIDVALIDITY resets and moves, flags and removals from the provider, IDLE (polling without it) with reconnect backoff. `SyncPlanner` holds its decisions as plain functions |
 | `MailSpikeKit`, `gkmail-spike` | The GKM-004 end-to-end scenario and its command |
 
 Needs Swift 6.2 (Xcode 26) and macOS 15 / iOS 18, because swift-nio-imap 0.5 does.
@@ -37,7 +39,8 @@ given command or body text, or right after the server accepted a message), and `
 (iCloud's port 587 requires it) before relaying to GreenMail. CI starts the server and sets
 `GKM_REQUIRE_TEST_MAIL_SERVER=1`, so there a missing server fails instead of skipping.
 
-Known GreenMail 2.1.3 behaviour the tests account for: delivery adds `Return-Path`/`Received`
+Known GreenMail 2.1.3 behaviour the tests account for: RFC822.SIZE reports the body's size, not
+the whole message's (so storage-budget tests use exact byte counts); delivery adds `Return-Path`/`Received`
 and drops the line break before the end-of-data dot; and LOGOUT does not deselect, so deleting a
 mailbox that an earlier session had selected kills the deleting connection (a server bug,
 reproducible with `openssl s_client`; real servers do not do this).

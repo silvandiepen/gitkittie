@@ -10,6 +10,8 @@ import PackageDescription
 // - MailIMAP       IMAP adapter on Apple's swift-nio-imap codec
 // - MailSMTP       SMTP submission, our own client on SwiftNIO (implicit TLS and STARTTLS)
 // - MailOutbox     the durable outbox: journal, at-most-once sending, Sent reconciliation (GKM-014)
+// - MailAccounts   account setup: provider presets, verification, the Keychain (GKM-010)
+// - MailSync       the sync coordinator: progressive import, cursors, IDLE (GKM-011)
 // - MailSpikeKit   the GKM-004 end-to-end scenario; `gkmail-spike` runs it against an account
 //
 // A separate package because swift-nio-imap 0.5 needs Swift 6.2 and macOS 15 / iOS 18, while
@@ -29,6 +31,8 @@ let package = Package(
         .library(name: "MailIMAP", targets: ["MailIMAP"]),
         .library(name: "MailSMTP", targets: ["MailSMTP"]),
         .library(name: "MailOutbox", targets: ["MailOutbox"]),
+        .library(name: "MailAccounts", targets: ["MailAccounts"]),
+        .library(name: "MailSync", targets: ["MailSync"]),
         .executable(name: "gkmail-spike", targets: ["MailSpike"]),
     ],
     dependencies: [
@@ -84,6 +88,23 @@ let package = Package(
             swiftSettings: protocolSettings
         ),
         .target(
+            name: "MailAccounts",
+            dependencies: [
+                "MailProvider", "MailIMAP", "MailSMTP",
+                .product(name: "MailCore", package: "GitKittieMailKit"),
+            ],
+            swiftSettings: protocolSettings
+        ),
+        .target(
+            name: "MailSync",
+            dependencies: [
+                "MailProvider",
+                .product(name: "MailCore", package: "GitKittieMailKit"),
+                .product(name: "MailStore", package: "GitKittieMailKit"),
+            ],
+            swiftSettings: protocolSettings
+        ),
+        .target(
             name: "MailSpikeKit",
             dependencies: [
                 "MailProvider", "MailIMAP", "MailSMTP",
@@ -123,14 +144,25 @@ let package = Package(
             dependencies: ["MailSMTP", "MailProvider", .product(name: "NIOEmbedded", package: "swift-nio")],
             swiftSettings: protocolSettings
         ),
+        .testTarget(
+            name: "MailSyncTests",
+            dependencies: ["MailSync", "MailProvider"],
+            swiftSettings: protocolSettings
+        ),
+        .testTarget(
+            name: "MailAccountsTests",
+            dependencies: ["MailAccounts", "MailProvider", .product(name: "MailCore", package: "GitKittieMailKit")],
+            swiftSettings: protocolSettings
+        ),
         // Talk to a real local mail server (scripts/test-mail-server.sh); skipped when it is down.
         .testTarget(
             name: "MailIntegrationTests",
             dependencies: [
-                "MailProvider", "MailIMAP", "MailSMTP", "MailSpikeKit", "MailOutbox",
+                "MailProvider", "MailIMAP", "MailSMTP", "MailSpikeKit", "MailOutbox", "MailAccounts", "MailSync",
                 .product(name: "MailCore", package: "GitKittieMailKit"),
                 .product(name: "MailMIME", package: "GitKittieMailKit"),
                 .product(name: "MailCompose", package: "GitKittieMailKit"),
+                .product(name: "MailStore", package: "GitKittieMailKit"),
                 .product(name: "NIOConcurrencyHelpers", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
