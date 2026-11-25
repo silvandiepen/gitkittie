@@ -84,6 +84,12 @@ struct MessageCard: View {
 
     @ViewBuilder private func notices(_ content: ReaderContent) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Deleted at the provider: the copy here is kept, and says so with when (MAIL-075).
+            let account = model.account(of: message.summary)
+            if let deleted = ProviderDeletionText.line(message.summary, account: account) {
+                NoticeLine(systemImage: "trash.slash", tint: .secondary,
+                           text: deleted + ". " + ProviderDeletionText.explanation(removesHere: account?.removesDeletedMail ?? false))
+            }
             if case .html(let html) = content.body {
                 remoteContentNotice(html, content: content)
                 if html.trackingPixels > 0 {

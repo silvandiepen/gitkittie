@@ -201,7 +201,10 @@ extension MailStore {
         }
         try mapping.database.transaction {
             for location in from { try mapping.forget(location) }
-            for location in to { try mapping.record(location, for: id) }
+            for location in to {
+                try mapping.record(location, for: id)
+                try index.setDeletedAtProvider(nil, for: id)
+            }
             let sequences = records.map(\.sequence).sorted()
             if awaitingLocation, to.isEmpty, let last = sequences.last {
                 // Only the last row says where the message ended up.

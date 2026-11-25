@@ -45,8 +45,15 @@ struct AddAccountSheet: View {
                         .labelsHidden()
                 }
                 SettingsDivider()
-                FieldRow(label: "Name") {
-                    TextField("Name", text: $draft.name, prompt: Text(draft.displayName.isEmpty ? "Optional" : draft.displayName))
+                // On mail you send (MAIL-074); the account name below is only for the sidebar.
+                FieldRow(label: "Your name") {
+                    TextField("Your name", text: $draft.senderName, prompt: Text("As people see it on your mail"))
+                        .textContentType(.name)
+                        .labelsHidden()
+                }
+                SettingsDivider()
+                FieldRow(label: "Account name") {
+                    TextField("Account name", text: $draft.name, prompt: Text(draft.displayName.isEmpty ? "Optional" : draft.displayName))
                         .labelsHidden()
                 }
             }

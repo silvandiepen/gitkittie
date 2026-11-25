@@ -30,6 +30,13 @@ public struct SyncOptions: Sendable {
     /// Most partial messages a pass completes for pins (GKM-036), so a large pin never holds
     /// back new mail.
     public var pinnedPerPass: Int
+    /// Delete the local copy of mail deleted at the provider ("Remove mail deleted elsewhere",
+    /// MAIL-075). Off: it is kept and shown as deleted there. Pinned mail, mail in a space and
+    /// mail with a change in the action journal is kept either way.
+    public var removesMailDeletedElsewhere: Bool
+    /// Most noticed deletions a pass checks at the provider (a search per folder whose mail is
+    /// not all downloaded here) before confirming them; the rest wait for the next pass.
+    public var deletionChecksPerPass: Int
     /// Download the next batch while the store writes this one (GKM-038, MAIL-066). Off only to
     /// measure what it gains.
     public var pipelineStores: Bool
@@ -54,6 +61,7 @@ public struct SyncOptions: Sendable {
 
     public init(recentPerFolder: Int = 200, historyBudgetBytes: Int64? = nil, historyDays: Int? = nil, historyPerPass: Int = 10_000,
                 historySlice: Duration = .seconds(20), onDemandThreshold: Int? = 1_000_000, pinnedPerPass: Int = 50,
+                removesMailDeletedElsewhere: Bool = false, deletionChecksPerPass: Int = 50,
                 pipelineStores: Bool = true,
                 summaryBatch: Int = 500, bodyBatchMessages: Int = 100, bodyBatchBytes: Int = 8 * 1024 * 1024,
                 idleTimeout: Duration = .seconds(9 * 60), flagCheckInterval: Duration = .seconds(120),
@@ -65,6 +73,8 @@ public struct SyncOptions: Sendable {
         self.historySlice = historySlice
         self.onDemandThreshold = onDemandThreshold
         self.pinnedPerPass = pinnedPerPass
+        self.removesMailDeletedElsewhere = removesMailDeletedElsewhere
+        self.deletionChecksPerPass = deletionChecksPerPass
         self.pipelineStores = pipelineStores
         self.summaryBatch = summaryBatch
         self.bodyBatchMessages = bodyBatchMessages
@@ -109,6 +119,10 @@ public struct SyncProgress: Sendable, Equatable {
     public var olderNotDownloaded = 0
     /// Messages too large to download; they stay at the provider.
     public var skippedTooLarge = 0
+    /// Stored messages the provider no longer has, kept here and shown as deleted there
+    /// (MAIL-075), and how many local copies "Remove mail deleted elsewhere" removed.
+    public var deletedAtProvider = 0
+    public var removedDeletedElsewhere = 0
     /// When the last complete pass over every folder finished.
     public var lastCompletedPass: Date?
     /// The provider's folders, after the first listing.

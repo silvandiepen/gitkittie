@@ -21,9 +21,11 @@ extension AppModel {
     var onDemandThreshold: Int { sync.services.syncOptions.onDemandThreshold ?? 0 }
 
     /// The most the offline cache keeps before it gives back the least recently opened parts
-    /// it can fetch again (`defaults write app.hakobs.gitmail offlineCacheBudgetBytes <bytes>`).
+    /// it can fetch again: the iPhone's storage budget (MAIL-079), else 2 GB on the Mac
+    /// (`defaults write app.hakobs.gitmail offlineCacheBudgetBytes <bytes>`).
     var offlineCacheBudget: Int64 {
-        (sync.services.defaults.object(forKey: "offlineCacheBudgetBytes") as? Int).map(Int64.init) ?? 2 * 1024 * 1024 * 1024
+        sync.services.offlineCacheBytes
+            ?? (sync.services.defaults.object(forKey: "offlineCacheBudgetBytes") as? Int).map(Int64.init) ?? 2 * 1024 * 1024 * 1024
     }
 
     /// Fetches an attachment a partial message left at the provider, once; then keeps the

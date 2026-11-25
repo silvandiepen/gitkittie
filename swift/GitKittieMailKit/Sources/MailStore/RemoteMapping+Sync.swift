@@ -96,14 +96,18 @@ extension RemoteMapping {
     /// Records the provider's folder list, in its order, keeping each known folder's cursor.
     /// Folders that are gone at the provider lose their row and every location in them; their
     /// messages stay in the mail folder. Returns the names that were removed.
-    func replaceFolders(_ folders: [SyncedFolder]) throws -> [String] {
+    func replaceFolders(_ folders: [SyncedFolder], now: Date = Date()) throws -> [String] {
         try database.transaction {
             let wanted = Set(folders.map(\.name))
             let removed = try self.folders().map(\.name).filter { !wanted.contains($0) }
             for name in removed {
+                let members = try localIDs(inMailbox: name)
                 try database.prepare("DELETE FROM folder_state WHERE name = ?").run([.text(name)])
                 try database.prepare("DELETE FROM locations WHERE mailbox = ?").run([.text(name)])
                 try database.prepare("DELETE FROM mailboxes WHERE name = ?").run([.text(name)])
+                // A folder deleted at the provider takes its messages with it, unless they are
+                // in another folder too (MAIL-075).
+                try noticeDeletionsWithoutLocation(members, at: now)
             }
             for (position, folder) in folders.enumerated() {
                 let path = String(decoding: try JSONEncoder().encode(folder.path), as: UTF8.self)

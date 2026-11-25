@@ -118,7 +118,10 @@ final class PartialMessageTests: XCTestCase {
         let pending = try await store.pendingClassificationCount()
         XCTAssertEqual(pending, 0, "verdicts kept: migrated, not rebuilt")
         let schema = try await store.indexSchemaForTesting()
-        XCTAssertEqual(schema, 6)
+        XCTAssertEqual(schema, 7, "on through 6 → 7 (provider deletions, MAIL-075) as well")
+        let listed = try await store.search(SearchQuery())
+        XCTAssertEqual(listed.count, 1, "summaries read the new table")
+        XCTAssertNil(listed.first?.deletedAtProvider)
         let count = try await store.messageCount()
         XCTAssertEqual(count, 1)
         let partial = try await store.partialMessages()
@@ -132,6 +135,7 @@ extension MailStore {
     func downgradeToSchemaFiveForTesting() throws {
         try index.database.execute("""
             DROP INDEX messages_partial; ALTER TABLE messages DROP COLUMN partial; ALTER TABLE message_blobs DROP COLUMN section;
+            DROP TABLE provider_deletions;
             """)
         try index.database.setUserVersion(5)
     }

@@ -153,6 +153,48 @@ final class AccountTests: XCTestCase {
         XCTAssertEqual(model.syncStatus(account.id), "Password needed")
     }
 
+    /// GKM-011, answered by Sil (MAIL-075): mail deleted at the provider is kept and shown as
+    /// "Deleted at iCloud" with when, in the list and the reader; the account's setting
+    /// "Remove mail deleted elsewhere" is off until turned on and is kept in account.json.
+    func testMailDeletedAtTheProviderIsShownAndTheRemovalSettingIsKept() async throws {
+        let seed = try await MailStore.open(locations)
+        let account = MailAccount(displayName: "Family", address: "ada@icloud.com",
+                                  connection: ProviderPresets.iCloud.connection(for: "ada@icloud.com"))
+        try await seed.save(account)
+        let eml = Data("From: Bo <bo@example.net>\r\nTo: ada@icloud.com\r\nSubject: Gone\r\nMessage-ID: <gone@example.net>\r\nDate: Tue, 24 Nov 2026 09:00:00 +0000\r\n\r\nBye\r\n".utf8)
+        let location = RemoteLocation(mailbox: "INBOX", uidValidity: 1, uid: 1)
+        let id = try await seed.ingest(eml, account: account.id, remote: location).id
+        let noticed = Date(timeIntervalSince1970: 1_795_600_000) // 2026-11-25 07:46:40 UTC
+        try await seed.forget(location, account: account.id, now: noticed)
+        try await seed.confirmDeletions(seed.deletionCandidates(account: account.id), account: account.id)
+
+        let model = AppModel(locations: locations, services: services(trust: .system))
+        await model.open()
+        await model.select(.allMail)
+        let row = try XCTUnwrap(model.browser.rows.first { $0.latest.id == id })
+        XCTAssertEqual(row.latest.deletedAtProvider, noticed)
+        let shown = try XCTUnwrap(model.accounts.first)
+        XCTAssertEqual(ProviderDeletionText.short(row.latest, account: shown), "Deleted at iCloud", "the provider, not the account's name")
+        let line = ProviderDeletionText.line(row.latest, account: shown, timeZone: TimeZone(identifier: "UTC")!,
+                                             locale: Locale(identifier: "en_GB"))
+        XCTAssertEqual(line, "Deleted at iCloud · " + noticed.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened,
+                                                                                         locale: Locale(identifier: "en_GB"),
+                                                                                         timeZone: TimeZone(identifier: "UTC")!)))
+        XCTAssertTrue(line?.contains("25 Nov 2026") == true, line ?? "")
+        await model.browser.select(row.id)
+        XCTAssertEqual(model.browser.openThread?.messages.last?.summary.deletedAtProvider, noticed, "the reader has it too")
+
+        XCTAssertFalse(shown.removesDeletedMail, "off until turned on")
+        try await model.updateAccountSettings(account.id, displayName: "Family", senderName: "Ada", removesMailDeletedElsewhere: true)
+        let saved = try await MailStore.open(locations).accounts().first
+        XCTAssertEqual(saved?.removesMailDeletedElsewhere, true)
+        XCTAssertEqual(saved?.senderName, "Ada")
+        XCTAssertEqual(model.totalCount, 1, "turning it on removes nothing by itself; the sync does, on its next pass")
+        try await model.updateAccountSettings(account.id, displayName: "Family", senderName: "Ada", removesMailDeletedElsewhere: false)
+        let off = try await MailStore.open(locations).accounts().first
+        XCTAssertNil(off?.removesMailDeletedElsewhere, "off is the default again, not written out")
+    }
+
     // MARK: - With the local test server
 
     func testAddingAnAccountVerifiesKeepsThePasswordOnlyInTheKeychainAndSyncs() async throws {
@@ -162,9 +204,12 @@ final class AccountTests: XCTestCase {
         let model = AppModel(locations: locations, services: services(trust: server.trust))
         await model.open()
 
-        let account = try await model.addAccount(draft(server, user))
+        var withName = draft(server, user)
+        withName.senderName = " Ada Example "
+        let account = try await model.addAccount(withName)
         XCTAssertEqual(model.accounts.map(\.id), [account.id])
         XCTAssertEqual(account.connection?.imap.host, "localhost")
+        XCTAssertEqual(account.senderName, "Ada Example", "Your name, asked when the account is added (MAIL-074)")
         let saved = try XCTUnwrap(try credentials.secret(for: account.id))
         saved.withValue { XCTAssertEqual($0, user.password) }
 
@@ -174,6 +219,8 @@ final class AccountTests: XCTestCase {
         XCTAssertEqual(registered.first?.credential.service, credentials.service)
         XCTAssertEqual(registered.first?.credential.account, account.id.rawValue)
         XCTAssertEqual(registered.first?.credential.username, user.address)
+        XCTAssertEqual(registered.first?.identities, [MailAddress(name: "Ada Example", address: user.address)],
+                       "sent as Your name, not as the account's name \"Test\"")
 
         try await waitUntil("three messages listed") { model.browser.rows.map(\.latest).count == 3 }
         XCTAssertEqual(Set(model.browser.rows.map(\.latest).compactMap(\.subject)), ["One", "Two", "Three"])
