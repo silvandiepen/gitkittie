@@ -55,7 +55,7 @@ struct ServerQuery: Equatable {
     /// Why this search can't go to the server; nil when it can.
     var unavailable: String?
 
-    /// The provider's half of `query`. Nil without words or people to look for: the server
+    /// The provider's half of `query`. Nil without words, people or a sender to look for: the server
     /// would otherwise list whole folders. `explicitCategory` is a category the person asked
     /// for (chip or `category:`); the category view being searched in is not one, since mail
     /// that is not downloaded has no category yet.
@@ -64,7 +64,8 @@ struct ServerQuery: Equatable {
             terms: SearchQuery.searchTerms(query.text),
             participants: SearchQuery.searchTerms(query.participant ?? ""),
             receivedOnOrAfter: query.after, receivedBefore: query.before,
-            unreadOnly: query.unreadOnly, flaggedOnly: query.flaggedOnly)
+            unreadOnly: query.unreadOnly, flaggedOnly: query.flaggedOnly,
+            senders: query.sender.map { [$0] } ?? [])
         guard !criteria.hasNoText else { return nil }
         var server = ServerQuery(criteria: criteria, account: query.account, mailbox: query.mailbox)
         if query.space != nil {
