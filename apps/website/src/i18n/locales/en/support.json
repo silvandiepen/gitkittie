@@ -1,11 +1,11 @@
 {
   "meta": {
     "title": "Support — GitKittie",
-    "description": "Support and troubleshooting for GitKittie Folder, GitKittie Tasks and GitKittie Bud. Most issues come down to git, token access, repository URLs, or folder permissions."
+    "description": "Support and troubleshooting for GitKittie Folder, GitKittie Tasks, GitKittie Bud and GitKittie Mail. Most issues come down to access: a git token, a repository URL, folder permissions, or a mail account's password."
   },
   "eyebrow": "Help",
   "title": "Support",
-  "intro": "GitKittie Folder, GitKittie Tasks and GitKittie Bud are small, local-first apps. Most issues come down to git, token access, repository URLs, or folder permissions. Pick your app below.",
+  "intro": "GitKittie Folder, GitKittie Tasks, GitKittie Bud and GitKittie Mail are small, local-first apps. Most issues come down to access: git, a token, a repository URL, folder permissions, or a mail account's password. Pick your app below.",
   "folder": {
     "heading": "GitKittie Folder",
     "setup": {
@@ -58,6 +58,29 @@
     "title": "In development",
     "body": "GitKittie Bud's macOS app isn't on the App Store yet, so there's nothing to install. Send a message to be told when it ships, or to say what you'd want from it.",
     "action": "Message about GitKittie Bud"
+  },
+  "mail": {
+    "heading": "GitKittie Mail",
+    "title": "In development",
+    "body": "GitKittie Mail isn't on the App Store yet, so there's nothing to install. Send a message to be told when it ships, or to say what you'd want from it.",
+    "setup": {
+      "title": "Adding an account, once it's out",
+      "steps": [
+        {
+          "title": "iCloud Mail",
+          "desc": "Mail never asks for your Apple Account password. Create an app-specific password at [account.apple.com](https://account.apple.com) under Sign-In and Security, and paste that."
+        },
+        {
+          "title": "Any other IMAP account",
+          "desc": "Enter your address, the IMAP and SMTP servers and ports your provider lists, and your password or app password. Mail checks both servers before it saves anything, and says whether the password, the server, the certificate or the connection was the problem."
+        },
+        {
+          "title": "A password that stopped working",
+          "desc": "If you change or revoke a password, the account stops syncing and says so. Use **Sign In Again** with the new one; your stored mail stays where it is."
+        }
+      ]
+    },
+    "action": "Message about GitKittie Mail"
   },
   "stillStuck": {
     "title": "Still stuck?",

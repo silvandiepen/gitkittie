@@ -25,6 +25,13 @@ interface SupportContent {
   }
   tasks: { heading: string; title: string; body: string; action: string }
   bud: { heading: string; title: string; body: string; action: string }
+  mail: {
+    heading: string
+    title: string
+    body: string
+    setup: { title: string; steps: StepItem[] }
+    action: string
+  }
   stillStuck: { title: string; body: string; action: string }
 }
 
@@ -104,6 +111,32 @@ function marker(i: number): string {
             <Markdown class="support__prose" tag="div" :content="t.bud.body" />
             <div class="mkt__actions support__actions">
               <ArlezSupport :label="t.bud.action" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GitKittie Mail -->
+      <section class="support__app" data-app="mail">
+        <div class="mkt__container support__app-inner">
+          <h2 class="support__app-heading">{{ t.mail.heading }}</h2>
+          <div class="support__group">
+            <h3 class="mkt__heading">{{ t.mail.title }}</h3>
+            <Markdown class="support__prose" tag="div" :content="t.mail.body" />
+            <div class="mkt__actions support__actions">
+              <ArlezSupport :label="t.mail.action" />
+            </div>
+          </div>
+
+          <div class="support__group">
+            <h3 class="mkt__heading">{{ t.mail.setup.title }}</h3>
+            <div class="mkt__rows">
+              <div v-for="item in t.mail.setup.steps" :key="item.title" class="mkt__row">
+                <h4 class="support__item-title">{{ item.title }}</h4>
+                <div class="mkt__row-body">
+                  <Markdown class="support__prose" tag="div" :content="item.desc" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
