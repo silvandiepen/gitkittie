@@ -68,6 +68,7 @@ struct ReviewInboxView: View {
         .navigationDestination(for: ReviewRef.self) { ref in ReviewDetailView(ref: ref) }
         .refreshable { await model.loadReviewInbox() }
         .task { if !model.hasLoadedReviewInbox { await model.loadReviewInbox() } }
+        .safeAreaInset(edge: .bottom, spacing: 0) { SyncFailuresBanner() }
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
         .fullScreenCover(item: $run) { run in
             ReviewRunView(refs: run.refs).environment(model)

@@ -44,6 +44,7 @@ struct ReviewListView: View {
             ReviewDetailView(ref: ref)
         }
         .refreshable { await model.loadReviews() }
+        .safeAreaInset(edge: .bottom, spacing: 0) { SyncFailuresBanner() }
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
     }
 }
@@ -358,10 +359,15 @@ struct ReviewDetailView: View {
         }
         .reviewRequestPrompts(commenting: $commenting, removing: $removing, onRemoved: { dismiss() })
         .overlay(alignment: .bottom) {
-            if let error = model.errorMessage {
-                Text(error).font(.callout).padding(10)
-                    .background(.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-                    .padding()
+            VStack(spacing: 0) {
+                // Reviews open in a sheet, over the activity mark: a change that could not
+                // be sent shows here, with what can be done about it.
+                SyncFailuresBanner()
+                if let error = model.errorMessage {
+                    Text(error).font(.callout).padding(10)
+                        .background(.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                        .padding()
+                }
             }
         }
     }

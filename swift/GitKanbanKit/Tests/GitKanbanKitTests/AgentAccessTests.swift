@@ -97,7 +97,7 @@ final class AgentAccessTests: XCTestCase {
         try FileManager.default.createDirectory(at: root.appendingPathComponent("Pets/5. Done"), withIntermediateDirectories: true)
 
         suite = "gk-agent-\(UUID().uuidString)"
-        model = AppModel(appGroup: suite, keychainService: "gk-agent-tests-\(UUID().uuidString)", migratesLegacyStorage: false)
+        model = AppModel.testing(suite: suite, keychainService: "gk-agent-tests-\(UUID().uuidString)")
         model.addedRepos = [AddedRepo(namespace: "folder", name: "tasks", branch: "", isPrivate: true,
                                       boards: [SelectedBoard(folder: "Pets", name: "Pets")],
                                       kind: .localFolder(path: root.path, bookmark: nil))]
@@ -114,7 +114,7 @@ final class AgentAccessTests: XCTestCase {
     override func tearDown() async throws {
         await model.agentServer?.stop()
         try? FileManager.default.removeItem(at: root)
-        UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
+        AppModel.removeTestStorage(suite)
     }
 
     private func write(_ path: String, _ text: String) throws {

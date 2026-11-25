@@ -45,7 +45,7 @@ final class SeenStateTests: XCTestCase {
 
     override func tearDown() async throws {
         try? FileManager.default.removeItem(at: root)
-        UserDefaults().removePersistentDomain(forName: suite)
+        AppModel.removeTestStorage(suite)
     }
 
     private func write(_ path: String, _ text: String) throws {
@@ -68,7 +68,7 @@ final class SeenStateTests: XCTestCase {
     }
 
     private func opened() async -> AppModel {
-        let model = AppModel(appGroup: suite, keychainService: "gk-seen-tests", migratesLegacyStorage: false)
+        let model = AppModel.testing(suite: suite, keychainService: "gk-seen-tests")
         await model.openBoard(repo, folder: "Tasks/Pets")
         model.stopWatching()
         return model
@@ -104,7 +104,7 @@ final class SeenStateTests: XCTestCase {
         model.markSeen(recent)
         XCTAssertFalse(model.isUnseen(recent))
 
-        let relaunched = AppModel(appGroup: suite, keychainService: "gk-seen-tests", migratesLegacyStorage: false)
+        let relaunched = AppModel.testing(suite: suite, keychainService: "gk-seen-tests")
         await relaunched.restore()
         relaunched.stopWatching()
         XCTAssertNotNil(relaunched.seenCards["\(repo.id)|Tasks/Pets|PETS-2"])
@@ -206,8 +206,8 @@ final class BoardAppearanceTests: XCTestCase {
         try Data("---\nconfig: project\nproject: Pets\nreview_path: \"../review\"\nlanes:\n  - id: todo\n    name: To do\n    folder: \"1. To do\"\n    status: todo\n---\n\n# Pets\n\nAbout pets.\n".utf8).write(to: readme)
 
         let suite = "gk-look-\(UUID().uuidString)"
-        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
-        let model = AppModel(appGroup: suite, keychainService: "gk-look-tests", migratesLegacyStorage: false)
+        defer { AppModel.removeTestStorage(suite) }
+        let model = AppModel.testing(suite: suite, keychainService: "gk-look-tests")
         let board = SelectedBoard(folder: "Tasks/Pets", name: "Pets")
         let repo = AddedRepo(namespace: "folder", name: "Projects", branch: "", isPrivate: true, boards: [board],
                              kind: .localFolder(path: root.path, bookmark: nil))

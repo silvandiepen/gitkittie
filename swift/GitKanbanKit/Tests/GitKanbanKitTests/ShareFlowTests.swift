@@ -36,7 +36,7 @@ final class ShareFlowTests: XCTestCase {
 
     override func tearDown() async throws {
         try? FileManager.default.removeItem(at: root)
-        UserDefaults().removePersistentDomain(forName: suite)
+        AppModel.removeTestStorage(suite)
     }
 
     private func write(_ path: String, _ text: String) throws {
@@ -46,7 +46,7 @@ final class ShareFlowTests: XCTestCase {
     }
 
     private func model() -> AppModel {
-        AppModel(appGroup: suite, keychainService: "gk-share-tests", migratesLegacyStorage: false)
+        AppModel.testing(suite: suite, keychainService: "gk-share-tests")
     }
 
     /// The app adds a folder board; a second model over the same storage (the extension) sees it.

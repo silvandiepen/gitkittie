@@ -124,12 +124,43 @@ and iPad each question is one page of the request's slides, questions first.
 
 ---
 
+### 8. The outbox never queues a write without its content; review writes merge
+
+**Decision:** `Outbox.enqueue` stores a write's content before it lists the write, and throws
+`OutboxError.notSaved` ("Not saved: …") when either cannot be stored; nothing is queued then. An
+index that cannot be read is an error, never an empty queue. A write to a review request carries
+the reviewer's `ReviewEdit`s (decision, comment, answer, question comment, each with its time) next
+to the file it produced. It is sent by reading the server's copy and applying the edits again
+(`Review.merge` in `GitKanbanKit/ReviewEdits.swift`), compare-and-swap through
+`GitPontFileSource: VersionedBoardSource`: a comment is added when missing, a decision or answer
+goes in only when newer than the server's (and an answer only while the agent has not handled it),
+nothing else changes. Every queued write to one request is folded into one send, and review writes
+never wait behind a refused one. A whole-file review write queued by an earlier version has its
+edits read back from its copy. Card writes keep the conflict: a refused card write stays refused,
+with a note that says what Retry and Discard do. Every place a refused write shows offers Retry,
+Discard and Show What It Was (`swift/TasksUI/SyncFailures.swift`).
+
+**Context:** A write made while the disk was full was listed without its content (`try?` on the
+blob), so the reviewer's change was gone while the app said it was saved (ARVIK-471). Five writes
+to one review request, each a whole copy from the day before, waited forever behind one refused
+write, and sending any of them would have overwritten answers given since (LOBBY-001).
+
+**Rationale:** Reviewer fields carry their own times, so edits can be applied in any order and
+onto any newer copy; a base copy and a three-way diff are not needed. The merge lives in
+GitKanbanKit and not in the board contract (`review.ts`): it is how this client sends, not what a
+review file is. Cards have no per-field times to merge on, so their conflict stays the person's
+call, made with the content in view.
+
+**Status:** Accepted.
+
+---
+
 ## Open questions
 
 - **OAuth sign-in:** move from a pasted personal access token to provider OAuth. (Open — PAT-only
   today.)
 - **Offline / local mode:** whether iOS ever gains a cached working copy or embedded git. (Open.)
-- **Conflict surfacing:** how to detect and present concurrent edits given blind writes. (Open.)
+- **Conflict surfacing:** review requests merge (Decision 8); cards still keep the conflict for the person to settle. (Open for cards.)
 - **Per-card history:** whether to fetch it from the provider's commit API. (Open.)
 - **Rank keys:** in-column reorder ships today by rewriting an integer `order` (only changed cards
   commit); adopting the core's fractional rank keys is a future refinement. (Open.)

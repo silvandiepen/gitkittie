@@ -85,16 +85,19 @@ public final class AppModel {
     /// Storage shared through an App Group, so the app and its share extension see the
     /// same boards, connection and token. `migratesLegacyStorage` is for the app itself:
     /// it moves what an earlier version kept in its private defaults and keychain item.
-    public init(appGroup: String, keychainService: String, migratesLegacyStorage: Bool) {
+    /// `storageDirectory` replaces the group container for the outbox and read cache (tests):
+    /// asking macOS for a group's container makes the folder, under ~/Library/Group Containers.
+    public init(appGroup: String, keychainService: String, migratesLegacyStorage: Bool, storageDirectory: URL? = nil) {
         defaults = UserDefaults(suiteName: appGroup) ?? .standard
         keychain = KeychainService(service: keychainService, accessGroup: appGroup)
         bucketCredentials = BucketCredentialStore(service: keychainService + ".storage", accessGroup: appGroup)
         legacyKeychain = migratesLegacyStorage
             ? KeychainService(service: Bundle.main.bundleIdentifier ?? keychainService) : nil
         // The outbox lives in the group container so a write saved by the share extension
-        // is sent by the app if the extension is closed first. Outside a real App Group
-        // (tests) it falls back to a folder named after the suite.
-        let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+        // is sent by the app if the extension is closed first. Outside a real App Group it
+        // falls back to a folder named after the suite.
+        let container = storageDirectory
+            ?? FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
             ?? FileManager.default.temporaryDirectory.appendingPathComponent(appGroup, isDirectory: true)
         outbox = Outbox(directory: container.appendingPathComponent("Outbox", isDirectory: true))
         readCache = ReadCache(directory: container.appendingPathComponent("ReadCache", isDirectory: true))
@@ -1210,7 +1213,7 @@ public final class AppModel {
     public func deleteAttachment(path: String) async {
         guard let source else { return }
         isSaving = true; errorMessage = nil; defer { isSaving = false }
-        try? await source.delete(path: path, message: "Remove attachment \(path)")
+        do { try await source.delete(path: path, message: "Remove attachment \(path)") } catch { errorMessage = error.localizedDescription }
     }
 
     public func readAttachment(path: String) async -> Data? {

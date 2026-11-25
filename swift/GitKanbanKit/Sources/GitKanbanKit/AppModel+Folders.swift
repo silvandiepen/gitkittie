@@ -199,12 +199,12 @@ extension AppModel {
 
     public func decide(_ request: ReviewRequest, item: ReviewItem, status: ReviewStatus) async {
         let by = reviewerID(for: request)
-        await rewriteReview(request) { try Review.applyDecision($0, itemID: item.id, status: status, by: by) }
+        await rewriteReview(request, [.decision(item: item.id, status: status, by: by, at: ReviewEdit.now())])
     }
 
     public func comment(_ request: ReviewRequest, item: ReviewItem, text: String) async {
         let by = reviewerID(for: request)
-        await rewriteReview(request) { try Review.appendComment($0, itemID: item.id, by: by, body: text) }
+        await rewriteReview(request, [.comment(item: item.id, by: by, text: Self.trimmed(text), image: nil, at: ReviewEdit.now())])
     }
 
     /// Answer a question, or change the answer while the agent has not acted on it. The
@@ -214,16 +214,19 @@ extension AppModel {
     @discardableResult
     public func answer(_ request: ReviewRequest, question: ReviewQuestion, choices: [String], other: String?, comment: String? = nil) async -> Bool {
         let by = reviewerID(for: request)
-        await rewriteReview(request) {
-            try Review.applyAnswer($0, questionID: question.id, choices: choices, other: other, comment: comment, by: by)
+        let at = ReviewEdit.now()
+        var edits: [ReviewEdit] = [.answer(question: question.id, choices: choices, other: other, by: by, at: at)]
+        if let note = comment.map(Self.trimmed), !note.isEmpty {
+            edits.append(.questionComment(question: question.id, by: by, text: note, at: at))
         }
+        await rewriteReview(request, edits)
         return errorMessage == nil
     }
 
     /// Comment on a question without changing its answer.
     public func comment(_ request: ReviewRequest, question: ReviewQuestion, text: String) async {
         let by = reviewerID(for: request)
-        await rewriteReview(request) { try Review.appendQuestionComment($0, questionID: question.id, by: by, body: text) }
+        await rewriteReview(request, [.questionComment(question: question.id, by: by, text: Self.trimmed(text), at: ReviewEdit.now())])
     }
 
     // MARK: Whole requests at once
@@ -238,9 +241,8 @@ extension AppModel {
             return !(status == .approved && item.pickOne) && !(status == .approved && request.groups.contains { $0.pickOne && $0.items.contains(item) })
         }
         guard !waiting.isEmpty else { return }
-        await rewriteReview(request) { text in
-            try waiting.reduce(text) { try Review.applyDecision($0, itemID: $1.id, status: status, by: by) }
-        }
+        let at = ReviewEdit.now()
+        await rewriteReview(request, waiting.map { .decision(item: $0.id, status: status, by: by, at: at) })
     }
 
     /// The same comment on every item of a request (or only those still waiting), in one write.
@@ -250,9 +252,8 @@ extension AppModel {
         let targets = request.items.filter { !onlyWaiting || $0.status == .pending }
         guard !body.isEmpty, !targets.isEmpty else { return }
         let by = reviewerID(for: request)
-        await rewriteReview(request) { text in
-            try targets.reduce(text) { try Review.appendComment($0, itemID: $1.id, by: by, body: body) }
-        }
+        let at = ReviewEdit.now()
+        await rewriteReview(request, targets.map { .comment(item: $0.id, by: by, text: body, image: nil, at: at) })
     }
 
     /// Remove a request and its files from the board, answered or not. Git keeps its history.
@@ -312,13 +313,14 @@ extension AppModel {
         isSaving = false
         let by = reviewerID(for: request)
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "See the marked-up image." : text
-        await rewriteReview(request) { try Review.appendComment($0, itemID: item.id, by: by, body: body, image: file) }
+        await rewriteReview(request, [.comment(item: item.id, by: by, text: Self.trimmed(body), image: file, at: ReviewEdit.now())])
     }
 
     /// Read-modify-write a `review.md`, only touching reviewer fields. On sources that
     /// support it, the write is compare-and-swap; a concurrent agent edit is re-read and
-    /// the change re-applied (up to 3 times) instead of overwritten.
-    private func rewriteReview(_ request: ReviewRequest, _ change: (String) throws -> String) async {
+    /// the change re-applied (up to 3 times) instead of overwritten. Through the outbox the
+    /// edits travel with the write, and are applied again onto the server's copy when sent.
+    private func rewriteReview(_ request: ReviewRequest, _ edits: [ReviewEdit]) async {
         guard let source = reviewSource(for: request) else { return }
         isSaving = true
         errorMessage = nil
@@ -329,21 +331,28 @@ extension AppModel {
                 while true {
                     let (text, version) = try await versioned.readVersioned(request.path)
                     do {
-                        try await versioned.write(path: request.path, text: try change(text), ifVersion: version)
+                        try await versioned.write(path: request.path, text: try Review.apply(text, edits: edits), ifVersion: version,
+                                                  message: "Review \(request.id)")
                         break
                     } catch is SourceConflictError where attempt < 2 {
                         attempt += 1
                     }
                 }
+            } else if let editing = source as? any ReviewEditingSource {
+                let text = try await editing.readText(request.path)
+                try await editing.writeReview(path: request.path, text: try Review.apply(text, edits: edits), edits: edits,
+                                              message: "Review \(request.id)")
             } else {
                 let text = try await source.readText(request.path)
-                try await source.write(path: request.path, text: try change(text), message: "Review \(request.id)")
+                try await source.write(path: request.path, text: try Review.apply(text, edits: edits), message: "Review \(request.id)")
             }
         } catch {
             errorMessage = error.localizedDescription
         }
         await reloadReview(request)
     }
+
+    private static func trimmed(_ text: String) -> String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private func reloadReview(_ request: ReviewRequest) async {
         guard let source = reviewSource(for: request), let text = try? await source.readText(request.path) else { return }
