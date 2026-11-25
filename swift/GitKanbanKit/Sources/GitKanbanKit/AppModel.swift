@@ -135,6 +135,9 @@ public final class AppModel {
     // MARK: Presentation
     public var selectedCard: Card?
     public var newTaskLane: Lane?
+    /// Images the new-task sheet starts with: dropped on the board (Mac). The sheet takes
+    /// them when it opens; see `startTask(fromImages:onLaneID:)`.
+    public var newTaskImages: [TaskImage] = []
     /// ⌘N with no board open: the sheet that asks which board the new task is for.
     public var isChoosingBoardForNewTask = false
     public var boardViewMode: BoardViewMode = .lanes

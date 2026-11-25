@@ -110,7 +110,7 @@ final class ShareModel {
 
     /// A title when nothing better exists: the first mark or found problem, else the date.
     private var fallbackTitle: String {
-        if let first = ImageTaskDrafter.firstComment(images) ?? foundIssues.first(where: { selectedIssues.contains($0) }) ?? foundIssues.first {
+        if let first = ImageTaskDrafter.firstComment(images.taskImages) ?? foundIssues.first(where: { selectedIssues.contains($0) }) ?? foundIssues.first {
             return first
         }
         return "Screenshot \(Self.readableDate.string(from: Date()))"
@@ -179,7 +179,7 @@ final class ShareModel {
 
     // MARK: Analysis
 
-    var annotationNotes: String { ImageTaskDrafter.annotationNotes(images) }
+    var annotationNotes: String { ImageTaskDrafter.annotationNotes(images.taskImages) }
 
     private var issueNotes: String {
         let chosen = foundIssues.filter { selectedIssues.contains($0) }
@@ -206,7 +206,7 @@ final class ShareModel {
         draftedAnnotations = annotationNotes
         var known = recognizedText
         let drafted = await ImageTaskDrafter.draft(
-            app: app, images: images, pointers: pointers, confirmed: issueNotes, recognizedText: &known)
+            app: app, images: images.taskImages, pointers: pointers, confirmed: issueNotes, recognizedText: &known)
         recognizedText = known
         guard let ticket = drafted else {
             // A draft that failed is said out loud, also on the automatic pass: otherwise
@@ -258,7 +258,7 @@ final class ShareModel {
         }
         let steps = Double(images.count + 1)
         savingProgress = 0.05
-        let stamp = Self.stamp.string(from: Date())
+        let stamp = TaskImage.stamp(Date())
         let cardID: String
         switch target {
         case .new:
@@ -292,8 +292,7 @@ final class ShareModel {
         for (index, image) in images.enumerated() {
             savingStep = images.count > 1 ? "Uploading image \(index + 1) of \(images.count)" : "Uploading the image"
             let file = image.attachment()
-            let suffix = images.count > 1 ? "-\(index + 1)" : ""
-            let name = "screenshot-\(stamp)\(suffix).\(file.fileExtension)"
+            let name = TaskImage.attachmentName(stamp: stamp, index: index, count: images.count, fileExtension: file.fileExtension)
             if await !app.attachFile(toCardID: cardID, data: file.data, filename: name) { failed += 1 }
             savingProgress = Double(index + 2) / steps
         }
@@ -329,13 +328,6 @@ final class ShareModel {
     private static let readableDate: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "d MMM HH:mm"
-        return formatter
-    }()
-
-    private static let stamp: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
         return formatter
     }()
 
