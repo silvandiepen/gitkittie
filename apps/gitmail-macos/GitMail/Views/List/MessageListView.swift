@@ -46,7 +46,7 @@ struct MessageListView: View {
     @ViewBuilder private var content: some View {
         if model.isEmpty {
             NoMailView()
-        } else if browser.rows.isEmpty {
+        } else if browser.rows.isEmpty, !(browser.isSearching && browser.server.isShown) {
             QuietNote(browser.isSearching ? "No messages match." : browser.scope.category?.emptyNote ?? "No messages here.")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -78,6 +78,9 @@ struct MessageListView: View {
                                 .onAppear {
                                     if row.id == browser.rows.last?.id { Task { await browser.loadMore() } }
                                 }
+                        }
+                        if browser.isSearching, browser.server.isShown {
+                            ServerResultsSection()
                         }
                     }
                     .padding(.horizontal, 8)

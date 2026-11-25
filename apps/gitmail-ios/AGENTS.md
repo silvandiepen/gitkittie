@@ -13,7 +13,7 @@ MAIL-050..053, MAIL-067..070 and MAIL-072, ThreatModel.md) first. Follow the roo
 - `GitMail/Support` — UI-free iOS parts: `MobileSession` (lifecycle, background runs, MAIL-069),
   `StorageBudget` / `DeviceCache` (MAIL-068; the 30-day history window, MAIL-072), `MailFolderCheck` (Files changed the folder).
 - `GitMail/Views` — SwiftUI: `RootView` (three-column split view), `MailboxesView`,
-  `MessageListScreen` + `SearchChips`, `Reader/` (the safe reader: `MailReaderWeb`, link sheet),
+  `MessageListScreen` + `SearchChips` + `ServerResultsSection` (mail found on the server, GKM-041), `Reader/` (the safe reader: `MailReaderWeb`, link sheet),
   `Compose/` (compose, drafts, outbox), `Accounts/`, `Settings/`.
 - `Tests` — hosted in the app (the Keychain test needs its entitlement); `UITests` — the flow
   against the local test server, with screenshots.

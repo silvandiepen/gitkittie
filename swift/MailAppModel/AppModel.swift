@@ -134,6 +134,7 @@ final class AppModel {
         sync.onStoreChanged = { [weak self] in await self?.refreshAfterSync() }
         browser.onActionsQueued = { [weak self] accounts in await self?.sync.actionsQueued(for: accounts) }
         browser.onMessagesOpened = { [weak self] ids in await self?.senders.recordOpen(ids) }
+        browser.sync = sync
         browser.onFetchAttachment = { [weak self] attachment, id in
             guard let self else { throw CancellationError() }
             return try await self.fetchAttachment(attachment, of: id)

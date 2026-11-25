@@ -65,6 +65,9 @@ struct MessageListScreen: View {
                         if row.id == browser.rows.last?.id { Task { await browser.loadMore() } }
                     }
             }
+            if browser.isSearching, browser.server.isShown {
+                ServerResultsSection()
+            }
         }
         .listStyle(.plain)
         .themedList()
@@ -109,7 +112,7 @@ struct MessageListScreen: View {
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("addAccountButton")
             }
-        } else if browser.rows.isEmpty {
+        } else if browser.rows.isEmpty, !(browser.isSearching && browser.server.isShown) {
             QuietNote(browser.isSearching ? "No messages match." : browser.scope.category?.emptyNote ?? "No messages here.")
         }
     }
