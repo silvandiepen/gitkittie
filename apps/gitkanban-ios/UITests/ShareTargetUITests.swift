@@ -24,17 +24,32 @@ final class ShareTargetUITests: XCTestCase {
         app.terminate()
         app.launchArguments = ["-shareSheetProbe", kind]
         app.launch()
+        let sheet = app.collectionViews["activityCollectionView"]
+        XCTAssertTrue(sheet.waitForExistence(timeout: 20), "The share sheet opens for \(kind).\n\(app.debugDescription)")
         let cells = app.cells.matching(identifier: group)
-        // Both rows end in "More" once the sheet has laid out.
-        let more = cells.matching(NSPredicate(format: "label == 'More'")).firstMatch
-        XCTAssertTrue(more.waitForExistence(timeout: 20), "The share sheet opens for \(kind).\n\(app.debugDescription)")
+        _ = cells.firstMatch.waitForExistence(timeout: 10)
+        settle(cells)
         var names = Set(labels { $0.elementType == .cell && $0.identifier == group })
-        if more.isHittable {
+        // A row ends in "More" only when it has more than fits; with few apps installed (a
+        // fresh simulator) it does not, and everything is already in the row.
+        let more = cells.matching(NSPredicate(format: "label == 'More'")).firstMatch
+        if more.exists, more.isHittable {
             more.tap()
             _ = app.buttons["Done"].firstMatch.waitForExistence(timeout: 10)
             names.formUnion(labels { $0.elementType == .staticText || $0.elementType == .cell })
         }
         return names
+    }
+
+    /// Wait until the row stops gaining cells: the share sheet fills it in as targets load.
+    private func settle(_ cells: XCUIElementQuery) {
+        var last = -1
+        for _ in 0..<10 {
+            let count = cells.count
+            if count == last { return }
+            last = count
+            Thread.sleep(forTimeInterval: 0.5)
+        }
     }
 
     /// Labels read from one accessibility snapshot: querying element by element races the

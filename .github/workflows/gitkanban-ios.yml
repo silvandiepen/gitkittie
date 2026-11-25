@@ -1,0 +1,72 @@
+name: GitKanban iOS
+
+# Tasks for iPhone and iPad, and GitKanbanKit (the shared model the Mac app uses too).
+# Before this, no CI ran GitKanbanKit's tests or built the iOS app and its extensions.
+on:
+  pull_request:
+    branches: [main, development]
+    paths:
+      - apps/gitkanban-ios/**
+      - swift/GitKanbanKit/**
+      - swift/GitKittieKit/**
+      - swift/TasksUI/**
+      - .github/workflows/gitkanban-ios.yml
+  push:
+    branches: [main, development]
+    paths:
+      - apps/gitkanban-ios/**
+      - swift/GitKanbanKit/**
+      - swift/GitKittieKit/**
+      - swift/TasksUI/**
+      - .github/workflows/gitkanban-ios.yml
+  workflow_dispatch:
+
+jobs:
+  kit:
+    name: GitKanbanKit tests
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v6
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Test
+        working-directory: swift/GitKanbanKit
+        run: swift test
+
+  ios:
+    name: Build and test (iOS Simulator)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: apps/gitkanban-ios
+        run: xcodegen generate
+      - name: Pick an iPhone simulator
+        # Prefer iPhone 17 Pro Max (as locally); the runner image decides which devices exist.
+        run: |
+          id=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = [d for runtime, ds in json.load(sys.stdin)["devices"].items() if "iOS" in runtime for d in ds]
+          phones = [d for d in devices if d["name"].startswith("iPhone")]
+          preferred = [d for d in phones if d["name"] == "iPhone 17 Pro Max"]
+          print((preferred or phones)[-1]["udid"])')
+          echo "Using simulator $id"
+          echo "DESTINATION=platform=iOS Simulator,id=$id" >> "$GITHUB_ENV"
+      - name: Boot the simulator and wait until it is ready
+        run: xcrun simctl bootstatus "${DESTINATION##*id=}" -b
+      - name: Build the app, its extensions and tests, and run the unit tests and share-sheet test
+        # The other UI tests need a seeded board or the photo picker; they run locally.
+        working-directory: apps/gitkanban-ios
+        run: |
+          xcodebuild test -quiet -project GitKanban.xcodeproj -scheme GitKanban \
+            -destination "$DESTINATION" -derivedDataPath "$RUNNER_TEMP/dd" \
+            -resultBundlePath "$RUNNER_TEMP/gitkanban-ios.xcresult" \
+            -only-testing:GitKanbanTests -only-testing:GitKanbanUITests/ShareTargetUITests
+      - name: Keep the test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitkanban-ios-results
+          path: ${{ runner.temp }}/gitkanban-ios.xcresult
