@@ -35,7 +35,8 @@ extension AppModel {
         // Cancelled while the servers were being checked: nothing is saved.
         guard !Task.isCancelled else { throw .cancelled }
 
-        let account = MailAccount(displayName: draft.displayName, address: address, connection: verified)
+        let account = MailAccount(displayName: draft.displayName, address: address, connection: verified,
+                                  senderName: draft.trimmedSenderName)
         do {
             try sync.services.credentials.save(password, for: account.id)
         } catch {
@@ -78,6 +79,29 @@ extension AppModel {
         if let current = accounts.first(where: { $0.id == id }) {
             await sync.start(current, store: store)
             await registerForSending([current])
+        }
+    }
+
+    /// Account settings (MAIL-074, MAIL-075): the sidebar name, "Your name" on sent mail, and
+    /// whether mail deleted at the provider is removed here too. Saved in the account's
+    /// `account.json`; sending takes the new name at once, and the sync starts again when the
+    /// removal choice changed (it applies from its next pass).
+    func updateAccountSettings(_ id: MailAccountID, displayName: String, senderName: String,
+                               removesMailDeletedElsewhere: Bool) async throws {
+        guard let store = mailStore, var account = accounts.first(where: { $0.id == id }) else { return }
+        let label = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = senderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let removalChanged = account.removesDeletedMail != removesMailDeletedElsewhere
+        if !label.isEmpty { account.displayName = label }
+        account.senderName = name.isEmpty ? nil : name
+        account.removesMailDeletedElsewhere = removesMailDeletedElsewhere ? true : nil
+        try await store.save(account)
+        try await reloadAfterAccountChange()
+        guard account.connection != nil else { return }
+        await registerForSending([account])
+        if removalChanged, sync.isSyncing(id) {
+            await sync.stop(id)
+            await sync.start(account, store: store)
         }
     }
 

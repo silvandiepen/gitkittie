@@ -105,7 +105,11 @@ final class ClassificationAppTests: XCTestCase {
             await model.select(.category(category))
             await model.select(.account(account)) // and back, so the scope reloads cleanly
             await model.select(.category(category))
-            let members = expectations.fixtures.filter { $0.home == category || (category.purpose == $0.purpose && $0.home != .quarantine) }
+            // Nothing is read yet, so every receipt is in Focused too (MAIL-076).
+            let members = expectations.fixtures.filter {
+                $0.home == category || (category.purpose == $0.purpose && $0.home != .quarantine)
+                    || (category == .focused && $0.home == .transactions && $0.purpose == .transaction)
+            }
             let expectedThreads = Set(members.compactMap { ids[$0.file].flatMap { threadOf[$0] } })
             // Rows from the history account are mail too; compare the corpus's threads only.
             let corpusThreads = threadIDs(model).intersection(Set(threadOf.values))
@@ -152,6 +156,33 @@ final class ClassificationAppTests: XCTestCase {
         await model.attention.setLevel(.off, for: account, accounts: model.accounts)
         let historyFocusedUnread = try await store.categoryCounts(account: history)[.focused]?.unread ?? 0
         XCTAssertEqual(model.attention.badgeCount, historyFocusedUnread)
+    }
+
+    /// GKM-018, answered by Sil (MAIL-076): a receipt is in Focused until it is read, then only
+    /// in Transactions. Reading it in Focused keeps its row in place while it is open; it is gone
+    /// from Focused once the list loads again, and Transactions still lists it.
+    func testAReceiptStaysInFocusedUntilReadThenOnlyInTransactions() async throws {
+        let (_, ids) = try await seedCorpus()
+        let model = await openModel()
+        let receipt = try XCTUnwrap(ids["txn-receipt-en.eml"])
+        let store = try XCTUnwrap(model.mailStore)
+        let verdict = try await store.verdict(of: receipt)
+        XCTAssertEqual(verdict?.home, .transactions)
+        let unreadBefore = model.attention.count(.focused).unread
+
+        await model.select(.category(.focused))
+        let row = try XCTUnwrap(model.browser.rows.first { $0.latest.id == receipt }, "unread: in Focused")
+        await model.browser.select(row.id)
+        let kept = try XCTUnwrap(model.browser.rows.first { $0.id == row.id }, "the open row stays while it is read")
+        XCTAssertFalse(kept.isUnread)
+        XCTAssertEqual(model.browser.selectedRowID, row.id)
+        await model.refreshAfterSync()
+        XCTAssertEqual(model.attention.count(.focused).unread, unreadBefore - 1)
+
+        await model.select(.category(.transactions))
+        XCTAssertTrue(model.browser.rows.contains { $0.latest.id == receipt })
+        await model.select(.category(.focused))
+        XCTAssertFalse(model.browser.rows.contains { $0.latest.id == receipt }, "read: only in Transactions")
     }
 
     func testTheSearchChipNarrowsToACategory() async throws {

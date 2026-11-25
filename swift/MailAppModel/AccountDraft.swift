@@ -13,7 +13,10 @@ struct AccountDraft: Equatable {
 
     var provider: Provider = .iCloud
     var address = ""
+    /// The account's label in the sidebar.
     var name = ""
+    /// "Your name", put on mail sent from the account (MAIL-074).
+    var senderName = ""
     /// Held only until the account is saved; then it is in the Keychain and this draft is gone.
     var password = ""
 
@@ -28,6 +31,10 @@ struct AccountDraft: Equatable {
     var username = ""
 
     var trimmedAddress: String { address.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var trimmedSenderName: String? {
+        let name = senderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : name
+    }
 
     /// The preset that matches the address, for the note under the password field.
     var preset: ProviderPreset? {

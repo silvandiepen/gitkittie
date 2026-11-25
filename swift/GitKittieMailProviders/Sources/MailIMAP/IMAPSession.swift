@@ -504,6 +504,12 @@ public final class IMAPSession: MailboxSession {
             case .envelope(let envelope):
                 summary.messageIDHeader = envelope.messageID.map { String($0) }
                 summary.subject = envelope.subject.map { String(buffer: $0) }
+                for case .singleAddress(let address) in envelope.from.prefix(1) {
+                    summary.fromName = address.personName.map { String(buffer: $0) }
+                    if let mailbox = address.mailbox.map({ String(buffer: $0) }) {
+                        summary.fromAddress = address.host.map { mailbox + "@" + String(buffer: $0) } ?? mailbox
+                    }
+                }
             default: break
             }
         }

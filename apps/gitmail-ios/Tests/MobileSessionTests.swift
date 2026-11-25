@@ -99,8 +99,14 @@ final class MobileSessionTests: XCTestCase {
         let budget = StorageBudget.load(from: defaults)
         XCTAssertEqual(budget, .standard)
         XCTAssertEqual(budget.syncOptions.historyBudgetBytes, 500 * 1024 * 1024)
-        XCTAssertEqual(budget.syncOptions.historyDays, 30, "the first sync takes the newest 30 days (MAIL-072)")
+        // Sil's answer (GKM-025, MAIL-079): 14 days, no attachments until opened, a 250 MB cache.
+        XCTAssertEqual(budget.syncOptions.historyDays, 14, "the first sync takes the newest 14 days")
+        XCTAssertEqual(budget.syncOptions.onDemandThreshold, 0, "every attachment waits until it is opened")
+        XCTAssertEqual(budget.cacheBytes, 250 * 1024 * 1024)
         XCTAssertEqual(budget.minimumFreeBytes, 1024 * 1024 * 1024)
+        var withAttachments = budget
+        withAttachments.attachmentsWhenOpened = false
+        XCTAssertEqual(withAttachments.syncOptions.onDemandThreshold, 1_000_000, "off: only attachments over 1 MB wait, as on the Mac")
         var unlimited = budget
         unlimited.historyBytes = 0
         unlimited.save(to: defaults)
@@ -113,11 +119,40 @@ final class MobileSessionTests: XCTestCase {
         defaults.set(Data(saved.utf8), forKey: StorageBudget.defaultsKey)
         let budget = StorageBudget.load(from: defaults)
         XCTAssertEqual(budget.historyBytes, 100 * 1024 * 1024)
-        XCTAssertEqual(budget.cacheBytes, 200 * 1024 * 1024)
-        XCTAssertEqual(budget.historyWindow, 30)
+        XCTAssertEqual(budget.cacheBytes, 200 * 1024 * 1024, "a size the person chose stays")
+        XCTAssertEqual(budget.historyWindow, 14)
         var all = budget
         all.historyDays = 0
         XCTAssertNil(all.syncOptions.historyDays, "0 is all of it")
+    }
+
+    /// A budget saved under the first defaults (MAIL-068, MAIL-072) moves to the new ones where
+    /// it still holds them; what the person changed stays, and a new save is kept as it is.
+    func testABudgetSavedUnderTheFirstDefaultsMovesToTheNewOnesAndKeepsChanges() throws {
+        let untouched = #"{"historyDays":30,"historyBytes":104857600,"recentPerFolder":200,"cacheBytes":524288000,"minimumFreeBytes":1073741824}"#
+        defaults.set(Data(untouched.utf8), forKey: StorageBudget.defaultsKey)
+        let moved = StorageBudget.load(from: defaults)
+        XCTAssertEqual(moved.historyDays, 14)
+        XCTAssertEqual(moved.cacheBytes, 250 * 1024 * 1024)
+        XCTAssertTrue(moved.attachmentsWhenOpened)
+        XCTAssertEqual(moved.historyBytes, 100 * 1024 * 1024, "the history limit was changed: kept")
+
+        let changed = #"{"historyDays":90,"historyBytes":524288000,"recentPerFolder":200,"cacheBytes":1048576000,"minimumFreeBytes":1073741824}"#
+        defaults.set(Data(changed.utf8), forKey: StorageBudget.defaultsKey)
+        let kept = StorageBudget.load(from: defaults)
+        XCTAssertEqual(kept.historyDays, 90)
+        XCTAssertEqual(kept.cacheBytes, 1000 * 1024 * 1024)
+
+        let allTime = #"{"historyDays":0,"historyBytes":0,"recentPerFolder":200,"cacheBytes":524288000,"minimumFreeBytes":1073741824}"#
+        defaults.set(Data(allTime.utf8), forKey: StorageBudget.defaultsKey)
+        XCTAssertNil(StorageBudget.load(from: defaults).historyWindow, "all of it stays all of it")
+
+        // Chosen now, 30 days is a choice like any other and survives the next launch.
+        var thirty = StorageBudget.standard
+        thirty.historyDays = 30
+        thirty.cacheBytes = 500 * 1024 * 1024
+        thirty.save(to: defaults)
+        XCTAssertEqual(StorageBudget.load(from: defaults), thirty)
     }
 
     func testChangedBudgetReachesTheNextSync() async {
@@ -160,6 +195,27 @@ final class MobileSessionTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: files[1].path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: files[3].path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: record.path), "a crash record is never evicted")
+    }
+
+    /// Attachments in the cache (`cache/blobs`) go back only through the store's eviction, which
+    /// keeps pinned parts and parts that cannot be fetched again (MAIL-064): the cache trim
+    /// never removes them itself, however small the budget.
+    func testTheCacheTrimLeavesAttachmentsToTheStoresEviction() async throws {
+        let store = try await MailStore.open(locations)
+        let device = locations.deviceFolder
+        try DeviceCache.prepare(deviceFolder: device)
+        let blobs = DeviceCache.folder(in: device).appendingPathComponent("blobs", isDirectory: true)
+        try FileManager.default.createDirectory(at: blobs, withIntermediateDirectories: true)
+        let part = blobs.appendingPathComponent(String(repeating: "a", count: 64))
+        try Data(count: 512 * 1024).write(to: part)
+        DeviceCache.trim(deviceFolder: device, to: 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: part.path))
+
+        // Nothing refers to this part, so the store's eviction gives it back.
+        let session = makeSession()
+        await session.trimCache(store)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: part.path))
+        XCTAssertEqual(session.model.sync.services.offlineCacheBytes, 250 * 1024 * 1024, "the reader's cache follows the budget")
     }
 
     func testLowStorageStopsTheSyncWithAMessage() async {
@@ -212,7 +268,7 @@ final class MobileSessionTests: XCTestCase {
         try? KeychainCredentialStore(service: "app.hakobs.gitmail.tests").delete(for: account.id)
     }
 
-    func testTheFirstSyncTakesTheLast30DaysAndDownloadOlderMailBringsTheRest() async throws {
+    func testTheFirstSyncTakesTheLast14DaysAndDownloadOlderMailBringsTheRest() async throws {
         let server = try await LocalMailServer.require()
         let user = try await server.makeUser()
         try await server.append(["Last spring", "Last week", "Two months ago", "Today"], for: user, receivedDaysAgo: [300, 7, 60, 0])
@@ -227,9 +283,9 @@ final class MobileSessionTests: XCTestCase {
         }
         let firstStore = try XCTUnwrap(session.model.mailStore)
         let afterFirst = try await firstStore.messageCount()
-        XCTAssertEqual(afterFirst, 2, "only what arrived in the last 30 days")
+        XCTAssertEqual(afterFirst, 2, "only what arrived in the last 14 days")
         XCTAssertEqual(session.olderNotDownloaded, 2)
-        XCTAssertEqual(session.model.syncStatus(account.id), "Up to date · older than 30 days not downloaded")
+        XCTAssertEqual(session.model.syncStatus(account.id), "Up to date · older than 14 days not downloaded")
 
         try await server.append(["Just now"], for: user)
         await session.model.sync.syncNow()

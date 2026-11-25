@@ -101,6 +101,9 @@ final class CapturedLog: Sendable {
 
     var lines: [String] { records.withLockedValue { $0 } }
 
+    /// Forgets what was logged so far, to look at one step on its own.
+    func reset() { records.withLockedValue { $0.removeAll() } }
+
     func assertNoSecret(_ secret: String, file: StaticString = #filePath, line: UInt = #line) {
         let all = lines.joined(separator: "\n")
         XCTAssertFalse(lines.isEmpty, "nothing was logged", file: file, line: line)

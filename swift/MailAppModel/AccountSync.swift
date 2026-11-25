@@ -15,6 +15,9 @@ struct AccountServices {
     var verifier: AccountVerifier
     var syncOptions: SyncOptions
     var defaults: UserDefaults
+    /// The most the offline cache of attachments keeps (GKM-036); `nil` takes the Mac's default.
+    /// The iPhone sets its storage budget's cache here (MAIL-079).
+    var offlineCacheBytes: Int64? = nil
 
     static var live: AccountServices {
         var options = SyncOptions()
@@ -63,6 +66,8 @@ final class AccountSync {
     @ObservationIgnored private var replayListeners: [MailAccountID: Task<Void, Never>] = [:]
     /// Each account's on-demand fetcher: attachments left at the provider, pins (GKM-036).
     @ObservationIgnored private var fetchers: [MailAccountID: OnDemandFetcher] = [:]
+    /// Each account's server search: mail left at the provider (GKM-041).
+    @ObservationIgnored private var searchers: [MailAccountID: ServerSearcher] = [:]
     @ObservationIgnored private var refreshPending = false
     /// Settable so the iPhone app can apply a changed storage budget (`syncOptions`) to the next
     /// start; a running sync keeps the options it started with.
@@ -104,8 +109,10 @@ final class AccountSync {
             return
         }
         let connector = services.connections.imap(connection, password: secret)
+        var options = services.syncOptions
+        options.removesMailDeletedElsewhere = account.removesDeletedMail
         let coordinator = SyncCoordinator(account: account.id, connector: connector,
-                                          store: store, options: services.syncOptions, log: services.connections.log)
+                                          store: store, options: options, log: services.connections.log)
         coordinators[account.id] = coordinator
         let id = account.id
         // Everyday actions go over their own connection, so a flag never waits for an import.
@@ -114,6 +121,9 @@ final class AccountSync {
         replayers[id] = replayer
         // Attachments on demand use a connection of their own too.
         fetchers[id] = OnDemandFetcher(account: id, connector: connector, store: store, log: services.connections.log)
+        // Searching the provider and opening what it found: one more connection, at most (MAIL-082).
+        searchers[id] = ServerSearcher(account: id, connector: connector, store: store,
+                                       onDemandThreshold: services.syncOptions.onDemandThreshold, log: services.connections.log)
         replayListeners[id] = Task { [weak self] in
             for await update in replayer.updates {
                 guard let self else { return }
@@ -136,6 +146,7 @@ final class AccountSync {
         listeners.removeValue(forKey: account)?.cancel()
         if let replayer = replayers.removeValue(forKey: account) { await replayer.stop() }
         fetchers[account] = nil
+        searchers[account] = nil
         replayListeners.removeValue(forKey: account)?.cancel()
         progress[account] = nil
         replay[account] = nil
@@ -152,6 +163,78 @@ final class AccountSync {
 
     /// The on-demand fetcher of a syncing account; nil when it does not sync on this Mac.
     func fetcher(for account: MailAccountID) -> OnDemandFetcher? { fetchers[account] }
+
+    // MARK: Searching the server (GKM-041)
+
+    /// True when the sync leaves mail at the provider by design (a history window or a storage
+    /// budget) and an account in scope (all when nil) has a folder whose history is not all
+    /// here. Without either limit (the Mac's default) everything comes down, so there is
+    /// nothing to search for at the provider.
+    func leavesMailOnServer(account: MailAccountID?) -> Bool {
+        !searchableAccounts(account).isEmpty
+    }
+
+    /// True when every account the search would ask is offline: the last connection attempt
+    /// failed and the sync waits to retry.
+    func isOffline(account: MailAccountID?) -> Bool {
+        let accounts = searchableAccounts(account)
+        return !accounts.isEmpty && accounts.allSatisfy { progress[$0].map(Self.isOffline) == true }
+    }
+
+    /// Searches the provider of each account in scope that leaves mail there, at the same time
+    /// (each on its one search connection), and merges what they found, newest first.
+    func searchServer(_ query: ServerQuery) async -> ServerSearchState {
+        let accounts = searchableAccounts(query.account).compactMap { id in searchers[id] }
+        guard !accounts.isEmpty else { return .off }
+        let outcomes = await withTaskGroup(of: Result<ServerSearchResult, any Error>.self) { group in
+            for searcher in accounts {
+                group.addTask {
+                    do { return .success(try await searcher.search(query.criteria, mailbox: query.mailbox)) } catch { return .failure(error) }
+                }
+            }
+            var outcomes: [Result<ServerSearchResult, any Error>] = []
+            for await outcome in group { outcomes.append(outcome) }
+            return outcomes
+        }
+        var hits: [ServerSearchHit] = []
+        var total = 0
+        var failures: [any Error] = []
+        for outcome in outcomes {
+            switch outcome {
+            case .success(let result):
+                hits += result.hits
+                total += result.total
+            case .failure(let error):
+                failures.append(error)
+            }
+        }
+        guard failures.count < outcomes.count else {
+            if failures.contains(where: { if case ServerSearcher.Failure.offline = $0 { true } else { false } }) { return .offline }
+            let failure = failures[0]
+            return .failed((failure as? ServerSearcher.Failure)?.description ?? String(describing: failure))
+        }
+        hits.sort { ($0.receivedAt ?? .distantPast) > ($1.receivedAt ?? .distantPast) }
+        return .found(Array(hits.prefix(ServerSearcher.defaultLimit)), total: total)
+    }
+
+    /// Downloads a message the server search found and stores it like synced mail (GKM-041).
+    func downloadServerHit(_ hit: ServerSearchHit) async throws -> MailMessageID {
+        guard let searcher = searchers[hit.account] else {
+            throw ServerSearcher.Failure.failed("this account doesn’t sync on \(DeviceWords.this)")
+        }
+        let id = try await searcher.download(hit)
+        scheduleRefresh() // counts and the sidebar
+        return id
+    }
+
+    /// Syncing accounts in scope that leave mail at the provider, in a stable order.
+    private func searchableAccounts(_ account: MailAccountID?) -> [MailAccountID] {
+        let options = services.syncOptions
+        guard options.historyDays != nil || options.historyBudgetBytes != nil else { return [] }
+        return searchers.keys.filter { id in
+            (account == nil || account == id) && folders[id]?.contains { !$0.historyComplete && $0.uidValidity != nil } == true
+        }.sorted { $0.rawValue < $1.rawValue }
+    }
 
     /// The replayer of an account, for tests.
     func replayer(for account: MailAccountID) -> ActionReplayer? { replayers[account] }

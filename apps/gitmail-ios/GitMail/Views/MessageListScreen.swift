@@ -34,7 +34,8 @@ struct MessageListScreen: View {
                 MessageRow(row: row,
                            showsAccount: model.accounts.count > 1,
                            accountName: model.accounts.first { $0.id == row.latest.account }?.displayName,
-                           isPending: model.sync.replay[row.latest.account]?.status.pendingMessages.contains(row.latest.id) == true)
+                           isPending: model.sync.replay[row.latest.account]?.status.pendingMessages.contains(row.latest.id) == true,
+                           deletedAtProvider: ProviderDeletionText.short(row.latest, account: model.account(of: row.latest)))
                     .tag(row.id)
                     .listRowBackground(row.id == browser.selectedRowID ? Theme.accent.opacity(0.22) : Theme.window)
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -64,6 +65,9 @@ struct MessageListScreen: View {
                     .onAppear {
                         if row.id == browser.rows.last?.id { Task { await browser.loadMore() } }
                     }
+            }
+            if browser.isSearching, browser.server.isShown {
+                ServerResultsSection()
             }
         }
         .listStyle(.plain)
@@ -109,7 +113,7 @@ struct MessageListScreen: View {
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("addAccountButton")
             }
-        } else if browser.rows.isEmpty {
+        } else if browser.rows.isEmpty, !(browser.isSearching && browser.server.isShown) {
             QuietNote(browser.isSearching ? "No messages match." : browser.scope.category?.emptyNote ?? "No messages here.")
         }
     }
@@ -212,6 +216,8 @@ struct MessageRow: View {
     let accountName: String?
     /// A change made here has not reached the provider yet (GKM-015).
     var isPending = false
+    /// "Deleted at iCloud": the provider deleted it; the copy here is kept (MAIL-075).
+    var deletedAtProvider: String?
 
     private var summary: MessageSummary { row.latest }
 
@@ -249,6 +255,12 @@ struct MessageRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
+                if let deletedAtProvider {
+                    Label(deletedAtProvider, systemImage: "trash.slash")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 if showsAccount, let accountName {
                     Text(accountName).font(.caption).foregroundStyle(.tertiary)
                 }
@@ -268,6 +280,7 @@ struct MessageRow: View {
         parts.append(summary.subject ?? "No subject")
         if row.messageCount > 1 { parts.append("\(row.messageCount) messages") }
         if row.hasAttachments { parts.append("Has attachments") }
+        if let deletedAtProvider { parts.append(deletedAtProvider) }
         parts.append(MessageDate.short(summary.date))
         return parts.joined(separator: ", ")
     }

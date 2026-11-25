@@ -83,12 +83,11 @@ public struct SendingAccountSettings: SendingAccount, Hashable {
         self.sentFolder = sentFolder
     }
 
-    /// The account as the mail folder records it, with its address as the identity and any
-    /// aliases after it.
+    /// The account as the mail folder records it, with its address and "Your name" as the
+    /// identity (MAIL-074) and any aliases after it.
     public init(account: MailAccount, aliases: [MailAddress] = [], smtp: ServerEndpoint, imap: ServerEndpoint?,
                 credential: CredentialReference, sentCopy: SentCopyPolicy, sentFolder: String? = nil) {
-        let main = MailAddress(name: account.displayName.isEmpty ? nil : account.displayName, address: account.address)
-        self.init(accountID: account.id, identities: [main] + aliases, smtp: smtp, imap: imap,
+        self.init(accountID: account.id, identities: [account.sendingAddress] + aliases, smtp: smtp, imap: imap,
                   credential: credential, sentCopy: sentCopy, sentFolder: sentFolder)
     }
 

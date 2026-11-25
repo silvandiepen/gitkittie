@@ -88,7 +88,7 @@ extension MailStore {
     // MARK: Blobs
 
     /// Deletes blobs that no remaining message links to.
-    private func removeUnreferencedBlobs() throws {
+    func removeUnreferencedBlobs() throws {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: locations.blobsFolder.path) else { return }
         let accountFolders = fileManager.fileExists(atPath: locations.accountsFolder.path)

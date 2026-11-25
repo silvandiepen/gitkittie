@@ -141,6 +141,7 @@ final class AppModel {
         sync.onStoreChanged = { [weak self] in await self?.refreshAfterSync() }
         browser.onActionsQueued = { [weak self] accounts in await self?.sync.actionsQueued(for: accounts) }
         browser.onMessagesOpened = { [weak self] ids in await self?.senders.recordOpen(ids) }
+        browser.sync = sync
         browser.onFetchAttachment = { [weak self] attachment, id in
             guard let self else { throw CancellationError() }
             return try await self.fetchAttachment(attachment, of: id)
@@ -151,7 +152,7 @@ final class AppModel {
         }
         senders.unsubscribe.accountAddresses = { [weak self] account in
             guard let found = self?.accounts.first(where: { $0.id == account }), !found.address.isEmpty else { return [] }
-            return [MailAddress(name: found.displayName.isEmpty ? nil : found.displayName, address: found.address)]
+            return [found.sendingAddress]
         }
     }
 

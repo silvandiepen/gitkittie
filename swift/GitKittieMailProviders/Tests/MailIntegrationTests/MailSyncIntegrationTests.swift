@@ -451,6 +451,83 @@ final class MailSyncIntegrationTests: XCTestCase {
         XCTAssertEqual(archive, [second])
     }
 
+    /// GKM-011, answered by Sil (MAIL-075): mail deleted elsewhere stays here, marked as deleted
+    /// at the provider with when; a move is not a deletion, also when the message moved into a
+    /// folder this device has not downloaded all of; "Remove mail deleted elsewhere" removes it.
+    func testMailDeletedElsewhereIsKeptAndMarkedAndRemovedOnlyWhenAsked() async throws {
+        try await append(3)
+        let sync = coordinator(SyncOptions(reconnect: Self.fast))
+        try await sync.syncOnce()
+        let validity = try await XCTUnwrapAsync(await store.syncedFolders(account: account).first { $0.name == "INBOX" }?.uidValidity)
+        var stored: [MailMessageID] = []
+        for uid: UInt32 in 1...3 {
+            stored.append(try await XCTUnwrapAsync(await store.localID(at: RemoteLocation(mailbox: "INBOX", uidValidity: validity, uid: uid),
+                                                                       account: account)))
+        }
+        let (deleted, moved, later) = (stored[0], stored[1], stored[2])
+        func remote(_ uid: UInt32) -> RemoteMessageID { RemoteMessageID(folder: "INBOX", uidValidity: validity, uid: uid) }
+
+        // Another client deletes the first for good and moves the second to Archive.
+        let before = Date()
+        try await imap().withSession { session in
+            try await session.expunge([remote(1)])
+            try await session.createFolder("Archive")
+            _ = try await session.move([remote(2)], to: "Archive")
+        }
+        try await sync.syncOnce()
+        let after = Date()
+
+        let shown = try await store.summaries(ids: [deleted, moved])
+        let deletedAt = try XCTUnwrap(shown.first { $0.id == deleted }?.deletedAtProvider, "marked as deleted at the provider")
+        XCTAssertGreaterThanOrEqual(deletedAt.timeIntervalSince1970, before.timeIntervalSince1970.rounded(.down) - 1)
+        XCTAssertLessThanOrEqual(deletedAt, after)
+        XCTAssertNil(shown.first { $0.id == moved }?.deletedAtProvider, "moved, not deleted")
+        let kept = try await storedCount()
+        XCTAssertEqual(kept, 3, "nothing local is deleted")
+        let original = try await store.originalData(of: deleted)
+        XCTAssertFalse(original.isEmpty, "the original is still readable")
+        let progress = await sync.progress
+        XCTAssertEqual(progress.deletedAtProvider, 1)
+
+        // Moved into a folder whose older mail is held back by the storage budget: the provider
+        // still has it, so it is not deleted, though nothing here maps it yet.
+        try await imap().withSession { session in
+            try await session.createFolder("Later")
+            _ = try await session.move([remote(3)], to: "Later")
+        }
+        try await append(1, to: "Later", prefix: "newer")
+        let imported = try await store.importedBytes(account: account)
+        let held = coordinator(SyncOptions(recentPerFolder: 1, historyBudgetBytes: imported, reconnect: Self.fast))
+        try await held.syncOnce()
+        let heldBack = await held.progress
+        XCTAssertTrue(heldBack.historyPausedForBudget)
+        let unmapped = try await store.remoteLocations(of: later, account: account)
+        XCTAssertEqual(unmapped, [], "not downloaded from Later yet")
+        let notDeleted = try await store.summaries(ids: [later]).first?.deletedAtProvider
+        XCTAssertNil(notDeleted, "found at the provider by its Message-ID")
+        XCTAssertTrue(captured.lines.contains { $0.contains("UID SEARCH HEADER Message-ID in Later") })
+        let stillMarked = try await store.deletedAtProvider(account: account)
+        XCTAssertEqual(Array(stillMarked.keys), [deleted])
+
+        // Without the budget it comes in and is matched to the stored message, not copied.
+        try await coordinator(SyncOptions(reconnect: Self.fast)).syncOnce()
+        let mapped = try await store.remoteLocations(of: later, account: account)
+        XCTAssertEqual(mapped.map(\.mailbox), ["Later"])
+        let withNewer = try await storedCount()
+        XCTAssertEqual(withNewer, 4)
+
+        // "Remove mail deleted elsewhere": the local copy goes; everything else stays.
+        let removing = coordinator(SyncOptions(removesMailDeletedElsewhere: true, reconnect: Self.fast))
+        try await removing.syncOnce()
+        let gone = try await store.summaries(ids: [deleted])
+        XCTAssertEqual(gone, [])
+        let left = try await storedCount()
+        XCTAssertEqual(left, 3)
+        let removed = await removing.progress
+        XCTAssertEqual(removed.removedDeletedElsewhere, 1)
+        XCTAssertEqual(removed.deletedAtProvider, 0)
+    }
+
     func testARefusedPasswordStopsTheSyncAndSaysSo() async throws {
         let wrong = IMAPConnector(endpoint: server.imaps, credential: .password(username: user.address, password: Secret("revoked-\(UUID())")),
                                   log: captured.log)

@@ -27,10 +27,11 @@ extension MailIndex {
         var rows: [CleanupRow] = []
         while try statement.step() {
             guard let summary = Self.summary(statement) else { continue }
-            rows.append(CleanupRow(summary: summary, listID: statement.text(11), sender: statement.text(12),
-                                   home: statement.text(13).flatMap(MailCategory.init(rawValue:)) ?? .focused,
-                                   purpose: statement.text(14).flatMap(MailPurpose.init(rawValue:)) ?? .unknown,
-                                   bytes: Int64(statement.int(15))))
+            let more = Self.summaryColumnCount
+            rows.append(CleanupRow(summary: summary, listID: statement.text(more), sender: statement.text(more + 1),
+                                   home: statement.text(more + 2).flatMap(MailCategory.init(rawValue:)) ?? .focused,
+                                   purpose: statement.text(more + 3).flatMap(MailPurpose.init(rawValue:)) ?? .unknown,
+                                   bytes: Int64(statement.int(more + 4))))
         }
         return rows
     }

@@ -70,6 +70,7 @@ final class MobileSession {
             lastBackgroundRun = try? JSONDecoder().decode(BackgroundRun.self, from: data)
         }
         model.sync.services.syncOptions = budget.syncOptions
+        model.sync.services.offlineCacheBytes = budget.cacheBytes
     }
 
     /// The app's model: the Keychain, the standard folders, in-process attachment text with
@@ -78,6 +79,7 @@ final class MobileSession {
         let defaults = UserDefaults.standard
         var services = AccountServices.live
         services.syncOptions = StorageBudget.load(from: defaults).syncOptions
+        services.offlineCacheBytes = StorageBudget.load(from: defaults).cacheBytes
         let attempts = (try? StoreLocations.standard()).map {
             DeviceCache.folder(in: $0.deviceFolder).appendingPathComponent("attachment-text-attempts", isDirectory: true)
         }
@@ -119,7 +121,7 @@ final class MobileSession {
             await model.registerForSending(model.accounts)
             model.indexAttachmentTextInBackground()
         }
-        DeviceCache.trim(deviceFolder: store.locations.deviceFolder, to: budget.cacheBytes)
+        await trimCache(store)
         watchFreeSpace()
     }
 
@@ -139,9 +141,7 @@ final class MobileSession {
             while !expiry.passed, ContinuousClock.now < deadline, self.isSending {
                 try? await Task.sleep(for: .milliseconds(250))
             }
-            if let folder = self.model.mailStore?.locations.deviceFolder {
-                DeviceCache.trim(deviceFolder: folder, to: self.budget.cacheBytes)
-            }
+            if let store = self.model.mailStore { await self.trimCache(store) }
         }
         leaving = task
         await task.value
@@ -236,6 +236,7 @@ final class MobileSession {
         self.budget = budget
         budget.save(to: defaults)
         model.sync.services.syncOptions = budget.syncOptions
+        model.sync.services.offlineCacheBytes = budget.cacheBytes
         guard isActive, let store = model.mailStore else { return }
         // Running syncs keep the options they started with: start them again.
         await model.sync.stopAll()
@@ -243,7 +244,16 @@ final class MobileSession {
             await model.sync.start(model.accounts, store: store)
             await model.registerForSending(model.accounts)
         }
-        DeviceCache.trim(deviceFolder: store.locations.deviceFolder, to: budget.cacheBytes)
+        await trimCache(store)
+    }
+
+    /// Keeps the device cache within the budget: attachments first, through the store's
+    /// eviction (never a pinned part or one that cannot be fetched again, MAIL-064), then the
+    /// rest of `cache/`, least recently used first, in what is left.
+    func trimCache(_ store: MailStore) async {
+        _ = try? await store.evictCache(toFit: budget.cacheBytes)
+        let attachments = (try? await store.offlineStorage().cacheBytes) ?? 0
+        DeviceCache.trim(deviceFolder: store.locations.deviceFolder, to: max(0, budget.cacheBytes - attachments))
     }
 
     /// Messages at the providers received before the history window and not downloaded, over

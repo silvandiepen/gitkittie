@@ -80,6 +80,28 @@ final class ReaderContentTests: XCTestCase {
         XCTAssertEqual(same.warnings, [])
     }
 
+    /// GKM-012, answered by Sil: warn always, worded neutrally. The warning does not depend on
+    /// whether the sender is known or trusted, and it is there when the sender itself is the
+    /// fake one; the wording says what differs, never "phishing" or "scam".
+    func testTheLookalikeWarningIsAlwaysGivenAndWordedNeutrally() {
+        let link = HTMLLink(index: 0, href: "https://c1oudvault.example/login", text: "Sign in", isAllowedScheme: true)
+        // A sender never seen before, from the real domain.
+        let unknown = LinkInspector.assess(link, senderAddress: "news@cloudvault.example")
+        XCTAssertEqual(unknown.warnings, [.lookalike(of: "cloudvault.example")])
+        // A sender that is itself a lookalike, whose name names another domain: still warned.
+        let fakeSender = SenderAssessment.assess(from: [MailAddress(name: "CloudVault (cloudvault.example)", address: "alerts@c1oudvault.example")],
+                                                 replyTo: [])
+        XCTAssertFalse(fakeSender.warnings.isEmpty)
+        let fromFake = LinkInspector.assess(HTMLLink(index: 1, href: "https://cloudvault.example/login", text: "Sign in", isAllowedScheme: true),
+                                            senderAddress: "alerts@c1oudvault.example")
+        XCTAssertEqual(fromFake.warnings, [.lookalike(of: "c1oudvault.example")], "either one may be the fake")
+        for warning in unknown.warnings + fromFake.warnings {
+            let text = warning.message.lowercased()
+            XCTAssertFalse(["phish", "scam", "fraud", "danger", "malicious"].contains { text.contains($0) }, text)
+            XCTAssertTrue(text.contains("looks like"), text)
+        }
+    }
+
     func testObfuscatedSchemesAreBlocked() {
         for href in ["java\tscript:alert(1)", " JAVASCRIPT:alert(1)", "vbscript:x", "data:text/html,x", "file:///etc/hosts", "app-scheme://x"] {
             let assessment = LinkInspector.assess(HTMLLink(index: 0, href: href, text: "x", isAllowedScheme: false), senderAddress: nil)

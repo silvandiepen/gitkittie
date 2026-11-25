@@ -7,7 +7,7 @@ Purpose, security risk, urgency, workflow and space membership are separate dime
 | Purpose | Examples | Default attention |
 | --- | --- | --- |
 | Conversation | Personal, support | Inbox |
-| Transaction | Receipts, orders, invoices, travel | Actionable items in Inbox; all in Transactions |
+| Transaction | Receipts, orders, invoices, travel | Actionable items in Focused; receipts in Focused until read (MAIL-076); all in Transactions |
 | Security | Account alerts, verification | Inbox when trustworthy; suspicious flagged |
 | Notification | GitHub, deliveries, routine updates | Updates; priority exceptions |
 | Subscription | Editorial newsletters, digests | Subscriptions |

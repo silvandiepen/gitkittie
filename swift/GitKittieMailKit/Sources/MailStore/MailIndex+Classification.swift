@@ -128,13 +128,18 @@ extension MailIndex {
         CREATE INDEX IF NOT EXISTS message_classes_by_rule ON message_classes (sender_rule) WHERE sender_rule IS NOT NULL;
         """
 
-    /// The category filter over `messages m`. A message without a verdict is in Focused.
+    /// The category filter over `messages m`. A message without a verdict is in Focused. So is
+    /// an unread receipt (MAIL-076): a transaction whose home is Transactions is listed in
+    /// Focused too until it is read, then only in Transactions. Its home does not change, so it
+    /// never notifies by itself; muted or silently archived ones stay out.
     static func categoryClause(_ category: MailCategory) -> (String, [SQLiteValue]) {
         switch category {
         case .focused:
             return ("""
                 NOT EXISTS (SELECT 1 FROM message_classes c WHERE c.local_id = m.local_id
-                  AND (c.home != 'focused' OR c.disposition IN ('muted', 'archived')))
+                  AND (c.home != 'focused' OR c.disposition IN ('muted', 'archived'))
+                  AND NOT (c.home = 'transactions' AND c.purpose = 'transaction' AND m.seen = 0
+                           AND (c.disposition IS NULL OR c.disposition NOT IN ('muted', 'archived'))))
                 """, [])
         case .quarantine:
             return ("EXISTS (SELECT 1 FROM message_classes c WHERE c.local_id = m.local_id AND c.home = 'quarantine')", [])
@@ -297,11 +302,22 @@ extension MailIndex {
                 counts[category, default: CategoryCount()].total += total
                 counts[category, default: CategoryCount()].unread += unread
             }
+            if Self.isInFocusedWhileUnread(home: home, purpose: purpose, disposition: disposition) {
+                counts[.focused, default: CategoryCount()].total += unread
+                counts[.focused, default: CategoryCount()].unread += unread
+            }
         }
         return counts
     }
 
-    /// The same membership as `categoryClause`, for counting.
+    /// A receipt or other record (a transaction at home in Transactions) is also in Focused
+    /// while it is unread (MAIL-076). The same rule as `categoryClause(.focused)`.
+    static func isInFocusedWhileUnread(home: MailCategory, purpose: MailPurpose?, disposition: SenderDisposition?) -> Bool {
+        home == .transactions && purpose == .transaction && disposition != .muted && disposition != .archived
+    }
+
+    /// The same membership as `categoryClause`, for counting (read and unread alike; unread
+    /// receipts in Focused are added by `isInFocusedWhileUnread`).
     static func isListed(home: MailCategory, purpose: MailPurpose?, disposition: SenderDisposition?, in category: MailCategory) -> Bool {
         switch category {
         case .focused: return home == .focused && disposition != .muted && disposition != .archived

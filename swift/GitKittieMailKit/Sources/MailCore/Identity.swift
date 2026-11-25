@@ -56,19 +56,38 @@ public struct RemoteLocation: Hashable, Codable, Sendable {
 /// Keychain (GKM-010); this is what the sidebar shows and what the folder is about.
 public struct MailAccount: Hashable, Codable, Sendable, Identifiable {
     public var id: MailAccountID
+    /// What the sidebar calls the account ("iCloud", "Work"). Never put on sent mail.
     public var displayName: String
     public var address: String
     /// The servers it syncs with. `nil` for an account whose mail was kept after it was
     /// disconnected, or a folder copied in by hand: its mail is there, nothing syncs it.
     public var connection: MailConnectionSettings?
+    /// "Your name": the name on mail sent from this account, asked when it is added and
+    /// changeable later (GKM-011, MAIL-074). Empty or missing sends the address alone.
+    public var senderName: String?
+    /// "Remove mail deleted elsewhere" (MAIL-075): `true` deletes the local copy of mail the
+    /// provider deleted. Missing is off: the copy stays, shown as deleted at the provider.
+    public var removesMailDeletedElsewhere: Bool?
 
     public init(id: MailAccountID = MailAccountID(), displayName: String, address: String,
-                connection: MailConnectionSettings? = nil) {
+                connection: MailConnectionSettings? = nil, senderName: String? = nil,
+                removesMailDeletedElsewhere: Bool? = nil) {
         self.id = id
         self.displayName = displayName
         self.address = address
         self.connection = connection
+        self.senderName = senderName
+        self.removesMailDeletedElsewhere = removesMailDeletedElsewhere
     }
+
+    /// The address mail from this account is sent from: "Your name" and the address. The
+    /// account's label is never used as the name (an iCloud account no longer sends as "iCloud").
+    public var sendingAddress: MailAddress {
+        let name = senderName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return MailAddress(name: name?.isEmpty == false ? name : nil, address: address)
+    }
+
+    public var removesDeletedMail: Bool { removesMailDeletedElsewhere ?? false }
 }
 
 extension MailAddress {

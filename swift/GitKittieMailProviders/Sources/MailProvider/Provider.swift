@@ -32,6 +32,10 @@ public protocol MailboxSession: AnyObject {
     /// header), for the history window (GKM-039). Throws `commandFailed` when the folder no longer
     /// has `uidValidity`, since its UIDs would then name other messages.
     func uids(in folder: String, uidValidity: UInt32, receivedSince day: Date) async throws -> [UInt32]
+    /// The folder's status and the UIDs, ascending, of its messages that match `criteria`
+    /// (IMAP `UID SEARCH`), for searching mail that is not downloaded (GKM-041). Throws
+    /// `folderNotFound` when the folder is gone.
+    func search(_ criteria: RemoteSearchCriteria, in folder: String) async throws -> FolderListing
     /// Flags, size, dates and envelope for these messages.
     func summaries(of ids: [RemoteMessageID]) async throws -> [RemoteMessageSummary]
     /// The raw messages.

@@ -3,6 +3,7 @@ import MailClassifier
 import MailCore
 import MailReader
 import MailStore
+import MailSync
 import Observation
 
 /// Which mail the list shows, from the sidebar.
@@ -89,9 +90,12 @@ enum ListRow: Identifiable, Hashable {
     var id: String {
         switch self {
         case .thread(let thread): "t:" + thread.id
-        case .message(let message): "m:" + message.id.rawValue
+        case .message(let message): Self.id(of: message.id)
         }
     }
+
+    /// The id of a message's row while searching.
+    static func id(of message: MailMessageID) -> String { "m:" + message.rawValue }
 
     var latest: MessageSummary {
         switch self {
@@ -118,6 +122,20 @@ enum ListRow: Identifiable, Hashable {
         switch self {
         case .thread(let thread): thread.hasAttachments
         case .message(let message): message.hasAttachments
+        }
+    }
+
+    /// Takes the read and flag marks of the open conversation, for a row kept in the list after
+    /// a change took it out of the query.
+    mutating func reflect(_ open: OpenThread) {
+        switch self {
+        case .thread(var thread):
+            thread.unreadCount = open.messages.filter(\.summary.isUnread).count
+            thread.isFlagged = open.messages.contains(where: \.summary.isFlagged)
+            if let latest = open.messages.first(where: { $0.id == thread.latest.id }) { thread.latest = latest.summary }
+            self = .thread(thread)
+        case .message(let message):
+            if let shown = open.messages.first(where: { $0.id == message.id }) { self = .message(shown.summary) }
         }
     }
 }
@@ -173,6 +191,16 @@ final class MailBrowser {
     @ObservationIgnored var onFetchAttachment: (@MainActor (AttachmentReference, MailMessageID) async throws -> AttachmentReference)?
     /// Attachments downloading now, by ``downloadKey(_:of:)``, for the reader's progress.
     private(set) var downloading: Set<String> = []
+    /// Mail at the provider that matches the search and is not downloaded (GKM-041).
+    private(set) var server = ServerSearchState.off
+    /// The hit being downloaded to open it, by id.
+    private(set) var openingServerHit: String?
+    /// The accounts' sync, which searches their providers; set by the app model.
+    @ObservationIgnored weak var sync: AccountSync?
+    /// How long typing must pause before the server is asked (MAIL-082). Zero in tests.
+    @ObservationIgnored var serverSearchDelay: Duration = .milliseconds(600)
+    @ObservationIgnored private var serverQuery: ServerQuery?
+    @ObservationIgnored private var serverTask: Task<Void, Never>?
 
     private var store: MailStore?
     private var preferences: RemoteContentPreferences?
@@ -262,6 +290,7 @@ final class MailBrowser {
                 selectedRowID = nil
                 openThread = nil
             }
+            updateServerSearch()
         } catch {
             actionError = String(describing: error)
         }
@@ -286,6 +315,77 @@ final class MailBrowser {
             return try await store.search(query, limit: Self.pageSize, offset: offset).map(ListRow.message)
         }
         return try await store.threads(query, limit: Self.pageSize, offset: offset).map(ListRow.thread)
+    }
+
+    // MARK: Searching the server (GKM-041)
+
+    /// The provider's half of the search, or nil when there is none.
+    var currentServerQuery: ServerQuery? {
+        guard isSearching else { return nil }
+        let explicitCategory = filters.category ?? SearchQuery.parse(searchText, calendar: calendar).category
+        return ServerQuery.make(query, explicitCategory: explicitCategory)
+    }
+
+    /// Starts, keeps or ends the server search for the current query, after the local results
+    /// are in. A new query cancels the one running; an unchanged one is not asked again (the
+    /// list reloads whenever the sync stores mail), except to retry after being offline or to
+    /// start once an account has mail left at the provider. Waits ``serverSearchDelay`` first,
+    /// so typing asks the server once, not per letter.
+    func updateServerSearch() {
+        let next = currentServerQuery
+        guard next != serverQuery || server == .off || server == .offline else { return }
+        serverTask?.cancel()
+        serverTask = nil
+        serverQuery = next
+        guard let next, let sync, sync.leavesMailOnServer(account: next.account) else {
+            server = .off
+            return
+        }
+        if let reason = next.unavailable {
+            server = .unavailable(reason)
+            return
+        }
+        if sync.isOffline(account: next.account) {
+            server = .offline
+            return
+        }
+        server = .searching
+        let delay = serverSearchDelay
+        serverTask = Task { [weak self] in
+            if delay > .zero {
+                do { try await Task.sleep(for: delay) } catch { return }
+            }
+            guard let sync = self?.sync, !Task.isCancelled else { return }
+            let state = await sync.searchServer(next)
+            guard let self, !Task.isCancelled, self.serverQuery == next else { return }
+            self.server = state
+        }
+    }
+
+    /// Downloads a message found on the server, stores it like synced mail and opens it. It is
+    /// then one of the local results; offline or gone from the provider, ``actionError`` says so.
+    func openServerHit(_ hit: ServerSearchHit) async {
+        guard let sync, openingServerHit == nil else { return }
+        openingServerHit = hit.id
+        defer { openingServerHit = nil }
+        do {
+            let id = try await sync.downloadServerHit(hit)
+            if case .found(var hits, let total) = server {
+                hits.removeAll { $0.id == hit.id }
+                server = .found(hits, total: max(hits.count, total - 1))
+            }
+            await reload()
+            let rowID = ListRow.id(of: id)
+            if rows.contains(where: { $0.id == rowID }) {
+                await select(rowID)
+            } else if let summary = try await store?.summary(of: id) {
+                await show(id, threadID: summary.threadID)
+            }
+        } catch let failure as ServerSearcher.Failure {
+            actionError = failure.description
+        } catch {
+            actionError = String(describing: error)
+        }
     }
 
     // MARK: Intents: selection and keyboard
@@ -439,7 +539,8 @@ final class MailBrowser {
             }
             if openThread?.id == thread.id { openThread = thread }
         }
-        await refreshAfterFlagChange()
+        // A correction moves the message where you said: its row leaves this view at once.
+        await refreshAfterFlagChange(keepsOpenRow: false)
     }
 
     // MARK: Flags
@@ -487,14 +588,22 @@ final class MailBrowser {
     }
 
     /// Re-reads the loaded rows so unread and flag marks are current, without moving the list.
-    private func refreshAfterFlagChange() async {
+    /// The open row stays where it was even when the change takes it out of the list (an
+    /// unread receipt in Focused, MAIL-076, or the Unread filter): it goes with the next reload.
+    private func refreshAfterFlagChange(keepsOpenRow: Bool = true) async {
         guard let store else { return }
         do {
             let count = max(rows.count, Self.pageSize)
             let query = query
-            let fresh: [ListRow] = isSearching
+            var fresh: [ListRow] = isSearching
                 ? try await store.search(query, limit: count).map(ListRow.message)
                 : try await store.threads(query, limit: count).map(ListRow.thread)
+            if keepsOpenRow, let selected = selectedRowID, !fresh.contains(where: { $0.id == selected }),
+               let index = rows.firstIndex(where: { $0.id == selected }) {
+                var kept = rows[index]
+                if let thread = openThread, thread.id == kept.threadID { kept.reflect(thread) }
+                fresh.insert(kept, at: min(index, fresh.count))
+            }
             rows = fresh
         } catch {
             actionError = String(describing: error)
