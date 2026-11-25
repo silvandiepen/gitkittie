@@ -6,6 +6,21 @@ import XCTest
 /// model, on a real board in a temp folder laid out like the tasks repo.
 @MainActor
 final class AgentAccessTests: XCTestCase {
+    /// The prompt for agents' instruction files names every tool it tells them to use, lists the
+    /// boards, and is about the person using the app, not one named person.
+    func testTheAgentPromptNamesRealToolsAndTheBoards() throws {
+        let prompt = AgentTools.prompt(boards: [("tasks/GitKittie", "GitKittie"), ("Notes", "Notes")])
+        XCTAssertTrue(prompt.contains("- `tasks/GitKittie` (GitKittie)"))
+        XCTAssertTrue(prompt.contains("- `Notes`\n") || prompt.hasSuffix("- `Notes`"))
+        let offered = Set(AgentTools.all.map(\.name))
+        let named = prompt.matches(of: try Regex<(Substring, Substring)>(#"`([a-z_]+)`"#)).map { String($0.output.1) }.filter { $0.contains("_") }
+        XCTAssertFalse(named.isEmpty)
+        for tool in named { XCTAssertTrue(offered.contains(tool), "the prompt names \(tool), which the server does not offer") }
+        XCTAssertFalse(AgentTools.prompt(boards: []).contains("Sil"))
+        XCTAssertFalse(AgentTools.instructions.contains("Sil"))
+        XCTAssertTrue(AgentTools.prompt(boards: []).contains("no boards yet"))
+    }
+
     private var root: URL!
     private var suite: String!
     private var model: AppModel!

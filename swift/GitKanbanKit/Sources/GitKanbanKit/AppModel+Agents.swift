@@ -470,10 +470,65 @@ enum AgentBridge {
     }
 }
 
+extension AppModel {
+    /// What to tell agents about Tasks, for their CLAUDE.md / AGENTS.md: what it is, how to reach it, how
+    /// to work with it, and the boards in the sidebar. Agents that are not connected learn it from here;
+    /// connected ones also get `AgentTools.instructions` from the server.
+    public var agentPrompt: String {
+        AgentTools.prompt(boards: addedRepos.flatMap { repo in
+            repo.boards.map { (Self.agentReference(repo, $0), $0.name) }
+        })
+    }
+}
+
 /// The tools the agent server offers, and how to use them.
 enum AgentTools {
+    /// The prompt for an agent's instructions file; `boards` are (reference, name) pairs.
+    static func prompt(boards: [(reference: String, name: String)]) -> String {
+        let list = boards.isEmpty
+            ? "- (no boards yet: list_boards shows them once boards are added in the app)"
+            : boards.map { "- `\($0.reference)`\($0.name == $0.reference ? "" : " (\($0.name))")" }.joined(separator: "\n")
+        return """
+        ## Tasks: the shared task board
+
+        My work is tracked in **Tasks** (GitKittie Tasks), a Kanban board app. Every board is a folder of \
+        Markdown cards in a git repository; the app shows them as lanes (To do, In Progress, In Review, \
+        Testing, Done). It is how a new session finds out what the last one did, so keep it current.
+
+        **How to reach it:** through the `tasks` MCP server (the Tasks app; it opens itself when it is \
+        closed). Use its tools for everything on a board; don't read or write the card files yourself:
+
+        - `list_boards`, then `get_board_rules` once per board before your first change: the board's \
+          contract (fields, lanes, lifecycle). It wins over anything written here.
+        - `list_cards` (by lane), `get_card`, `create_card`, `update_card` (fields, an activity entry, a move \
+          to another lane), `claim_card`.
+        - Reviews: `list_reviews`, `create_review`, `wait_for_reviews`, `handle_review_item`, `close_review`.
+        - Docs: `list_docs`, `get_doc`, `search_docs`, `write_doc`; files: `attach_file`.
+
+        Every change is written and committed at once; a call that returns without error has landed. \
+        If the `tasks` tools are missing, the app isn't connected on this machine: say so (Tasks ▸ Agent \
+        Access… has the command).
+
+        **How to work with it:**
+
+        1. At the start, `list_cards` in In Progress (where we left off), then To do. Say which card you \
+           are working on, or that you are creating one.
+        2. `claim_card` before you implement it.
+        3. Keep the card current while you work: what's done, approaches tried and rejected, scope changes.
+        4. File a new card for a real problem you find but don't fix now.
+        5. Never leave a claimed card silently stale: if you stop, write what is done, what isn't, and the \
+           next concrete step.
+        6. Ask for decisions with `create_review` (questions with options) instead of in chat, when they \
+           can wait.
+
+        **Boards:**
+
+        \(list)
+        """
+    }
+
     static let instructions = """
-    This is Sil's task board, served by the Tasks app. Use these tools for everything on the board instead of \
+    This is the person's task board, served by the Tasks app (GitKittie Tasks). Use these tools for everything on the board instead of \
     reading or writing card files in a repository. Start with list_boards. Before your first change on a board, \
     read get_board_rules once: it is the board's contract (fields, lanes, lifecycle) and it wins over anything \
     written here. Claim a card with claim_card before you implement it. Keep the card current while you work with \

@@ -8,6 +8,10 @@ struct GitMailApp: App {
     @State private var model: AppModel
 
     init() {
+        // Thin overlay scrollbars that only show while scrolling, whatever System Settings says
+        // (the wide "Always" ones draw a light track across the dark window). This app's own
+        // preference: it changes nothing for other apps.
+        UserDefaults.standard.set("WhenScrolling", forKey: "AppleShowScrollBars")
         // Attachment text for search comes from the sandboxed GitMailExtractor.xpc, never this process.
         let model = AppModel(extractor: IsolatedTextExtractor(serviceName: "app.hakobs.gitmail.extractor"),
                              notifications: UserNotificationPoster())

@@ -77,6 +77,31 @@ struct AgentAccessSheet: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Tell your agents about Tasks").font(.subheadline.weight(.medium))
+                    Text("Paste this into your agent's instructions (CLAUDE.md or AGENTS.md) so every session knows what Tasks is, how to reach it and how to work with your boards.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ScrollView {
+                        Text(model.agentPrompt)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                    }
+                    .frame(height: 160)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                    .accessibilityIdentifier("agentPrompt")
+                    HStack {
+                        Spacer()
+                        Button(copied == "prompt" ? "Copied" : "Copy Prompt") {
+                            Platform.copy(model.agentPrompt)
+                            copied = "prompt"
+                        }
+                        .controlSize(.small)
+                    }
+                }
+
                 Text("Agents see the boards in your sidebar and can create, change, move and claim cards on them.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
