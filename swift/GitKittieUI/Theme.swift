@@ -17,6 +17,12 @@ enum Theme {
     static let stroke = dynamic(light: 0xD9DEE8, dark: 0x232D42)
     /// The one accent: selection, links, the primary button.
     static let accent = Color(red: 0x4F / 255, green: 0x8C / 255, blue: 1)
+    /// The accent for text and symbols on the raised rows of a dark form or sheet (#2C2C2E,
+    /// #3A3A3C), where `accent` is under 4.5:1: 4.6:1 there, 7.8:1 on `window`.
+    static let accentText = Color(red: 0x75 / 255, green: 0xA5 / 255, blue: 1)
+    /// The accent under white text (a prominent button, a swipe action): 5:1, where white on
+    /// `accent` is 3.2:1.
+    static let accentFill = Color(red: 0x2B / 255, green: 0x68 / 255, blue: 0xE0 / 255)
 
     private static func dynamic(light: UInt32, dark: UInt32) -> Color {
         #if canImport(AppKit) && !targetEnvironment(macCatalyst)
