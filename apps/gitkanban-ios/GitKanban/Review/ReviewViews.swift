@@ -55,6 +55,8 @@ struct ReviewListView: View {
 private struct ReviewRequestActions: ViewModifier {
     @Environment(AppModel.self) private var model
     let request: ReviewRequest
+    @State private var commenting: ReviewRequest?
+    @State private var removing: ReviewRequest?
 
     func body(content: Content) -> some View {
         let waiting = request.summary.pendingItems
@@ -71,7 +73,9 @@ private struct ReviewRequestActions: ViewModifier {
                 } else if waiting == 0 {
                     Text("Nothing is waiting in this request")
                 }
+                ReviewRequestCommands(request: request, commenting: $commenting, removing: $removing)
             }
+            .reviewRequestPrompts(commenting: $commenting, removing: $removing)
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 if waiting > 0 {
                     Button { decide(.approved) } label: { Label("Approve All", systemImage: "checkmark") }.tint(.green)
@@ -95,6 +99,81 @@ extension View {
     /// Long-press and swipe actions that answer a whole review request at once.
     func reviewRequestActions(_ request: ReviewRequest) -> some View {
         modifier(ReviewRequestActions(request: request))
+    }
+}
+
+/// What else can be done with a whole request, as on the Mac: one comment on every file,
+/// its link and path, and removing it. Used in the row's long-press menu and in the request.
+struct ReviewRequestCommands: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openURL) private var openURL
+    let request: ReviewRequest
+    @Binding var commenting: ReviewRequest?
+    @Binding var removing: ReviewRequest?
+
+    var body: some View {
+        if request.summary.items > 0 {
+            Section {
+                Button("Comment on All Files…", systemImage: "text.bubble") { commenting = request }
+            }
+        }
+        Section {
+            let link = model.reviewLink(request)
+            if let link, !link.isFileURL {
+                Button("Copy Link to Request", systemImage: "link") { UIPasteboard.general.url = link }
+                Button("Open in Browser", systemImage: "safari") { openURL(link) }
+            }
+            Button("Copy Path", systemImage: "doc.on.doc") { UIPasteboard.general.string = model.reviewPath(request) }
+        }
+        Section {
+            Button("Remove Request…", systemImage: "trash", role: .destructive) { removing = request }
+        }
+    }
+}
+
+/// The two prompts the request commands open.
+private struct ReviewRequestPrompts: ViewModifier {
+    @Environment(AppModel.self) private var model
+    @Binding var commenting: ReviewRequest?
+    @Binding var removing: ReviewRequest?
+    var onRemoved: () -> Void
+    @State private var text = ""
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Comment on All Files", isPresented: Binding(get: { commenting != nil }, set: { if !$0 { commenting = nil } }),
+                   presenting: commenting) { request in
+                TextField("Comment", text: $text)
+                Button("Add to All Files") {
+                    let comment = text
+                    text = ""
+                    Task { await model.commentAll(request, text: comment) }
+                }
+                Button("Cancel", role: .cancel) { text = "" }
+            } message: { request in
+                Text("The comment is added to all \(request.summary.items) files of “\(request.title)”, for the agent to read.")
+            }
+            .confirmationDialog("Remove “\(removing?.title ?? "")”?",
+                                isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+                                titleVisibility: .visible, presenting: removing) { request in
+                Button("Remove Request", role: .destructive) {
+                    Task {
+                        await model.removeReview(request)
+                        onRemoved()
+                    }
+                }
+            } message: { request in
+                Text((request.items.isEmpty ? "The request is deleted from the board."
+                      : "The request and its \(request.items.count) files are deleted from the board.")
+                     + " Your answers go with it; git keeps the history.")
+            }
+    }
+}
+
+extension View {
+    func reviewRequestPrompts(commenting: Binding<ReviewRequest?>, removing: Binding<ReviewRequest?>,
+                              onRemoved: @escaping () -> Void = {}) -> some View {
+        modifier(ReviewRequestPrompts(commenting: commenting, removing: removing, onRemoved: onRemoved))
     }
 }
 
@@ -194,6 +273,8 @@ struct ReviewDetailView: View {
     @State private var selection = ""
     @State private var showsAnswered = false
     @State private var confirmClose = false
+    @State private var commenting: ReviewRequest?
+    @State private var removing: ReviewRequest?
 
     private var request: ReviewRequest? { model.reviewRequest(ref) }
 
@@ -268,9 +349,14 @@ struct ReviewDetailView: View {
                 Menu {
                     Toggle("Show Answered", isOn: $showsAnswered)
                     Button("Reload", systemImage: "arrow.clockwise") { Task { await model.refreshReviews() } }
+                    if let request {
+                        ReviewRequestCommands(request: request, commenting: $commenting, removing: $removing)
+                    }
                 } label: { Image(systemName: "ellipsis.circle") }
+                .accessibilityIdentifier("reviewMoreMenu")
             }
         }
+        .reviewRequestPrompts(commenting: $commenting, removing: $removing, onRemoved: { dismiss() })
         .overlay(alignment: .bottom) {
             if let error = model.errorMessage {
                 Text(error).font(.callout).padding(10)
