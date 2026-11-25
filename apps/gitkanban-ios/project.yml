@@ -145,10 +145,21 @@ targets:
             # Offer Tasks whenever at least one shared attachment is an image, even when
             # the sharing app adds other representations (a URL, text) alongside it. The
             # plain "SupportsImageWithMaxCount" rule hides the target in that case.
+            # Some apps share an image without typing it as one: a file whose name has no
+            # image extension registers only "dyn.…" + "public.file-url", and an item source
+            # can declare plain "public.data". Those attachments count too, unless they also
+            # say they are something else (text, a PDF, a web link); the extension checks the
+            # bytes (TaskImage). Keep GitKanbanAction's rule the same.
             NSExtensionActivationRule: >-
               SUBQUERY(extensionItems, $item,
               SUBQUERY($item.attachments, $attachment,
-              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image").@count >= 1).@count >= 1
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image"
+              OR (SUBQUERY($attachment.registeredTypeIdentifiers, $type,
+              $type == "public.data" OR $type BEGINSWITH "dyn.").@count >= 1
+              AND SUBQUERY($attachment.registeredTypeIdentifiers, $type,
+              $type UTI-CONFORMS-TO "public.content"
+              OR ($type UTI-CONFORMS-TO "public.url" AND NOT $type UTI-CONFORMS-TO "public.file-url")).@count == 0)
+              ).@count >= 1).@count >= 1
 
   # The share sheet has two places: the row of app icons (GitKanbanShare) and the list of
   # actions below it, where people look for "Ask …" / "Save to …". This is the same view
@@ -200,7 +211,13 @@ targets:
             NSExtensionActivationRule: >-
               SUBQUERY(extensionItems, $item,
               SUBQUERY($item.attachments, $attachment,
-              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image").@count >= 1).@count >= 1
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image"
+              OR (SUBQUERY($attachment.registeredTypeIdentifiers, $type,
+              $type == "public.data" OR $type BEGINSWITH "dyn.").@count >= 1
+              AND SUBQUERY($attachment.registeredTypeIdentifiers, $type,
+              $type UTI-CONFORMS-TO "public.content"
+              OR ($type UTI-CONFORMS-TO "public.url" AND NOT $type UTI-CONFORMS-TO "public.file-url")).@count == 0)
+              ).@count >= 1).@count >= 1
 
   GitKanbanTests:
     type: bundle.unit-test
