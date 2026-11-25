@@ -256,6 +256,42 @@ extension AppModel {
         await rewriteReview(request, targets.map { .comment(item: $0.id, by: by, text: body, image: nil, at: at) })
     }
 
+    // MARK: A selection of files
+
+    /// Give the chosen files of a request the same decision, in one write (one outbox entry
+    /// carrying an edit per file). Files that already have that decision are left as they
+    /// are. Approving is refused, and nothing written, when it would leave more than one
+    /// option of a pick-one group approved; `errorMessage` then says which.
+    /// Returns whether the decision was written (or there was nothing to change).
+    @discardableResult
+    public func decide(_ request: ReviewRequest, itemIDs: some Collection<String>, status: ReviewStatus) async -> Bool {
+        let chosen = request.items(withIDs: itemIDs)
+        errorMessage = nil
+        if status == .approved, let conflict = request.pickOneConflict(approving: chosen.map(\.id)) {
+            errorMessage = conflict.message
+            return false
+        }
+        let changing = chosen.filter { $0.status != status }
+        guard !changing.isEmpty else { return true }
+        let by = reviewerID(for: request)
+        let at = ReviewEdit.now()
+        await rewriteReview(request, changing.map { .decision(item: $0.id, status: status, by: by, at: at) })
+        return errorMessage == nil
+    }
+
+    /// The same comment on each of the chosen files of a request, and on no other, in one write.
+    /// Returns whether the comment was written.
+    @discardableResult
+    public func comment(_ request: ReviewRequest, itemIDs: some Collection<String>, text raw: String) async -> Bool {
+        let body = Self.trimmed(raw)
+        let targets = request.items(withIDs: itemIDs)
+        guard !body.isEmpty, !targets.isEmpty else { return false }
+        let by = reviewerID(for: request)
+        let at = ReviewEdit.now()
+        await rewriteReview(request, targets.map { .comment(item: $0.id, by: by, text: body, image: nil, at: at) })
+        return errorMessage == nil
+    }
+
     /// Remove a request and its files from the board, answered or not. Git keeps its history.
     public func removeReview(_ request: ReviewRequest) async {
         guard let source = reviewSource(for: request) else { return }

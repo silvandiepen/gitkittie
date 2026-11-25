@@ -240,6 +240,12 @@ private struct ReviewDetailView: View {
     /// What "only waiting" hides, fixed when the request opens (or the switch changes), so a
     /// file you just decided stays where it is instead of vanishing under the pointer.
     @State private var hidden: (items: Set<String>, questions: Set<String>) = ([], [])
+    /// Files chosen to act on at once: ⌘A, the checkbox, or a click with ⌘ or ⇧.
+    @State private var selection: Set<String> = []
+    /// Where a ⇧-click range starts: the file last clicked without ⇧.
+    @State private var anchor: String?
+    @State private var commentingSelection = false
+    @State private var selectionComment = ""
 
     var body: some View {
         if let request = model.reviewRequest(ref) {
@@ -248,6 +254,7 @@ private struct ReviewDetailView: View {
                 shown.items = group.items.filter { !hidden.items.contains($0.id) }
                 return shown.items.isEmpty ? nil : shown
             }
+            let shownIDs = request.shownItemIDs(hiding: hidden.items)
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
                     header(request)
@@ -262,7 +269,9 @@ private struct ReviewDetailView: View {
                             }
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 320, maximum: 520), spacing: 18, alignment: .top)], alignment: .leading, spacing: 18) {
                                 ForEach(group.items) { item in
-                                    ReviewItemView(request: request, item: item, group: group)
+                                    ReviewItemView(request: request, item: item, group: group,
+                                                   isSelected: selection.contains(item.id),
+                                                   select: { mode in select(item.id, mode, shown: shownIDs) })
                                 }
                             }
                         }
@@ -276,11 +285,25 @@ private struct ReviewDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .overlay(alignment: .bottom) {
-                if let error = model.errorMessage {
-                    Text(error).font(.callout).padding(10)
-                        .background(.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-                        .padding()
+                VStack(spacing: 0) {
+                    if let error = model.errorMessage {
+                        Text(error).font(.callout).padding(10)
+                            .background(.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                            .padding()
+                    }
+                    if !selection.isEmpty { selectionBar(request) }
                 }
+            }
+            .background {
+                // ⌘A and Escape for the files. Kept out of sight: they are the keyboard's way in.
+                Group {
+                    Button("Select All Files") { selectAll(shownIDs) }
+                        .keyboardShortcut("a", modifiers: .command)
+                    Button("Clear Selection") { selection = []; anchor = nil }
+                        .keyboardShortcut(.cancelAction)
+                        .disabled(selection.isEmpty)
+                }
+                .opacity(0).allowsHitTesting(false).accessibilityHidden(true)
             }
             .toolbar {
                 ToolbarItem {
@@ -289,6 +312,17 @@ private struct ReviewDetailView: View {
                         .accessibilityIdentifier("reviewOnlyWaiting")
                 }
             }
+            .alert("Comment on \(selection.count) File\(selection.count == 1 ? "" : "s")", isPresented: $commentingSelection) {
+                TextField("Comment", text: $selectionComment)
+                Button("Add Comment") {
+                    let text = selectionComment, ids = selection
+                    selectionComment = ""
+                    Task { await model.comment(request, itemIDs: ids, text: text) }
+                }
+                Button("Cancel", role: .cancel) { selectionComment = "" }
+            } message: {
+                Text("The comment is added to each selected file, for the agent to read.")
+            }
             .onAppear { hide(request) }
             .onChange(of: onlyWaiting) { _, _ in hide(request) }
         }
@@ -296,6 +330,69 @@ private struct ReviewDetailView: View {
 
     private func hide(_ request: ReviewRequest) {
         hidden = onlyWaiting ? request.settledIDs : ([], [])
+        // A file that is no longer on show is no longer chosen.
+        selection.subtract(hidden.items)
+    }
+
+    /// How a file was clicked to choose it.
+    enum SelectMode { case toggle, extend }
+
+    private func select(_ id: String, _ mode: SelectMode, shown: [String]) {
+        switch mode {
+        case .toggle:
+            if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+            anchor = id
+        case .extend:
+            guard let anchor, let from = shown.firstIndex(of: anchor), let to = shown.firstIndex(of: id) else {
+                selection.insert(id)
+                self.anchor = id
+                return
+            }
+            selection.formUnion(shown[min(from, to)...max(from, to)])
+        }
+    }
+
+    /// ⌘A: every file on show. In a text field it selects the text, as it always does.
+    private func selectAll(_ shown: [String]) {
+        if NSApp.keyWindow?.firstResponder is NSText {
+            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+            return
+        }
+        selection = Set(shown)
+        anchor = shown.first
+    }
+
+    /// "N selected" and what can be done with them, in one write each.
+    private func selectionBar(_ request: ReviewRequest) -> some View {
+        let ids = selection
+        return HStack(spacing: 10) {
+            Text("\(ids.count) selected").font(.callout.weight(.semibold)).monospacedDigit()
+                .accessibilityIdentifier("reviewSelectionCount")
+            Divider().frame(height: 18)
+            Button { decideSelection(request, ids, .approved) } label: { Label("Approve", systemImage: "checkmark") }
+                .tint(.green)
+            Button { decideSelection(request, ids, .changesRequested) } label: { Label("Ask Changes", systemImage: "pencil") }
+                .tint(.orange)
+            Button { decideSelection(request, ids, .rejected) } label: { Label("Reject", systemImage: "xmark") }
+                .tint(.red)
+            Button { decideSelection(request, ids, .pending) } label: { Label("Back to Waiting", systemImage: "arrow.uturn.backward") }
+            Button { selectionComment = ""; commentingSelection = true } label: { Label("Comment…", systemImage: "text.bubble") }
+            Divider().frame(height: 18)
+            Button { selection = []; anchor = nil } label: { Image(systemName: "xmark.circle.fill") }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .help("Clear the selection (Escape)")
+                .accessibilityLabel("Clear Selection")
+        }
+        .buttonStyle(.bordered)
+        .disabled(model.isSaving)
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(.regularMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+        .padding(.bottom, 16)
+    }
+
+    private func decideSelection(_ request: ReviewRequest, _ ids: Set<String>, _ status: ReviewStatus) {
+        Task { await model.decide(request, itemIDs: ids, status: status) }
     }
 
     /// The request's questions as a form: one after another, each answered on its own.
@@ -334,6 +431,9 @@ private struct ReviewItemView: View {
     let request: ReviewRequest
     let item: ReviewItem
     let group: ReviewGroup
+    var isSelected = false
+    /// Choose the file to act on with others: toggled, or a range up to it (⇧).
+    var select: (ReviewDetailView.SelectMode) -> Void = { _ in }
     @State private var draft = ""
     @FocusState private var composing: Bool
 
@@ -346,6 +446,11 @@ private struct ReviewItemView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
             HStack(alignment: .firstTextBaseline) {
+                Toggle(isOn: Binding(get: { isSelected }, set: { _ in select(.toggle) })) { EmptyView() }
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                    .help("Select to act on several files at once (⌘A selects all)")
+                    .accessibilityLabel("Select \(item.id)")
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.id).font(.subheadline.weight(.semibold))
                     Text(item.file).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
@@ -388,7 +493,14 @@ private struct ReviewItemView: View {
         }
         .padding(12)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            if isSelected { RoundedRectangle(cornerRadius: 14).strokeBorder(Color.accentColor, lineWidth: 2.5) }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 14))
+        // A click with ⌘ or ⇧ chooses the file, wherever it lands, before anything inside it reacts.
+        .highPriorityGesture(TapGesture().modifiers(.command).onEnded { select(.toggle) })
+        .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { select(.extend) })
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .contextMenu {
             Button("Approve", systemImage: "checkmark") { Task { await model.decide(request, item: item, status: .approved) } }
                 .disabled(item.status == .approved)
