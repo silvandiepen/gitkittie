@@ -48,6 +48,7 @@ struct AddAccountScreen: View {
                 if let error {
                     Section {
                         NoticeLine(systemImage: "exclamationmark.triangle", tint: .orange, text: error.message)
+                            .accessibilityElement(children: .combine)
                             .accessibilityIdentifier("accountError")
                     }
                 }

@@ -24,8 +24,9 @@ final class MailFlowUITests: XCTestCase {
         app.launchEnvironment["GKM_TEST_CA_PEM_BASE64"] = server.caPEM.base64EncodedString()
         app.launch()
 
-        // First run: no account, so the app opens on the mailboxes with Add Account.
-        let add = app.buttons["addAccountButton"]
+        // First run: no account. Add Account is in the empty list, and on iPad also in the
+        // sidebar; both open the same sheet.
+        let add = app.buttons.matching(identifier: "addAccountButton").firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 20))
         snapshot("1-first-run")
         add.tap()
@@ -68,12 +69,13 @@ final class MailFlowUITests: XCTestCase {
         XCTAssertTrue(readRow.waitForExistence(timeout: 10))
         XCTAssertFalse(readRow.label.hasPrefix("Unread"), "opening the conversation marks it read")
         readRow.swipeRight()
-        let unread = app.buttons["Unread"]
+        // The swipe actions have their own identifiers: on iPad the open reader has Flag too.
+        let unread = app.buttons["swipeReadUnread"]
         if unread.waitForExistence(timeout: 3) { unread.tap() }
         XCTAssertTrue(waitFor { rows.containing(NSPredicate(format: "label BEGINSWITH 'Unread' AND label CONTAINS 'Lunch on Friday'")).count == 1 })
         // Swipe left: flag it.
         readRow.swipeLeft()
-        let flag = app.buttons["Flag"]
+        let flag = app.buttons["swipeFlag"]
         XCTAssertTrue(flag.waitForExistence(timeout: 5))
         flag.tap()
         XCTAssertTrue(waitFor { rows.containing(NSPredicate(format: "label CONTAINS 'Flagged' AND label CONTAINS 'Lunch on Friday'")).count == 1 })
@@ -87,7 +89,14 @@ final class MailFlowUITests: XCTestCase {
         XCTAssertTrue(waitFor { rows.count == 1 })
         XCTAssertTrue(app.descendants(matching: .any)["searchChips"].waitForExistence(timeout: 5))
         snapshot("5-search")
-        app.buttons["Cancel"].firstMatch.tap()
+        // iPhone's search field has Cancel; iPad's has only the clear button.
+        let cancel = app.buttons["Cancel"].firstMatch
+        if cancel.exists {
+            cancel.tap()
+        } else {
+            search.buttons["Clear text"].tap()
+        }
+        XCTAssertTrue(waitFor { rows.count >= 3 }, "clearing the search shows the inbox again")
 
         // Write to yourself and send.
         let compose = app.buttons["composeButton"]
@@ -128,7 +137,9 @@ final class MailFlowUITests: XCTestCase {
     private func replace(_ field: XCUIElement, with text: String) {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         if !field.isHittable { app.swipeUp() }
-        field.tap()
+        // The fields are trailing-aligned: tap the right end so the cursor lands after the old
+        // text (a plain tap can put it at the start on iPad, and the deletes then remove nothing).
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         let current = field.value as? String ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
         field.typeText(text)
@@ -144,7 +155,7 @@ final class MailFlowUITests: XCTestCase {
     }
 
     private func errorText() -> String {
-        let error = app.descendants(matching: .any)["accountError"]
+        let error = app.descendants(matching: .any).matching(identifier: "accountError").firstMatch
         return error.exists ? error.label : "no error shown"
     }
 
