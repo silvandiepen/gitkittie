@@ -23,7 +23,9 @@ Tailscale). Both do **no git**: the folder's own sync tool commits. The kind liv
 `AppModel.makeSource(for:)` picks the source. Review requests (`Review` in GitKittieKit, mirroring
 `packages/gitkanban-core/src/review.ts`) load from the board's effective `review_path` and only show
 when that folder exists. Reviewer writes are compare-and-swap so an agent's concurrent edit is never lost.
-iOS has the review screens (`GitKanban/Review/`); macOS has folder sources but no review UI yet.
+Both apps have review screens (`GitKanban/Review/`). Select in a request's ⋯ menu shows its files as a grid to decide or
+comment on several at once, in one write (`AppModel.decide(_:itemIDs:status:)`, `comment(_:itemIDs:text:)`); approving two options
+of a pick-one group is refused. `UITests/ReviewSelectUITests` needs `scripts/seed-select-fixture.sh <simulator-udid>` first.
 The home-screen name is **Tasks** (GITKITTIE-013 tracks the rest of the rename).
 
 ## Share extension and shared storage

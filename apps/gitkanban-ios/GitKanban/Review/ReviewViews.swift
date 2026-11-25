@@ -276,8 +276,20 @@ struct ReviewDetailView: View {
     @State private var confirmClose = false
     @State private var commenting: ReviewRequest?
     @State private var removing: ReviewRequest?
+    /// Select mode: the files on show as a grid, to choose several and act on them at once.
+    @State private var selecting = false
+    @State private var chosen: Set<String> = []
+    @State private var commentingSelection = false
+    @State private var selectionComment = ""
 
     private var request: ReviewRequest? { model.reviewRequest(ref) }
+
+    /// The files on show, in order: what Select works on.
+    private func shownItems(_ request: ReviewRequest) -> [ReviewItem] {
+        slides(request).compactMap { page in
+            if case .item(let item) = page { return item } else { return nil }
+        }
+    }
 
     private func slides(_ request: ReviewRequest) -> [ReviewPage] {
         ReviewPage.all(request).filter { slideIDs.contains($0.id) }
@@ -295,6 +307,8 @@ struct ReviewDetailView: View {
                     header(request, pages: pages)
                     if pages.isEmpty {
                         ContentUnavailableView("Nothing to review", systemImage: "checkmark.seal")
+                    } else if selecting {
+                        ReviewSelectGrid(request: request, items: shownItems(request), chosen: $chosen)
                     } else {
                         TabView(selection: $selection) {
                             ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
@@ -338,26 +352,59 @@ struct ReviewDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(!embedded)
         .toolbar {
-            if !embedded {
+            if selecting {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        if let request, !unanswered(request).isEmpty { confirmClose = true } else { dismiss() }
-                    } label: { Label("Reviews", systemImage: "chevron.left") }
-                    .accessibilityIdentifier("reviewBackButton")
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Toggle("Show Answered", isOn: $showsAnswered)
-                    Button("Reload", systemImage: "arrow.clockwise") { Task { await model.refreshReviews() } }
-                    if let request {
-                        ReviewRequestCommands(request: request, commenting: $commenting, removing: $removing)
+                    let all = request.map { shownItems($0).map(\.id) } ?? []
+                    let allChosen = !all.isEmpty && Set(all).isSubset(of: chosen)
+                    Button(allChosen ? "Deselect All" : "Select All") {
+                        chosen = allChosen ? [] : Set(all)
                     }
-                } label: { Image(systemName: "ellipsis.circle") }
-                .accessibilityIdentifier("reviewMoreMenu")
+                    .accessibilityIdentifier("reviewSelectAll")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { endSelecting() }.fontWeight(.semibold)
+                        .accessibilityIdentifier("reviewSelectDone")
+                }
+            } else {
+                if !embedded {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            if let request, !unanswered(request).isEmpty { confirmClose = true } else { dismiss() }
+                        } label: { Label("Reviews", systemImage: "chevron.left") }
+                        .accessibilityIdentifier("reviewBackButton")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        if let request, !shownItems(request).isEmpty {
+                            Button("Select", systemImage: "checkmark.circle") { withAnimation { selecting = true } }
+                                .accessibilityIdentifier("reviewSelectFiles")
+                        }
+                        Toggle("Show Answered", isOn: $showsAnswered)
+                        Button("Reload", systemImage: "arrow.clockwise") { Task { await model.refreshReviews() } }
+                        if let request {
+                            ReviewRequestCommands(request: request, commenting: $commenting, removing: $removing)
+                        }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                    .accessibilityIdentifier("reviewMoreMenu")
+                }
             }
         }
         .reviewRequestPrompts(commenting: $commenting, removing: $removing, onRemoved: { dismiss() })
+        .alert("Comment on \(chosen.count) File\(chosen.count == 1 ? "" : "s")", isPresented: $commentingSelection) {
+            TextField("Comment", text: $selectionComment)
+            Button("Add Comment") {
+                let text = selectionComment, ids = chosen
+                selectionComment = ""
+                if let request { Task { await model.comment(request, itemIDs: ids, text: text) } }
+            }
+            Button("Cancel", role: .cancel) { selectionComment = "" }
+        } message: {
+            Text("The comment is added to each selected file, for the agent to read.")
+        }
+        .safeAreaInset(edge: .bottom) {
+            if selecting, let request { selectionBar(request) }
+        }
         .overlay(alignment: .bottom) {
             VStack(spacing: 0) {
                 // Reviews open in a sheet, over the activity mark: a change that could not
@@ -389,6 +436,52 @@ struct ReviewDetailView: View {
         if !slideIDs.contains(selection) {
             selection = shown.first(where: \.isWaiting)?.id ?? shown.first?.id ?? ""
         }
+    }
+
+    private func endSelecting() {
+        withAnimation { selecting = false }
+        chosen = []
+    }
+
+    /// "N selected" and what can be done with them, each in one write.
+    private func selectionBar(_ request: ReviewRequest) -> some View {
+        let ids = chosen
+        return VStack(spacing: 6) {
+            Text(ids.isEmpty ? "Select files" : "\(ids.count) selected")
+                .font(.footnote.weight(.semibold)).monospacedDigit().foregroundStyle(.secondary)
+                .accessibilityIdentifier("reviewSelectionCount")
+            HStack(spacing: 4) {
+                selectionAction("Approve", "checkmark", .green) { decideSelection(request, ids, .approved) }
+                selectionAction("Changes", "pencil", .orange) { decideSelection(request, ids, .changesRequested) }
+                selectionAction("Reject", "xmark", .red) { decideSelection(request, ids, .rejected) }
+                selectionAction("Waiting", "arrow.uturn.backward", .secondary) { decideSelection(request, ids, .pending) }
+                    .accessibilityLabel("Back to Waiting")
+                selectionAction("Comment", "text.bubble", Theme.accent) { selectionComment = ""; commentingSelection = true }
+            }
+            .disabled(ids.isEmpty || model.isSaving)
+        }
+        .padding(.horizontal, 10).padding(.top, 8).padding(.bottom, 6)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+    }
+
+    private func selectionAction(_ title: String, _ symbol: String, _ tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: symbol).font(.body.weight(.semibold))
+                Text(title).font(.caption2.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(tint)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("reviewSelection\(title)")
+    }
+
+    private func decideSelection(_ request: ReviewRequest, _ ids: Set<String>, _ status: ReviewStatus) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task { await model.decide(request, itemIDs: ids, status: status) }
     }
 
     private func goToUnanswered(_ request: ReviewRequest) {
@@ -433,6 +526,92 @@ struct ReviewDetailView: View {
             .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.horizontal).padding(.top, 8).padding(.bottom, 6)
+    }
+}
+
+/// Select mode: the request's files as thumbnails, each with a checkmark; tap to choose.
+private struct ReviewSelectGrid: View {
+    let request: ReviewRequest
+    let items: [ReviewItem]
+    @Binding var chosen: Set<String>
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: sizeClass == .regular ? 170 : 105), spacing: 10)], spacing: 10) {
+                ForEach(items) { item in
+                    let isChosen = chosen.contains(item.id)
+                    Button {
+                        if isChosen { chosen.remove(item.id) } else { chosen.insert(item.id) }
+                    } label: {
+                        ReviewThumbnail(request: request, item: item, isChosen: isChosen)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(item.id), \(item.status.title)")
+                    .accessibilityAddTraits(isChosen ? .isSelected : [])
+                    .accessibilityIdentifier("reviewSelectItem-\(item.id)")
+                }
+            }
+            .padding(.horizontal).padding(.vertical, 8)
+        }
+    }
+}
+
+/// One file in the select grid: a small picture of it, its decision and a checkmark.
+private struct ReviewThumbnail: View {
+    let request: ReviewRequest
+    let item: ReviewItem
+    let isChosen: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            picture
+                .frame(maxWidth: .infinity)
+                .aspectRatio(1, contentMode: .fit)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(isChosen ? Color.accentColor : .clear, lineWidth: 3)
+                }
+                .overlay(alignment: .topTrailing) {
+                    Image(systemName: isChosen ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.white, isChosen ? Color.accentColor : Color.black.opacity(0.25))
+                        .shadow(radius: 1)
+                        .padding(6)
+                }
+                .overlay(alignment: .bottomLeading) {
+                    Circle().fill(ReviewColor.status(item.status)).frame(width: 9, height: 9)
+                        .opacity(item.status == .pending ? 0 : 1)
+                        .padding(7)
+                }
+            Text(item.id).font(.caption2.weight(.medium)).lineLimit(1).truncationMode(.middle)
+                .foregroundStyle(.primary)
+        }
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder private var picture: some View {
+        switch item.kind {
+        case .image, .animation:
+            RemoteImage(request: request, file: item.file, maxPixel: 360)
+        case .model:
+            if let preview = item.preview {
+                RemoteImage(request: request, file: preview, maxPixel: 360)
+            } else {
+                symbol("cube.transparent")
+            }
+        case .audio: symbol("waveform")
+        case .video: symbol("film")
+        case .other: symbol("doc")
+        }
+    }
+
+    private func symbol(_ name: String) -> some View {
+        Image(systemName: name).font(.system(size: 30)).foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
