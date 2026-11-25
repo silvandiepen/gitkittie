@@ -246,6 +246,20 @@ final class MobileSession {
         DeviceCache.trim(deviceFolder: store.locations.deviceFolder, to: budget.cacheBytes)
     }
 
+    /// Messages at the providers received before the history window and not downloaded, over
+    /// every syncing account (MAIL-072).
+    var olderNotDownloaded: Int {
+        model.sync.progress.values.reduce(0) { $0 + $1.olderNotDownloaded }
+    }
+
+    /// Downloads the mail the history window left at the provider: the window goes, and the
+    /// sync imports the older mail newest first, within the storage limit, without duplicates.
+    func downloadOlderMail() async {
+        var budget = self.budget
+        budget.historyDays = 0
+        await setBudget(budget)
+    }
+
     /// False, with the notice set, when free space is under the budget's minimum.
     private func hasRoom(_ store: MailStore) -> Bool {
         guard let free = freeSpace(store.locations.mailFolder) else { storageNotice = nil; return true }

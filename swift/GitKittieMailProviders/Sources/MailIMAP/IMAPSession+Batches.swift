@@ -27,6 +27,32 @@ extension IMAPSession {
         return FolderListing(status: state.status, uids: Array(Set(uids)).sorted())
     }
 
+    public func uids(in folder: String, uidValidity: UInt32, receivedSince day: Date) async throws -> [UInt32] {
+        let state = try await select(folder)
+        guard state.status.uidValidity == uidValidity else {
+            throw MailProviderError.commandFailed("\(folder): UIDVALIDITY changed since it was listed")
+        }
+        guard state.status.messageCount > 0 else { return [] }
+        let result = try await wire.run(.uidSearch(key: .since(Self.calendarDay(day))), logAs: "UID SEARCH SINCE in \(folder)")
+        try Self.check(result, "UID SEARCH SINCE")
+        var uids: [UInt32] = []
+        for case .mailboxData(.search(let found, _)) in result.untagged {
+            uids += found.map(\.rawValue)
+        }
+        _ = wire.takeUnsolicited()
+        return Array(Set(uids)).sorted()
+    }
+
+    /// The calendar day of `date` in UTC, as IMAP dates are written (SEARCH SINCE has no time).
+    static func calendarDay(_ date: Date) -> IMAPCalendarDay {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        // IMAP days run from 1900 to 2500; a Gregorian month and day are always valid.
+        let year = min(max(parts.year ?? 1900, 1900), 2500)
+        return IMAPCalendarDay(year: year, month: parts.month ?? 1, day: parts.day ?? 1)!
+    }
+
     public func summaries(of ids: [RemoteMessageID]) async throws -> [RemoteMessageSummary] {
         guard !ids.isEmpty else { return [] }
         let (folder, uids) = try await selectForMessages(ids)

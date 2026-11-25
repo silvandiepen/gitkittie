@@ -210,6 +210,40 @@ final class ImageTaskTests: XCTestCase {
         XCTAssertEqual(images[1].pixelSize, CGSize(width: 200, height: 100))
     }
 
+    /// Some apps share an image without saying it is one: as bytes typed only `public.data`,
+    /// or as a file whose name has no image extension (registered as a `dyn.` type). The
+    /// share sheet offers Tasks for those, so they have to load; what is not an image is
+    /// still skipped.
+    func testImageBytesOfNoStatedTypeLoadAndOtherBytesDoNot() async throws {
+        let png = try image()
+        let jpeg = try image(as: .jpeg)
+        let file = root.appendingPathComponent("file-7a1c2e")
+        try png.write(to: file)
+        let notAnImage = root.appendingPathComponent("export-31f0")
+        try Data("not an image".utf8).write(to: notAnImage)
+
+        let untypedPNG = NSItemProvider(item: png as NSData, typeIdentifier: UTType.data.identifier)
+        let dynamicJPEG = NSItemProvider(item: jpeg as NSData, typeIdentifier: "dyn.age8u")
+        let fileWithoutExtension = NSItemProvider(object: file as NSURL)
+        let untypedText = NSItemProvider(item: Data("hello".utf8) as NSData, typeIdentifier: UTType.data.identifier)
+        let fileThatIsNotAnImage = NSItemProvider(object: notAnImage as NSURL)
+
+        let providers = [untypedPNG, dynamicJPEG, fileWithoutExtension, untypedText, fileThatIsNotAnImage]
+        XCTAssertTrue(TaskImage.canLoad(from: [untypedPNG]))
+        let images = await TaskImage.load(from: providers)
+        XCTAssertEqual(images.map(\.fileExtension), ["png", "jpg", "png"])
+        XCTAssertEqual(images.first?.data, png)
+        XCTAssertEqual(images.last?.data, png)
+    }
+
+    func testOnlyPublicDataAndDynamicTypesCountAsUntyped() {
+        XCTAssertTrue(TaskImage.isUntyped("public.data"))
+        XCTAssertTrue(TaskImage.isUntyped("dyn.age8u"))
+        for described in ["public.png", "public.plain-text", "public.url", "public.file-url", "com.adobe.pdf", "public.zip-archive"] {
+            XCTAssertFalse(TaskImage.isUntyped(described), described)
+        }
+    }
+
     func testPlainTextIsNotAnImageDrop() {
         XCTAssertFalse(TaskImage.canLoad(from: [NSItemProvider(object: "MORROW-001" as NSString)]))
     }

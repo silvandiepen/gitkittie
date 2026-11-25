@@ -8,8 +8,9 @@ import MailStore
 ///
 /// - **Progressive.** Each pass imports every folder's new mail first (on a first sync, the
 ///   newest ``SyncOptions/recentPerFolder`` messages), newest first, then flags and removals,
-///   then a slice of history, newest first, within the storage budget. Between slices it checks
-///   for new mail again, so a long history import never hides today's mail.
+///   then a slice of history, newest first, within the storage budget and the history window
+///   (``SyncOptions/historyDays``). Between slices it checks for new mail again, so a long
+///   history import never hides today's mail.
 /// - **Never loses or duplicates.** What is stored is decided by the store's remote mapping
 ///   (mailbox + UIDVALIDITY + UID → local id), which `ingest` writes only after the `.eml` is
 ///   durable. Cursors are checkpointed after the writes they cover. A message seen again —
@@ -37,6 +38,11 @@ public actor SyncCoordinator {
     private var historyPending = false
     /// Messages too large to download, per folder: reported, never retried in a loop.
     private var tooLargeByFolder: [String: Set<UInt32>] = [:]
+    /// History left out by the window, per folder, after its last listing (GKM-039).
+    private var olderByFolder: [String: Int] = [:]
+    /// What each folder's window searches found, so a pass searches only for what it has not
+    /// sorted yet.
+    private var windows: [String: WindowSearch] = [:]
     /// When every folder's flags were last checked.
     private var lastFlagCheck: ContinuousClock.Instant?
 
@@ -52,6 +58,7 @@ public actor SyncCoordinator {
         self.options = options
         self.log = log
         (updates, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(32))
+        progress.historyDays = options.historyDays
     }
 
     // MARK: - Control
@@ -165,6 +172,8 @@ public actor SyncCoordinator {
             log.info("sync", "folder \(name) is gone at the provider; its messages stay stored")
             missingByFolder[name] = nil
             tooLargeByFolder[name] = nil
+            olderByFolder[name] = nil
+            windows[name] = nil
         }
         progress.folders = try await store.syncedFolders(account: account)
         let flagsDue = lastFlagCheck.map { ContinuousClock.now - $0 >= options.flagCheckInterval } ?? true
@@ -195,7 +204,8 @@ public actor SyncCoordinator {
                                                   session, countsAgainstBudget: false)
             // Checkpoint after durable writes: every recent UID is stored now (or too large to be).
             try await store.saveCursor(folder: entry.folder, uidValidity: entry.uidValidity, highestUID: entry.plan.highestUID,
-                                       historyComplete: entry.plan.history.isEmpty, serverCount: entry.serverCount, account: account)
+                                       historyComplete: entry.plan.history.isEmpty && entry.plan.older.isEmpty,
+                                       serverCount: entry.serverCount, account: account)
             missingByFolder[entry.folder] = entry.plan.history.count + entry.plan.recent.count - result.stored - result.tooLarge
             updateRemaining()
         }
@@ -225,7 +235,8 @@ public actor SyncCoordinator {
                 updateRemaining()
                 if result.stored + result.tooLarge == entry.plan.history.count {
                     try await store.saveCursor(folder: entry.folder, uidValidity: entry.uidValidity, highestUID: entry.plan.highestUID,
-                                               historyComplete: true, serverCount: entry.serverCount, account: account)
+                                               historyComplete: entry.plan.older.isEmpty, serverCount: entry.serverCount,
+                                               account: account)
                 } else if !progress.historyPausedForBudget {
                     historyPending = true
                 }
@@ -262,9 +273,21 @@ public actor SyncCoordinator {
             tooLargeByFolder[name] = nil
         }
         let cursor = saved?.uidValidity == uidValidity ? saved?.highestUID : nil
-        let known = try await store.knownUIDs(mailbox: name, uidValidity: uidValidity, account: account)
-        let plan = SyncPlanner.plan(serverUIDs: listing.uids, known: Set(known.keys), cursor: cursor,
-                                    recentLimit: options.recentPerFolder)
+        let known = Set(try await store.knownUIDs(mailbox: name, uidValidity: uidValidity, account: account).keys)
+        var older: Set<UInt32>?
+        if let days = options.historyDays {
+            let start = SyncPlanner.windowStart(days: days, now: Date())
+            older = try await olderThanWindow(name, uidValidity: uidValidity, start: start, serverUIDs: listing.uids,
+                                              known: known, cursor: cursor, session)
+        }
+        let plan = SyncPlanner.plan(serverUIDs: listing.uids, known: known, cursor: cursor,
+                                    recentLimit: options.recentPerFolder, olderThanWindow: older)
+        olderByFolder[name] = plan.older.count
+        progress.olderNotDownloaded = olderByFolder.values.reduce(0, +)
+        if !plan.older.isEmpty, plan.older.count != windows[name]?.reportedOlder {
+            log.info("sync", "\(name): \(plan.older.count) messages received before the history window stay at the provider")
+            windows[name]?.reportedOlder = plan.older.count
+        }
         for uid in plan.gone {
             // Expunged or moved at the provider: the location goes, the stored message stays.
             try await store.forget(RemoteLocation(mailbox: name, uidValidity: uidValidity, uid: uid), account: account)
@@ -272,6 +295,45 @@ public actor SyncCoordinator {
         if !plan.gone.isEmpty { log.info("sync", "\(name): \(plan.gone.count) messages left the folder") }
         return PreparedFolder(folder: name, uidValidity: uidValidity, plan: plan, serverCount: listing.uids.count,
                               highestModSeq: listing.status.highestModSeq, listedAt: listedAt)
+    }
+
+    /// One folder's window searches (GKM-039): which UIDs were received before the window and
+    /// which within it, at one UIDVALIDITY.
+    private struct WindowSearch {
+        var uidValidity: UInt32
+        /// The window's first day when `within` was searched.
+        var start: Date
+        var within: Set<UInt32>
+        /// Received before a window start no later than today's: still before it, since the
+        /// window only moves forward and a UID's received date never changes.
+        var older: Set<UInt32>
+        var reportedOlder = 0
+    }
+
+    /// The UIDs among the folder's history candidates that were received before `start`.
+    /// Searches the server (UID SEARCH SINCE) only for candidates no earlier search sorted.
+    private func olderThanWindow(_ name: String, uidValidity: UInt32, start: Date, serverUIDs: [UInt32], known: Set<UInt32>,
+                                 cursor: UInt32?, _ session: any MailboxSession) async throws -> Set<UInt32> {
+        let candidates = SyncPlanner.historyCandidates(serverUIDs: serverUIDs, known: known, cursor: cursor)
+        var search = windows[name].flatMap { $0.uidValidity == uidValidity ? $0 : nil }
+            ?? WindowSearch(uidValidity: uidValidity, start: start, within: [], older: [])
+        if search.start != start {
+            // A later day: what was within the window may have left it.
+            search.start = start
+            search.within = []
+        }
+        let unsorted = candidates.filter { !search.older.contains($0) && !search.within.contains($0) }
+        if !unsorted.isEmpty {
+            let within = Set(try await session.uids(in: name, uidValidity: uidValidity, receivedSince: start))
+            search.within = within
+            search.older.formUnion(unsorted.lazy.filter { !within.contains($0) })
+        }
+        // Only what is still at the provider and not stored matters; keep the sets that small.
+        let wanted = Set(candidates)
+        search.older.formIntersection(wanted)
+        search.within.formIntersection(wanted)
+        windows[name] = search
+        return search.older
     }
 
     private struct ImportResult {

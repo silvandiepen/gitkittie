@@ -73,8 +73,8 @@ public struct TaskImage: Identifiable, Sendable {
         return from(data)
     }
 
-    /// Whether a drag or share offers something `load(from:)` can read: image data, or a
-    /// file (which is checked to be an image when it is read).
+    /// Whether a drag or share offers something `load(from:)` can read: image data, a
+    /// file, or bytes of no stated type (each checked to be an image when it is read).
     public static func canLoad(from providers: [NSItemProvider]) -> Bool {
         providers.contains(where: isCandidate)
     }
@@ -82,6 +82,20 @@ public struct TaskImage: Identifiable, Sendable {
     private static func isCandidate(_ provider: NSItemProvider) -> Bool {
         provider.hasItemConformingToTypeIdentifier(UTType.image.identifier)
             || provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+            || untypedIdentifier(of: provider) != nil
+    }
+
+    /// The identifier under which a provider offers bytes without saying what they are:
+    /// plain `public.data`, or a dynamic `dyn.…` type (what a file with no extension, or an
+    /// extension iOS does not know, is registered as). Some apps share an image this way;
+    /// only the bytes tell. Text, links and other described content never match.
+    static func untypedIdentifier(of provider: NSItemProvider) -> String? {
+        provider.registeredTypeIdentifiers.first(where: isUntyped)
+    }
+
+    /// `public.data` itself or a `dyn.` type: bytes of no declared kind.
+    public static func isUntyped(_ typeIdentifier: String) -> Bool {
+        typeIdentifier == UTType.data.identifier || typeIdentifier.hasPrefix("dyn.")
     }
 
     /// Every image from a share sheet's or a drop's item providers, in order. Providers
@@ -111,13 +125,22 @@ public struct TaskImage: Identifiable, Sendable {
            let data = await data(from: provider, type: .image) {
             return from(data)
         }
+        // Bytes of no stated type: an image when Image I/O can read them as one.
+        if let identifier = untypedIdentifier(of: provider), let data = await data(from: provider, typeIdentifier: identifier) {
+            return from(data)
+        }
         return nil
     }
 
     @MainActor
     private static func data(from provider: NSItemProvider, type: UTType) async -> Data? {
+        await data(from: provider, typeIdentifier: type.identifier)
+    }
+
+    @MainActor
+    private static func data(from provider: NSItemProvider, typeIdentifier: String) async -> Data? {
         await withCheckedContinuation { continuation in
-            _ = provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
+            _ = provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier) { data, _ in
                 continuation.resume(returning: data)
             }
         }

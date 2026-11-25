@@ -27,6 +27,11 @@ public protocol MailboxSession: AnyObject {
 
     /// Selects the folder and lists every UID in it, ascending.
     func listing(of folder: String) async throws -> FolderListing
+    /// The UIDs, ascending, of the messages the provider received on or after `day` (IMAP
+    /// `UID SEARCH SINCE`: the received date, INTERNALDATE, by calendar day, not the Date
+    /// header), for the history window (GKM-039). Throws `commandFailed` when the folder no longer
+    /// has `uidValidity`, since its UIDs would then name other messages.
+    func uids(in folder: String, uidValidity: UInt32, receivedSince day: Date) async throws -> [UInt32]
     /// Flags, size, dates and envelope for these messages.
     func summaries(of ids: [RemoteMessageID]) async throws -> [RemoteMessageSummary]
     /// The raw messages.
@@ -57,8 +62,9 @@ public protocol MailboxSession: AnyObject {
     /// `modSeq`, and the folder's HIGHESTMODSEQ. Throws `unsupported` without CONDSTORE.
     func flagChanges(in folder: String, uidValidity: UInt32, since modSeq: UInt64) async throws -> FlagChanges
     /// Stores a message in a folder (a Sent copy, a draft). Returns its id when the server
-    /// reports it (UIDPLUS).
-    func append(_ rawMessage: Data, to folder: String, flags: MessageFlags) async throws -> RemoteMessageID?
+    /// reports it (UIDPLUS). `receivedAt` sets the provider's received date (IMAP APPEND
+    /// date-time); `nil` lets the provider use the time of the append.
+    func append(_ rawMessage: Data, to folder: String, flags: MessageFlags, receivedAt: Date?) async throws -> RemoteMessageID?
     /// Finds messages by their Message-ID header, for Sent reconciliation.
     func search(messageIDHeader: String, in folder: String) async throws -> [RemoteMessageID]
 
@@ -68,6 +74,13 @@ public protocol MailboxSession: AnyObject {
 
     /// Logs out politely. The session cannot be used afterwards.
     func close() async
+}
+
+extension MailboxSession {
+    /// Stores a message in a folder, received now.
+    public func append(_ rawMessage: Data, to folder: String, flags: MessageFlags) async throws -> RemoteMessageID? {
+        try await append(rawMessage, to: folder, flags: flags, receivedAt: nil)
+    }
 }
 
 /// Opens sessions to one account. A connector holds no connection itself; sync code opens a

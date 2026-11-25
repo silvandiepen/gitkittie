@@ -44,6 +44,13 @@ card itself through `AppModel` (`restoreForSharing()`, `openBoard(…, transient
 - AI: `.onDevice` (`OnDeviceAI`, Apple Foundation Models, iOS 26+) is text-only, so it works from the
   text `ImageTextReader` reads out of the screenshot. Only a configured cloud provider is sent the
   image (`AITicketService.generateTickets(images:)`), and only from the explicit "Analyze image" action.
+- Activation (`NSExtensionActivationRule` in `project.yml`, the same for both targets): any
+  attachment typed as an image, or typed only `public.data` / `dyn.…` with nothing that says it is
+  text, other content or a web link. Apps share images both ways (a file named without an image
+  extension registers `dyn.…` + `public.file-url`); `TaskImage` reads the bytes to tell.
+  `UITests/ShareTargetUITests` opens the real share sheet on each representation through the
+  DEBUG `-shareSheetProbe <kind>` launch argument (`GitKanban/App/ShareSheetProbe.swift`). It reads
+  the iPhone sheet; the iPad's popover is not visible to XCUITest.
 - `UITests/ShareScreenshotUITests` drives Photos → Share → Tasks (new task with markup, then adding
   to that task). Seed a board first with `scripts/seed-share-fixture.sh <simulator-udid>`; it skips
   when there is none.

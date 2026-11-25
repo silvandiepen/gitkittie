@@ -6,6 +6,9 @@ import MailSync
 /// defaults the person can change in Settings ▸ Storage.
 ///
 /// What each limit does today:
+/// - `historyDays`: a folder's first sync downloads only the mail received in the last this many
+///   days (MAIL-072); older mail stays at the provider until the person asks for it, and the
+///   sync says "older than 30 days not downloaded". New mail always comes in, whatever its date.
 /// - `historyBytes`: older mail is downloaded up to this many bytes per account, newest first;
 ///   then the sync says "older mail paused at the storage limit". New mail always comes in.
 /// - `recentPerFolder`: a folder's newest messages that come in before any history.
@@ -14,6 +17,7 @@ import MailSync
 /// - `minimumFreeBytes`: under this much free space the sync stops, with a message, until there
 ///   is room again. Mail already stored is never removed to make room: it is the person's (MAIL-003).
 struct StorageBudget: Equatable, Codable {
+    var historyDays = 30
     var historyBytes: Int64 = 500 * 1024 * 1024
     var recentPerFolder = 200
     var cacheBytes: Int64 = 500 * 1024 * 1024
@@ -24,12 +28,31 @@ struct StorageBudget: Equatable, Codable {
     /// The choices Settings offers for the history limit; `nil` is no limit.
     static let historyChoices: [Int64?] = [100 * 1024 * 1024, 500 * 1024 * 1024, 2 * 1024 * 1024 * 1024, nil]
 
+    /// The choices Settings offers for the history window, in days; `nil` is all of it.
+    static let historyDayChoices: [Int?] = [30, 90, 365, nil]
+
     /// `historyBytes` of 0 is stored for "no limit" (Codable keeps it simple).
     var historyLimit: Int64? { historyBytes > 0 ? historyBytes : nil }
 
-    /// The sync's options under this budget: the Mac's defaults with the history limit.
+    /// `historyDays` of 0 is stored for "all of it", as `historyBytes`.
+    var historyWindow: Int? { historyDays > 0 ? historyDays : nil }
+
+    /// The sync's options under this budget: the Mac's defaults with the history window and limit.
     var syncOptions: SyncOptions {
-        SyncOptions(recentPerFolder: recentPerFolder, historyBudgetBytes: historyLimit)
+        SyncOptions(recentPerFolder: recentPerFolder, historyBudgetBytes: historyLimit, historyDays: historyWindow)
+    }
+
+    init() {}
+
+    /// A budget saved before a limit existed keeps its choices and takes that limit's default.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let standard = StorageBudget()
+        historyDays = try container.decodeIfPresent(Int.self, forKey: .historyDays) ?? standard.historyDays
+        historyBytes = try container.decodeIfPresent(Int64.self, forKey: .historyBytes) ?? standard.historyBytes
+        recentPerFolder = try container.decodeIfPresent(Int.self, forKey: .recentPerFolder) ?? standard.recentPerFolder
+        cacheBytes = try container.decodeIfPresent(Int64.self, forKey: .cacheBytes) ?? standard.cacheBytes
+        minimumFreeBytes = try container.decodeIfPresent(Int64.self, forKey: .minimumFreeBytes) ?? standard.minimumFreeBytes
     }
 
     // MARK: Persistence

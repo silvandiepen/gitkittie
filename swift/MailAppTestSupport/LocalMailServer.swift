@@ -64,8 +64,10 @@ struct LocalMailServer {
         return User(address: address, password: password)
     }
 
-    /// Puts synthetic messages in the user's inbox, oldest first.
-    func append(_ subjects: [String], for user: User) async throws {
+    /// Puts synthetic messages in the user's inbox, oldest first. `receivedDaysAgo` gives each
+    /// message's received date at the provider (IMAP APPEND date-time); without it they are
+    /// received now.
+    func append(_ subjects: [String], for user: User, receivedDaysAgo: [Int]? = nil) async throws {
         let connections = AccountConnections(trust: trust)
         let settings = MailConnectionSettings(
             kind: .imap,
@@ -74,7 +76,8 @@ struct LocalMailServer {
         try await connections.imap(settings, password: Secret(user.password)).withSession { session in
             for (index, subject) in subjects.enumerated() {
                 let raw = "From: Bo <bo@example.net>\r\nTo: \(user.address)\r\nSubject: \(subject)\r\nMessage-ID: <\(UUID().uuidString)@example.net>\r\nDate: Tue, 24 Nov 2026 0\(index % 10):00:00 +0000\r\n\r\n\(subject) body.\r\n"
-                _ = try await session.append(Data(raw.utf8), to: "INBOX", flags: MessageFlags())
+                let receivedAt = receivedDaysAgo.map { Date().addingTimeInterval(-Double($0[index]) * 86_400) }
+                _ = try await session.append(Data(raw.utf8), to: "INBOX", flags: MessageFlags(), receivedAt: receivedAt)
             }
         }
     }
