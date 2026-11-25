@@ -81,7 +81,7 @@ final class SenderSelectionTests: XCTestCase {
         XCTAssertTrue(plan.contains { $0.contains("messages_by_sender") }, "\(plan)")
     }
 
-    func testAnIndexAtSchemaSevenGainsTheSenderIndexInPlace() async throws {
+    func testAnIndexAtSchemaEightGainsTheSenderIndexInPlace() async throws {
         do {
             let store = try await MailStore.open(locations)
             try await seed(store)
@@ -89,10 +89,10 @@ final class SenderSelectionTests: XCTestCase {
         do {
             let index = try MailIndex(url: locations.indexURL)
             try index.database.execute("DROP INDEX messages_by_sender")
-            try index.database.setUserVersion(7)
+            try index.database.setUserVersion(8)
         }
         let index = try MailIndex(url: locations.indexURL)
-        XCTAssertFalse(index.needsRebuild, "7 → 8 is a migration, not a rebuild")
+        XCTAssertFalse(index.needsRebuild, "8 → 9 is a migration, not a rebuild")
         XCTAssertEqual(try index.database.userVersion, MailIndex.schemaVersion)
         let names = try index.database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'messages_by_sender'")
         XCTAssertTrue(try names.step())

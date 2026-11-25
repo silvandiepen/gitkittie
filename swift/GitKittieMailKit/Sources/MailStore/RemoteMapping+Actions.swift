@@ -125,12 +125,15 @@ extension RemoteMapping {
     }
 
     /// Moves rows to a new state. Only rows still `pending` or `awaitingSync` change: a row the
-    /// sync already settled (superseded) stays as it is.
-    func setState(_ state: MailActionState, of sequences: [Int64], error: String? = nil, at date: Date) throws {
+    /// sync already settled (superseded) stays as it is, unless `includingSuperseded` (the
+    /// provider confirmed that this row's own command did it, GKM-071).
+    func setState(_ state: MailActionState, of sequences: [Int64], error: String? = nil, at date: Date,
+                  includingSuperseded: Bool = false) throws {
         guard !sequences.isEmpty else { return }
+        let states = includingSuperseded ? "'pending', 'awaitingSync', 'failed', 'superseded'" : "'pending', 'awaitingSync', 'failed'"
         let statement = try database.prepare("""
             UPDATE actions SET state = ?, last_error = COALESCE(?, last_error), finished = ?
-            WHERE seq = ? AND state IN ('pending', 'awaitingSync', 'failed')
+            WHERE seq = ? AND state IN (\(states))
             """)
         for sequence in sequences {
             try statement.run([.text(state.rawValue), .optional(error), .double(date.timeIntervalSince1970), .int(sequence)])
