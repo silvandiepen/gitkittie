@@ -19,6 +19,7 @@ struct GitKanbanApp: App {
             RootView()
                 .environment(model)
                 #if DEBUG
+                .task { ShareSheetProbe.presentIfRequested() }
                 .task {
                     // `-aiDiagnostics`: say what the on-device model answers on this device.
                     guard ProcessInfo.processInfo.arguments.contains("-aiDiagnostics") else { return }
