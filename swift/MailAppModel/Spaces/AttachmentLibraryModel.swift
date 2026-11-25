@@ -135,9 +135,13 @@ final class AttachmentLibraryModel {
     }
 
     /// A quarantined private copy for Quick Look: the reader's own path (MailBrowser.previewFile).
+    /// An attachment still at the provider (GKM-036) is fetched once first; the list then shows
+    /// it as downloaded.
     func previewFile(for item: AttachmentItem) async throws -> URL {
         guard let browser else { throw CocoaError(.fileNoSuchFile) }
-        return try await browser.previewFile(for: item.reference)
+        let url = try await browser.previewFile(for: item.reference, of: item.message)
+        if !item.reference.isDownloaded { await reload() }
+        return url
     }
 
     /// The name Save As suggests: the sender's name made safe, with a matching extension.
@@ -145,8 +149,8 @@ final class AttachmentLibraryModel {
 
     /// Save As: the hash-checked bytes, written whole, then marked as downloaded (quarantine).
     func save(_ item: AttachmentItem, to url: URL) async throws {
-        guard let store else { throw CocoaError(.fileNoSuchFile) }
-        let data = try await store.attachmentData(item.reference)
+        guard let store, let browser else { throw CocoaError(.fileNoSuchFile) }
+        let data = try await store.attachmentData(browser.downloaded(item.reference, of: item.message))
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         try data.write(to: url, options: .atomic)

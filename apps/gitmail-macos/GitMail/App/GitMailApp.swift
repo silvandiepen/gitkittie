@@ -56,6 +56,23 @@ struct GitMailApp: App {
                 }
                 .disabled(selected == nil)
                 Divider()
+                // Pin for offline (GKM-036): download whole and keep, even attachments left at the provider.
+                Button("Keep Message Offline") {
+                    if let selected { Task { await model.pin(.message(selected.id)) } }
+                }
+                .disabled(selected == nil)
+                Button("Keep Conversation Offline") {
+                    Task { for thread in model.browser.threadIDs(actingOn: nil) { await model.pin(.thread(thread)) } }
+                }
+                .disabled(model.browser.threadIDs(actingOn: nil).isEmpty)
+                Button("Don’t Keep Offline") {
+                    Task {
+                        if let selected { await model.unpin(.message(selected.id)) }
+                        for thread in model.browser.threadIDs(actingOn: nil) { await model.unpin(.thread(thread)) }
+                    }
+                }
+                .disabled(selected == nil && model.browser.threadIDs(actingOn: nil).isEmpty)
+                Divider()
                 Button("Next Conversation") { Task { await model.browser.selectNext() } }
                     .keyboardShortcut(.downArrow, modifiers: [.command, .option])
                 Button("Previous Conversation") { Task { await model.browser.selectPrevious() } }
@@ -65,8 +82,21 @@ struct GitMailApp: App {
             CommandGroup(after: .toolbar) {
                 Button("Rebuild Search Index") { Task { await model.rebuildIndex() } }
                     .disabled(model.phase != .ready || model.isRebuildingIndex)
+                OfflineStorageCommand()
+                    .disabled(model.phase != .ready)
             }
         }
+
+        // What is kept offline and what the cache may give back (GKM-036).
+        Window("Offline Storage", id: OfflineStorageView.windowID) {
+            OfflineStorageView()
+                .environment(model)
+                .background(SolidWindow())
+                .tint(Theme.accent)
+                .preferredColorScheme(.dark)
+        }
+        .windowResizability(.contentSize)
+        .commandsRemoved()
 
         // One window per draft; restored with its draft after a relaunch (GKM-013).
         WindowGroup("New Message", id: ComposeScene.id, for: DraftID.self) { $draftID in

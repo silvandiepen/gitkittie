@@ -40,7 +40,10 @@ struct IMAPFetchedAttributes {
     var sequenceNumber: SequenceNumber?
     var uid: UInt32?
     var attributes: [MessageAttribute] = []
+    /// The whole message (`BODY[]`).
     var body: Data?
+    /// Other body sections (`BODY[HEADER]`, `BODY[1.MIME]`, `BODY[2]`), GKM-036.
+    var sections: [SectionSpecifier: Data] = [:]
 }
 
 /// One IMAP connection: writes commands and reads their responses, strictly one command at a
@@ -160,6 +163,7 @@ final class IMAPWire {
         var fetches: [IMAPFetchedAttributes] = []
         var current: IMAPFetchedAttributes?
         var streaming: Data?
+        var streamingKind: StreamingKind?
         while true {
             let response = try await nextResponse()
             switch response {
@@ -180,17 +184,23 @@ final class IMAPWire {
                 case .simpleAttribute(let attribute):
                     if case .uid(let uid) = attribute { current?.uid = uid.rawValue }
                     current?.attributes.append(attribute)
-                case .streamingBegin(_, let byteCount):
+                case .streamingBegin(let kind, let byteCount):
                     guard byteCount <= Self.maximumBodySize else {
                         isBroken = true
                         throw MailProviderError.unsupported("message of \(byteCount) bytes is over the in-memory limit")
                     }
                     streaming = Data(capacity: byteCount)
+                    streamingKind = kind
                 case .streamingBytes(let bytes):
                     streaming?.append(contentsOf: bytes.readableBytesView)
                 case .streamingEnd:
-                    current?.body = streaming
+                    if case .body(let section, nil)? = streamingKind, !(Array(section.part).isEmpty && section.kind == .complete) {
+                        current?.sections[section] = streaming ?? Data()
+                    } else {
+                        current?.body = streaming
+                    }
                     streaming = nil
+                    streamingKind = nil
                 case .finish:
                     if let finished = current { fetches.append(finished) }
                     current = nil

@@ -223,7 +223,7 @@ extension MailStore {
         return space
     }
 
-    private func write(_ space: MailSpace, now: Date) throws {
+    func write(_ space: MailSpace, now: Date) throws {
         var space = space
         space.format = MailSpace.formatVersion
         space.modified = Self.whole(now)

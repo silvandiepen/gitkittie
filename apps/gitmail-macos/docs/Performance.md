@@ -17,6 +17,10 @@ the index level (`SearchBenchmarkTests`); this is the sync end to end: IMAP → 
 - **After:** 10,000 messages in **32 s** (311/s, steady from first to last), the first 200
   messages visible after **0.5 s**, at most 158 MB of memory. A second sync with nothing changed
   takes 0.8 s. With a 50 ms round trip in front of the server (a distant provider): **67 s**.
+- **Now, with classification (GKM-017) and GKM-036/038:** 10,000 messages in about 2 minutes,
+  50,000 in about 9 minutes on loopback; classification costs about 10 ms of CPU per message and
+  dominates. History slices cut IMAP commands at 50,000 from 9,909 to 3,710 and disk writes from
+  26 to 15 GB. See [GKM-036 and GKM-038](#gkm-036-and-gkm-038-re-measured-with-classification-2026-11-25).
 - **50,000:** see [50,000 messages](#50000-messages).
 
 ## How it was measured
@@ -161,7 +165,8 @@ message) are for sending. Not measured against iCloud itself (GKM-004).
 
 ## 50,000 messages
 
-Not yet measured: the 50,000-message run was stopped twice because the shared disk filled up
+Measured on 2026-11-25: see [GKM-036 and GKM-038](#gkm-036-and-gkm-038-re-measured-with-classification-2026-11-25).
+Before that, the 50,000-message run was stopped twice because the shared disk filled up
 (other builds on the same volume); the benchmark now stops the sync itself when free space falls
 below half of `GKM_SYNC_BENCHMARK_KEEP_FREE_GB`. What the 10,000 run shows about 50,000:
 
@@ -185,16 +190,74 @@ below half of `GKM_SYNC_BENCHMARK_KEEP_FREE_GB`. What the 10,000 run shows about
 message a batch writes, after the batch is durable, in one index transaction for the batch. The
 numbers above were measured without it; re-measure with GKM-038.
 
+## GKM-036 and GKM-038: re-measured with classification (2026-11-25)
+
+Three changes since the numbers above: history slices end after 20 s or 10,000 messages instead
+of 500 messages (MAIL-065); fetching overlaps storing (MAIL-066); and attachments over 1 MB stay at
+the provider until opened or pinned (MAIL-062). Classification (GKM-017) has run on every stored
+message since #33. Each run below is "current" against "legacy" on **the same build**
+(`GKM_SYNC_BENCHMARK_LEGACY=1`: 500-message slices, whole messages, no overlap), so the
+difference is these changes alone; both include classification. Same Mac, shared with other work.
+
+| 10,000 messages (default mix) | Legacy | Current |
+| --- | ---: | ---: |
+| First sync, loopback | 115.1 s (87/s) | 127.2 s (79/s) |
+| First 200 visible | 2.06 s | 2.19 s |
+| CPU, client (server) | 105.0 s (6.3 s) | 114.9 s (8.2 s) |
+| IMAP commands | 607 | **378** |
+| Bytes written to disk | 1,928 MB | 1,737 MB |
+| Mail folder / device state | 514 / 159 MB | **423** / 159 MB |
+| Stored partially (attachments at the provider) | 0 | 30 |
+| First sync, 50 ms round trip | 153.8 s (65/s) | **135.8 s (74/s)** |
+| First 200 visible, 50 ms | 3.81 s | 3.71 s |
+| Nothing changed / 100 new + 500 flags, 50 ms | 4.1 s / 5.6 s | 4.0 s / 5.6 s |
+
+| 50,000 messages (`BODY_SCALE=0.4`, `ATTACHMENTS=0.25`, 52 folders, 578 MB) | Legacy | Current |
+| --- | ---: | ---: |
+| First sync, loopback | 563.7 s (89/s) | **524.3 s (95/s)** |
+| Messages/s by tenth | 116 134 126 117 96 90 74 72 67 64 | 176 166 148 129 97 93 86 72 73 57 |
+| First 200 visible | 1.19 s | 1.32 s |
+| CPU, client (server) | 481.7 s (41.5 s) | 467.5 s (38.3 s) |
+| IMAP commands | 9,909 | **3,710** |
+| Bytes written to disk | 26,015 MB | **15,319 MB** |
+| Index / sync-state commits | 5,663 / 9,955 | 2,700 / 3,865 |
+| Peak memory footprint | 94 MB | 82 MB |
+| Mail folder / device state | 1,036 / 422 MB | 932 / 425 MB |
+| Nothing changed / 100 new + 500 flags | 4.8 s / 6.0 s | 4.4 s / 6.0 s |
+
+What this says:
+
+- **The slices did what they were for.** At 50,000, IMAP commands fell from 9,909 to 3,710 and
+  disk writes from 26 GB to 15 GB (fewer passes, so fewer listings, fewer flag and cursor
+  commits). On a 50 ms link the 10,000 first sync is 12 % faster.
+- **Classification now dominates.** The first sync is CPU-bound in the client: about 10 ms of
+  CPU per message (115 s for 10,000, against 23.6 s before classification), so overlap gains
+  little on loopback (the store is the bottleneck either way; the loopback 10,000 runs differ by
+  about the noise of a shared machine). The 32 s in the tables above no longer holds: **a first
+  sync of 10,000 messages takes about 2 minutes, 50,000 about 9 minutes**, before network time.
+- **It still slows as the mailbox grows**: at 50,000 the rate falls from 176 to 57 messages/s in
+  both modes, while storing alone was flat (above). Something per message grows with the
+  number already stored; the CPU is in the client, not the server. Not found yet: GKM-040.
+- **Partial messages** (1–3 MB attachments, 0.1 % of the mix) kept 91 MB of attachments out of
+  the mail folder at 10,000; the first sync's numbers are otherwise unaffected, as intended.
+
+Run it yourself (each again with `GKM_SYNC_BENCHMARK_LEGACY=1`, and with `GKM_SYNC_BENCHMARK_RTT_MS=50`):
+
+    GKM_SYNC_BENCHMARK=1 GKM_SYNC_BENCHMARK_MESSAGES=10000 \
+      swift test -c release -Xswiftc -enable-testing --filter SyncBenchmarkTests
+    GKM_SYNC_BENCHMARK=1 GKM_SYNC_BENCHMARK_MESSAGES=50000 GKM_SYNC_BENCHMARK_BODY_SCALE=0.4 \
+      GKM_SYNC_BENCHMARK_ATTACHMENTS=0.25 swift test -c release -Xswiftc -enable-testing --filter SyncBenchmarkTests
+
 ## What is left
 
-- **Pipelining.** Each body fetch waits for the previous batch to be stored; fetching the next
-  batch while storing this one would hide most of the round-trip time (about half of the 66 s at
-  50 ms). Needs the session to be driven from a second task.
+- **Classification cost and the falling rate (GKM-040).** About 10 ms of client CPU per message,
+  and at 50,000 the rate falls from 176 to 57 messages/s: something per message grows with the
+  mailbox. Profile the store with classification on (sender/correspondent statistics and the
+  per-batch classification transaction are the first suspects) and make it flat again.
+- **Overlap on loopback.** Fetch and store overlap (MAIL-066), but while classification makes the
+  store the bottleneck it gains only on a slow link (12 % at 50 ms).
 - **CONDSTORE in the benchmark.** GreenMail has none; run the benchmark against a server with it
   (or iCloud, GKM-004) to measure the flag passes as they will be.
-- **Write amplification.** 1.7 GB is written for 650 MB stored: every file is written and
-  flushed once, and SQLite's WAL writes index pages and checkpoints them again. Acceptable now;
-  bigger index transactions or a larger `wal_autocheckpoint` would lower it.
-- **50,000 measured**, when the disk allows (about 1.5 GB for the store at the reduced mix:
-  `GKM_SYNC_BENCHMARK_MESSAGES=50000 GKM_SYNC_BENCHMARK_BODY_SCALE=0.4
-  GKM_SYNC_BENCHMARK_ATTACHMENTS=0.25`), then the history slice size (above) tuned on it.
+- **Write amplification.** 15 GB is written for about 1.4 GB stored at 50,000: every file is
+  written and flushed once, and SQLite's WAL writes index pages and checkpoints them again.
+  Bigger index transactions or a larger `wal_autocheckpoint` would lower it.

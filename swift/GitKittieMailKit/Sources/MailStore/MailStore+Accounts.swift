@@ -34,6 +34,10 @@ extension MailStore {
             }
         case .remove:
             if fileManager.fileExists(atPath: accountFolder.path) { try fileManager.removeItem(at: accountFolder) }
+            // Partial messages (GKM-036) are device state of this account; their cached parts
+            // become unreferenced and go with the next eviction.
+            let partial = partialDirectory(account: name)
+            if fileManager.fileExists(atPath: partial.path) { try fileManager.removeItem(at: partial) }
             try index.removeAccount(id)
             try removeUnreferencedBlobs()
             invalidateClassificationContext()

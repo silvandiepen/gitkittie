@@ -42,6 +42,12 @@ final class SyncBenchmarkTests: XCTestCase {
         let folderSize = Int(environment["GKM_SYNC_BENCHMARK_FOLDER_SIZE"] ?? "") ?? 1_000
         let roundTrip = Int(environment["GKM_SYNC_BENCHMARK_RTT_MS"] ?? "") ?? 0
         let megabits = Int(environment["GKM_SYNC_BENCHMARK_MBPS"] ?? "")
+        // GKM_SYNC_BENCHMARK_LEGACY=1: the sync as before GKM-036/038 (500-message history slices,
+        // no time limit, every message whole, no fetch/store overlap), to compare on one build.
+        let legacy = environment["GKM_SYNC_BENCHMARK_LEGACY"] == "1"
+        let options = legacy
+            ? SyncOptions(historyPerPass: 500, historySlice: .seconds(24 * 3600), onDemandThreshold: nil, pipelineStores: false)
+            : SyncOptions()
 
         let server = try await TestMailServer.require()
         let user = try await server.makeUser(function: "bench")
@@ -61,6 +67,7 @@ final class SyncBenchmarkTests: XCTestCase {
                 try await Self.deleteUser(user, server: server)
                 return
             }
+            Self.report("sync: " + (legacy ? "legacy (500-message slices, whole messages, no overlap)" : "current (20 s slices, attachments over 1 MB on demand, fetch/store overlap)"))
             Self.report("benchmark: \(count) messages in \(mailbox.folders.count) folders, about \(Self.mb(mailbox.approximateBytes)) of mail; \(Self.mb(free)) free disk")
 
             let seedClock = ContinuousClock.now
@@ -88,7 +95,7 @@ final class SyncBenchmarkTests: XCTestCase {
                 .flatMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
 
             func pass(_ name: String) async throws -> PassResult {
-                let coordinator = SyncCoordinator(account: Self.account, connector: connector, store: store, log: log)
+                let coordinator = SyncCoordinator(account: Self.account, connector: connector, store: store, options: options, log: log)
                 return try await Self.measure(name, coordinator: coordinator, commands: commands, serverPID: serverPID,
                                               minimumFree: keepFree / 2)
             }
@@ -104,6 +111,8 @@ final class SyncBenchmarkTests: XCTestCase {
             }
             results.append(first)
             Self.report(first.summary)
+            let partial = try await store.partialMessages(account: Self.account).count
+            Self.report("   partial messages (attachments left at the provider): \(partial)")
 
             let unchanged = try await pass("nothing changed")
             XCTAssertEqual(unchanged.imported, 0)
@@ -126,7 +135,7 @@ final class SyncBenchmarkTests: XCTestCase {
 
             if let path = environment["GKM_SYNC_BENCHMARK_OUT"] {
                 let document: [String: Any] = [
-                    "messages": count, "attachmentShare": attachmentShare, "bodyScale": bodyScale, "folderSize": folderSize, "folders": mailbox.folders.count, "roundTripMs": roundTrip, "megabits": megabits ?? 0,
+                    "legacy": legacy, "messages": count, "attachmentShare": attachmentShare, "bodyScale": bodyScale, "folderSize": folderSize, "folders": mailbox.folders.count, "roundTripMs": roundTrip, "megabits": megabits ?? 0,
                     "approximateMailBytes": mailbox.approximateBytes, "passes": results.map(\.json),
                 ]
                 try JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted, .sortedKeys])

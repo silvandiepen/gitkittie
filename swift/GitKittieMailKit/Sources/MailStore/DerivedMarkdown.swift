@@ -13,15 +13,30 @@ public struct AttachmentReference: Codable, Hashable, Sendable {
     public var inline: Bool
     /// The part's Content-ID (no angle brackets), when the HTML refers to it as `cid:`.
     public var contentId: String?
+    /// Only for a part of a partial message that was left at the provider (GKM-036, MAIL-062):
+    /// the IMAP section it is fetched from. Until it is fetched, `blob` is ``pendingBlob(_:)``
+    /// and `size` is estimated from the encoded size. Absent (and not written) otherwise.
+    public var section: String?
 
-    public init(blob: String, fileName: String, mediaType: String, size: Int, inline: Bool, contentId: String? = nil) {
+    public init(blob: String, fileName: String, mediaType: String, size: Int, inline: Bool, contentId: String? = nil,
+                section: String? = nil) {
         self.blob = blob
         self.fileName = fileName
         self.mediaType = mediaType
         self.size = size
         self.inline = inline
         self.contentId = contentId
+        self.section = section
     }
+
+    /// False for a part of a partial message that has not been downloaded yet: its bytes are
+    /// still only at the provider, and reading it needs a fetch (``MailStore/attachmentData(_:)``
+    /// throws ``MailStoreError/attachmentNotDownloaded(_:)``).
+    public var isDownloaded: Bool { SafePath.isSHA256Hex(blob) }
+
+    /// The stand-in `blob` of a part not downloaded yet: unique per message, never a hash, so
+    /// nothing can mistake it for bytes on disk.
+    public static func pendingBlob(_ section: String) -> String { "part:" + section }
 }
 
 /// The YAML front matter of a message's `.md`. Everything here is derived from the `.eml`,
