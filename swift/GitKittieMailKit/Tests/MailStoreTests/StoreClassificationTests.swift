@@ -481,6 +481,23 @@ final class StoreClassificationTests: XCTestCase {
         let later = try await store.arrivals(after: arrivals[0].sequence)
         XCTAssertEqual(later.map(\.id), [b])
     }
+
+    /// Per-space notification settings (GKM-037) look at the spaces a new message is in, by
+    /// hand or by a space's rules, when it is considered.
+    func testArrivalsNameTheSpacesTheyAreIn() async throws {
+        let store = try await open()
+        let walks = try await store.createSpace(name: "Walks")
+        let family = try await store.createSpace(name: "Family")
+        try await store.setRules([SpaceRule(sender: "jo.lee@example.org")], of: walks.id)
+        let a = try await store.ingest(Self.eml(from: "jo.lee@example.org", to: me, subject: "Ridge trail"), account: account).id
+        let b = try await store.ingest(Self.eml(from: "sam.lee@example.org", to: me, subject: "Sunday lunch"), account: account).id
+        let c = try await store.ingest(Self.eml(from: "ravi.patel@example.org", to: me, subject: "Hello"), account: account).id
+        try await store.applySpaceRules()
+        try await store.addMessages([a, b], to: family.id)
+        let arrivals = try await store.arrivals(after: 0)
+        XCTAssertEqual(arrivals.map(\.id), [a, b, c])
+        XCTAssertEqual(arrivals.map(\.spaces), [[walks.id, family.id], [family.id], []])
+    }
 }
 
 private func XCTUnwrapAsync<T>(_ value: T?, _ message: String) throws -> T {
