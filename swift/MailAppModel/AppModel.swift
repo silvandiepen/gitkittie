@@ -361,7 +361,7 @@ final class AppModel {
 
     private func reload() async throws {
         guard let store else { return }
-        accounts = try await store.accounts()
+        accounts = AccountOrder.load(deviceFolder: store.locations.deviceFolder).sorted(try await store.accounts())
         totalCount = try await store.messageCount()
         var found: [MailAccountID: [String]] = [:]
         for account in accounts { found[account.id] = try await store.folders(account: account.id) }

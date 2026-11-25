@@ -5,8 +5,9 @@ import SwiftUI
 /// from the provider and appear after a sync.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
+    @Environment(SettingsNavigation.self) private var settings
+    @Environment(\.openSettings) private var openSettings
     @State private var sheet: AccountSheet?
-    @State private var showsNotificationSettings = false
     @State private var spaceSheet: SpaceSheet?
 
     private var selection: Binding<SidebarSelection?> {
@@ -30,7 +31,6 @@ struct SidebarView: View {
         .background(Theme.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         .sheet(item: $sheet) { $0.view }
-        .sheet(isPresented: $showsNotificationSettings) { NotificationSettingsSheet() }
         .sheet(item: $spaceSheet) { sheet in
             switch sheet {
             case .create: SpaceEditorSheet(space: nil)
@@ -64,7 +64,8 @@ struct SidebarView: View {
                     Button("Use the Default Mail Folder", systemImage: "arrow.uturn.backward") { Task { await model.useMailFolder(nil) } }
                 }
                 Divider()
-                Button("Notifications…", systemImage: "bell.badge") { showsNotificationSettings = true }
+                Button("Notifications…", systemImage: "bell.badge") { settings.show(.notifications, with: openSettings) }
+                Button("Settings…", systemImage: "gearshape") { settings.show(.general, with: openSettings) }
                 Divider()
                 if model.sync.isRunning {
                     Button("Sync Now", systemImage: "arrow.triangle.2.circlepath") { Task { await model.sync.syncNow() } }

@@ -25,7 +25,7 @@ extension AppModel {
     /// (`defaults write app.hakobs.gitmail offlineCacheBudgetBytes <bytes>`).
     var offlineCacheBudget: Int64 {
         sync.services.offlineCacheBytes
-            ?? (sync.services.defaults.object(forKey: "offlineCacheBudgetBytes") as? Int).map(Int64.init) ?? 2 * 1024 * 1024 * 1024
+            ?? (sync.services.defaults.object(forKey: Self.offlineCacheBudgetKey) as? Int).map(Int64.init) ?? 2 * 1024 * 1024 * 1024
     }
 
     /// Fetches an attachment a partial message left at the provider, once; then keeps the
@@ -130,3 +130,62 @@ extension AppModel {
     }
 }
 
+
+// MARK: Storage settings (GKM-066)
+
+extension AppModel {
+    nonisolated static let onDemandThresholdKey = "onDemandThresholdBytes"
+    nonisolated static let offlineCacheBudgetKey = "offlineCacheBudgetBytes"
+
+    /// Attachments larger than `bytes` stay at the provider until opened or pinned; nil
+    /// downloads every message whole. The syncs start again with it; mail already downloaded is
+    /// kept as it is.
+    func setOnDemandThreshold(_ bytes: Int?) async {
+        sync.services.defaults.set(bytes ?? 0, forKey: Self.onDemandThresholdKey)
+        guard bytes != sync.services.syncOptions.onDemandThreshold else { return }
+        sync.services.syncOptions.onDemandThreshold = bytes
+        guard let store = mailStore else { return }
+        await sync.stopAll()
+        await sync.start(accounts, store: store)
+        await registerForSending(accounts)
+    }
+
+    /// The most the offline cache keeps; what is over it is given back now.
+    func setOfflineCacheBudget(_ bytes: Int64) async {
+        sync.services.defaults.set(Int(bytes), forKey: Self.offlineCacheBudgetKey)
+        await freeUpOfflineSpace(keeping: offlineCacheBudget)
+    }
+
+    /// How much the mail folder takes on disk, counted away from the main thread.
+    func mailFolderSize() async -> Int64? {
+        guard let folder = mailFolder else { return nil }
+        return await Task.detached(priority: .utility) { FreeSpace.allocatedSize(of: folder) }.value
+    }
+
+    /// Free space on the disk that holds the mail folder, as the system counts it for files
+    /// people keep (purgeable space included).
+    var freeDiskSpace: Int64? {
+        mailFolder.flatMap(FreeSpace.available(at:))
+    }
+}
+
+/// Space on disk, without UI: what is free (shared with the iPhone's storage budget) and what a
+/// folder takes.
+enum FreeSpace {
+    /// Free space on the volume, as the system reports it for things the person asked for.
+    static func available(at url: URL) -> Int64? {
+        let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values?.volumeAvailableCapacityForImportantUsage
+    }
+
+    static func allocatedSize(of folder: URL) -> Int64 {
+        let keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .isRegularFileKey]
+        guard let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys) else { return 0 }
+        var total: Int64 = 0
+        for case let file as URL in files {
+            guard let values = try? file.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+            total += Int64(values.totalFileAllocatedSize ?? 0)
+        }
+        return total
+    }
+}

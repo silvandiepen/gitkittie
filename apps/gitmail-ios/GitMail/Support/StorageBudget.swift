@@ -155,11 +155,3 @@ enum DeviceCache {
         return removed
     }
 }
-
-/// Free space on the device, as iOS reports it for things the person asked for.
-enum FreeSpace {
-    static func available(at url: URL) -> Int64? {
-        let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        return values?.volumeAvailableCapacityForImportantUsage
-    }
-}

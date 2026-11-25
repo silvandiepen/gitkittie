@@ -50,7 +50,7 @@ struct MailboxesView: View {
                 Section {
                     MailboxRow(title: "All of \(account.displayName)", systemImage: "person.crop.circle", count: nil)
                         .tag(SidebarSelection.account(account.id))
-                    ForEach(folders(of: account.id), id: \.self) { folder in
+                    ForEach(folders(of: account), id: \.self) { folder in
                         MailboxRow(title: folder.role == "inbox" ? "Inbox" : folder.path.joined(separator: " / "),
                                    systemImage: FolderLook.icon(folder.role), count: nil)
                             .tag(SidebarSelection.folder(account.id, folder.name))
@@ -91,12 +91,10 @@ struct MailboxesView: View {
         })
     }
 
-    private func folders(of account: MailAccountID) -> [SyncedFolder] {
-        if let synced = model.sync.folders[account], !synced.isEmpty {
-            return synced.filter { $0.role != "all" }
-        }
-        // Not connected on this device: the folders that hold stored mail.
-        return (model.folders[account] ?? []).map { SyncedFolder(name: $0, path: [$0]) }
+    /// The folders the account shows, in its order (Settings ▸ the account ▸ Mailboxes,
+    /// MAIL-093), without All Mail.
+    private func folders(of account: MailAccount) -> [SyncedFolder] {
+        model.sidebarFolders(of: account).filter { $0.role != "all" }
     }
 
     private func count(_ category: MailCategory) -> MailboxRow.Count? {
@@ -173,22 +171,6 @@ struct MailboxRow: View {
 
 private extension MailboxRow.Count {
     var isAttention: Bool { if case .attention = self { return true }; return false }
-}
-
-enum FolderLook {
-    static func icon(_ role: String?) -> String {
-        switch role {
-        case "inbox": "tray"
-        case "sent": "paperplane"
-        case "drafts": "doc"
-        case "archive": "archivebox"
-        case "trash": "trash"
-        case "junk": "xmark.bin"
-        case "flagged": "flag"
-        case "all": "tray.2"
-        default: "folder"
-        }
-    }
 }
 
 /// A space's colour name (the Tasks board palette) as a colour.
