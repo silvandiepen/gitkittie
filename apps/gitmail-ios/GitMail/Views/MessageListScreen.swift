@@ -57,7 +57,7 @@ struct MessageListScreen: View {
                         Button { act(row.isUnread ? .markRead : .markUnread, row) } label: {
                             Label(row.isUnread ? "Read" : "Unread", systemImage: row.isUnread ? "envelope.open" : "envelope.badge")
                         }
-                        .tint(Theme.accent)
+                        .tint(Theme.accentFill)
                         .accessibilityIdentifier("swipeReadUnread")
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -73,7 +73,8 @@ struct MessageListScreen: View {
                         Button { act(row.isFlagged ? .unflag : .flag, row) } label: {
                             Label(row.isFlagged ? "Unflag" : "Flag", systemImage: row.isFlagged ? "flag.slash" : "flag")
                         }
-                        .tint(.orange)
+                        // A darker orange than the system's: white on it is 5:1, not 2:1 (GKM-061).
+                        .tint(Color(red: 0xC2 / 255, green: 0x41 / 255, blue: 0x0C / 255))
                         .accessibilityIdentifier("swipeFlag")
                     }
                     .contextMenu { if !isEditing { RowMenu(row: row) } }
@@ -164,6 +165,7 @@ struct MessageListScreen: View {
             } actions: {
                 Button("Add Account") { router.showsAddAccount = true }
                     .buttonStyle(.borderedProminent)
+                    .tint(Theme.accentFill)
                     .accessibilityIdentifier("addAccountButton")
             }
         } else if browser.rows.isEmpty, !(browser.isSearching && browser.server.isShown) {
@@ -365,55 +367,68 @@ struct MessageRow: View {
     var isPending = false
     /// "Deleted at iCloud": the provider deleted it; the copy here is kept (MAIL-075).
     var deletedAtProvider: String?
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var dot: CGFloat = 9
 
     private var summary: MessageSummary { row.latest }
+    /// At the accessibility text sizes the date and the marks go under the sender, and nothing
+    /// is cut to one line (GKM-061).
+    private var isLarge: Bool { typeSize.isAccessibilitySize }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Circle()
                 .fill(row.isUnread ? Theme.accent : .clear)
-                .frame(width: 9, height: 9)
+                .frame(width: dot, height: dot)
                 .padding(.top, 6)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(summary.from?.displayName ?? "Unknown sender")
-                        .font(.body.weight(row.isUnread ? .semibold : .regular))
-                        .lineLimit(1)
-                    if row.messageCount > 1 {
-                        Text("\(row.messageCount)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                let header = isLarge ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                                     : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
+                header {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(summary.from?.displayName ?? "Unknown sender")
+                            .font(.body.weight(row.isUnread ? .semibold : .regular))
+                            .lineLimit(isLarge ? 3 : 1)
+                        if row.messageCount > 1 {
+                            Text("\(row.messageCount)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
                     }
-                    Spacer(minLength: 6)
-                    if isPending {
-                        Image(systemName: "icloud.and.arrow.up").font(.caption).foregroundStyle(.secondary)
+                    if !isLarge { Spacer(minLength: 6) }
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if isPending {
+                            Image(systemName: "icloud.and.arrow.up").font(.caption).foregroundStyle(.secondary)
+                        }
+                        if row.isFlagged { Image(systemName: "flag.fill").font(.caption).foregroundStyle(.orange) }
+                        if row.hasAttachments { Image(systemName: "paperclip").font(.caption).foregroundStyle(.secondary) }
+                        Text(MessageDate.short(summary.date))
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(.secondary)
                     }
-                    if row.isFlagged { Image(systemName: "flag.fill").font(.caption).foregroundStyle(.orange) }
-                    if row.hasAttachments { Image(systemName: "paperclip").font(.caption).foregroundStyle(.secondary) }
-                    Text(MessageDate.short(summary.date))
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
                 }
                 Text(summary.subject?.isEmpty == false ? summary.subject! : "(No subject)")
                     .font(.subheadline.weight(row.isUnread ? .medium : .regular))
-                    .lineLimit(1)
+                    .lineLimit(isLarge ? 4 : 1)
                 if !summary.snippet.isEmpty {
                     Text(summary.snippet)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(isLarge ? 4 : 2)
                 }
                 if let deletedAtProvider {
                     Label(deletedAtProvider, systemImage: "trash.slash")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .lineLimit(isLarge ? nil : 1)
                 }
                 if showsAccount, let accountName {
-                    Text(accountName).font(.caption).foregroundStyle(.tertiary)
+                    Text(accountName).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
         .padding(.vertical, 6)
+        // One element; its swipe actions and long-press menu are VoiceOver actions (SwiftUI
+        // adds them to the row).
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
         .accessibilityIdentifier("messageRow")
@@ -427,8 +442,11 @@ struct MessageRow: View {
         parts.append(summary.subject ?? "No subject")
         if row.messageCount > 1 { parts.append("\(row.messageCount) messages") }
         if row.hasAttachments { parts.append("Has attachments") }
+        if isPending { parts.append("Change waiting to sync") }
         if let deletedAtProvider { parts.append(deletedAtProvider) }
         parts.append(MessageDate.short(summary.date))
+        if !summary.snippet.isEmpty { parts.append(summary.snippet) }
+        if showsAccount, let accountName { parts.append(accountName) }
         return parts.joined(separator: ", ")
     }
 }
@@ -444,6 +462,12 @@ private struct StatusLine: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .fixedSize() // the bar gives it too little room otherwise ("Up t…")
+            // A live line: VoiceOver reads it as it changes, under a name that says what it is.
+            .accessibilityLabel("Sync")
+            .accessibilityValue(Self.text(model: model, session: session))
+            .accessibilityAddTraits(.updatesFrequently)
+            // The bar keeps its text small at the largest sizes; a long press shows it large.
+            .accessibilityShowsLargeContentViewer()
             .accessibilityIdentifier("statusLine")
     }
 

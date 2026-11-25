@@ -32,17 +32,21 @@ struct DraftsScreen: View {
 
 private struct DraftRow: View {
     let draft: ComposeDraft
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline) {
+            // At the accessibility sizes the date goes under the recipients (GKM-061).
+            let header = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                                                      : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+            header {
                 Text(draft.to.isEmpty ? "No recipients" : draft.to.map { $0.name ?? $0.address }.joined(separator: ", "))
                     .font(.body.weight(.medium))
-                    .lineLimit(1)
-                Spacer(minLength: 8)
+                    .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
+                if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
                 Text(MessageDate.short(draft.updatedAt)).font(.subheadline).foregroundStyle(.secondary)
             }
-            Text(draft.subject.isEmpty ? "(No subject)" : draft.subject).font(.subheadline).lineLimit(1)
+            Text(draft.subject.isEmpty ? "(No subject)" : draft.subject).font(.subheadline).lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
             if !draft.body.isEmpty {
                 Text(draft.body).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
             }
@@ -78,6 +82,7 @@ struct OutboxScreen: View {
 
 private struct OutboxRow: View {
     @Environment(MailRouter.self) private var router
+    @Environment(\.dynamicTypeSize) private var typeSize
     let entry: OutboxEntry
     let sending: MailSending
     @State private var confirmingSendAgain = false
@@ -85,18 +90,27 @@ private struct OutboxRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Image(systemName: OutboxText.symbol(entry))
-                    .foregroundStyle(OutboxText.isProblem(entry) ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
-                Text(entry.subject.isEmpty ? "(No subject)" : entry.subject).font(.body.weight(.medium)).lineLimit(1)
-                Spacer(minLength: 8)
+            // At the accessibility sizes the state goes under the subject, and the buttons stack.
+            let header = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                      : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+            header {
+                HStack(alignment: .firstTextBaseline) {
+                    Image(systemName: OutboxText.symbol(entry))
+                        .foregroundStyle(OutboxText.isProblem(entry) ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                        .accessibilityHidden(true)
+                    Text(entry.subject.isEmpty ? "(No subject)" : entry.subject).font(.body.weight(.medium))
+                        .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
+                }
+                if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
                 Text(OutboxText.state(entry)).font(.subheadline).foregroundStyle(.secondary)
             }
-            Text(OutboxText.recipients(entry)).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            Text(OutboxText.recipients(entry)).font(.subheadline).foregroundStyle(.secondary).lineLimit(typeSize.isAccessibilitySize ? 4 : 2)
             if let explanation = OutboxText.explanation(entry) {
                 Text(explanation).font(.caption).foregroundStyle(.secondary)
             }
-            HStack(spacing: 18) {
+            let buttons = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                                                       : AnyLayout(HStackLayout(spacing: 18))
+            buttons {
                 if entry.canRetry { Button("Retry") { Task { await sending.retry(entry.id) } } }
                 if entry.canSendAgain {
                     Button("Check Sent Again") { Task { await sending.checkAgain(entry.id) } }

@@ -17,24 +17,23 @@ struct MailboxesView: View {
             }
             Section {
                 ForEach(MailCategory.allCases, id: \.self) { category in
-                    MailboxRow(title: category.title, systemImage: category.systemImage, count: count(category))
+                    MailboxRow(title: category.title, systemImage: category.systemImage, count: count(category),
+                               countMeaning: countMeaning(category))
                         .tag(SidebarSelection.category(category))
-                        .accessibilityIdentifier("mailbox.\(category.title)")
                 }
                 MailboxRow(title: "All Mail", systemImage: "tray.full", count: nil)
                     .tag(SidebarSelection.allMail)
                 if model.attention.pendingClassification > 0 {
                     Text("Sorting \(model.attention.pendingClassification.formatted()) messages…")
-                        .font(.caption).foregroundStyle(.tertiary)
+                        .font(.caption).foregroundStyle(.secondary)
                         .selectionDisabled()
                 }
             }
             Section {
-                MailboxRow(title: "Drafts", systemImage: "doc", count: draftCount)
+                MailboxRow(title: "Drafts", systemImage: "doc", count: draftCount, countMeaning: { $0 == 1 ? "1 draft" : "\($0) drafts" })
                     .tag(SidebarSelection.drafts)
-                MailboxRow(title: "Outbox", systemImage: "tray.and.arrow.up", count: outboxCount)
+                MailboxRow(title: "Outbox", systemImage: "tray.and.arrow.up", count: outboxCount, countMeaning: outboxMeaning)
                     .tag(SidebarSelection.outbox)
-                    .accessibilityIdentifier("mailbox.Outbox")
             }
             if !model.spaces.spaces.isEmpty {
                 Section("Spaces") {
@@ -49,6 +48,7 @@ struct MailboxesView: View {
             ForEach(model.accounts, id: \.id) { account in
                 Section {
                     MailboxRow(title: "All of \(account.displayName)", systemImage: "person.crop.circle", count: nil)
+                        .accessibilityLabel("All mail of \(account.displayName)")
                         .tag(SidebarSelection.account(account.id))
                     ForEach(folders(of: account), id: \.self) { folder in
                         MailboxRow(title: folder.role == "inbox" ? "Inbox" : folder.path.joined(separator: " / "),
@@ -106,6 +106,18 @@ struct MailboxesView: View {
         }
     }
 
+    private func countMeaning(_ category: MailCategory) -> (Int) -> String {
+        switch category {
+        case .promotions, .quarantine: { $0 == 1 ? "1 message" : "\($0) messages" }
+        default: { "\($0) unread" }
+        }
+    }
+
+    private var outboxMeaning: (Int) -> String {
+        guard let sending = model.sending, !sending.needsAttention.isEmpty else { return { "\($0) waiting" } }
+        return { "\($0) need attention" }
+    }
+
     private var draftCount: MailboxRow.Count? {
         let count = model.sending?.drafts.count ?? 0
         return count > 0 ? .quiet(count) : nil
@@ -121,18 +133,22 @@ struct MailboxesView: View {
 /// An account's name and how its sync is doing, in words.
 private struct AccountHeader: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var typeSize
     let account: MailAccount
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             // An address would wrap mid-domain ("example.-com"): one line, shortened in the middle.
             Text(account.displayName)
-                .lineLimit(1)
+                .accessibilityLabel("Account \(account.displayName)")
+                .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
                 .truncationMode(.middle)
             if let status = model.syncStatus(account.id) {
                 Text(status)
                     .font(.caption2)
-                    .foregroundStyle(model.needsPassword(account.id) ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
+                    // A fixed colour: a hierarchical .secondary inside the already-secondary
+                    // header came out at about 2:1 (GKM-061).
+                    .foregroundStyle(model.needsPassword(account.id) ? AnyShapeStyle(.orange) : AnyShapeStyle(Color(uiColor: .secondaryLabel)))
                     .textCase(nil)
                     .accessibilityIdentifier("syncStatus.\(account.address)")
             }
@@ -150,22 +166,30 @@ struct MailboxRow: View {
     let systemImage: String
     let count: Count?
     var tint: Color?
+    /// What the number counts, for VoiceOver: "3 unread", "12 messages".
+    var countMeaning: (Int) -> String = { "\($0) unread" }
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 24
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
-                .frame(width: 24)
+                .frame(width: iconWidth)
                 .accessibilityHidden(true)
-            Text(title).lineLimit(1)
+            // A long folder or space name wraps at the accessibility sizes instead of vanishing.
+            Text(title).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
             Spacer(minLength: 8)
             if let count {
                 Text("\(count.value)")
                     .font(.callout.monospacedDigit().weight(count.isAttention ? .semibold : .regular))
-                    .foregroundStyle(count.isAttention ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(count.isAttention ? AnyShapeStyle(Theme.accentText) : AnyShapeStyle(.secondary))
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(count.map { countMeaning($0.value) } ?? "")
+        .accessibilityIdentifier("mailbox.\(title)")
     }
 }
 
@@ -206,6 +230,7 @@ struct NoticeLine: View {
             Image(systemName: systemImage).foregroundStyle(tint)
         }
         .font(.callout)
+        .accessibilityElement(children: .combine)
         .fixedSize(horizontal: false, vertical: true)
     }
 }
