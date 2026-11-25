@@ -30,7 +30,7 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>NSExtensionActivationRule</key>
-			<string>SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $attachment, ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image").@count &gt;= 1).@count &gt;= 1</string>
+			<string>SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $attachment, ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image" OR (SUBQUERY($attachment.registeredTypeIdentifiers, $type, $type == "public.data" OR $type BEGINSWITH "dyn.").@count &gt;= 1 AND SUBQUERY($attachment.registeredTypeIdentifiers, $type, $type UTI-CONFORMS-TO "public.content" OR ($type UTI-CONFORMS-TO "public.url" AND NOT $type UTI-CONFORMS-TO "public.file-url")).@count == 0) ).@count &gt;= 1).@count &gt;= 1</string>
 		</dict>
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.share-services</string>
