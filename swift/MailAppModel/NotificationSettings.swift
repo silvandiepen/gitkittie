@@ -3,9 +3,10 @@ import MailClassifier
 import MailCore
 import MailStore
 
-/// Which new mail may notify (GKM-018; Classification.md, Notifications). Per account, and per
-/// mailing list within an account. Kept on this device in `preferences/notifications.json`
-/// beside the remote-image choices (MAIL-033); GKM-026 moves both to private CloudKit.
+/// Which new mail may notify (GKM-018; Classification.md, Notifications). Per account, per
+/// mailing list within an account, and per space (GKM-037, MAIL-085). Kept on this device in
+/// `preferences/notifications.json` beside the remote-image choices (MAIL-033); GKM-026 moves
+/// both to private CloudKit.
 struct NotificationSettings: Codable, Equatable {
     enum AccountLevel: String, Codable, CaseIterable, Identifiable {
         /// New mail in Focused notifies and counts on the badge (the default).
@@ -25,6 +26,10 @@ struct NotificationSettings: Codable, Equatable {
         var id: String { rawValue }
     }
 
+    /// A space has the same three choices as a list: like the rest of Focused, Always (never
+    /// from Quarantine) or Never.
+    typealias SpaceLevel = ListLevel
+
     struct ListKey: Codable, Hashable {
         var account: MailAccountID
         /// The List-ID, as the store keeps it (lowercased, no angle brackets).
@@ -33,6 +38,22 @@ struct NotificationSettings: Codable, Equatable {
 
     var accounts: [MailAccountID: AccountLevel] = [:]
     var lists: [ListKey: ListLevel] = [:]
+    /// Spaces span accounts, so their choice does too. A deleted space's choice is kept, which
+    /// is harmless and brings it back with the space (a space file can be briefly unreadable
+    /// while another device writes it).
+    var spaces: [MailSpaceID: SpaceLevel] = [:]
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey { case accounts, lists, spaces }
+
+    /// A file from before spaces had a choice (GKM-018) has no `spaces`.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        accounts = try container.decodeIfPresent([MailAccountID: AccountLevel].self, forKey: .accounts) ?? [:]
+        lists = try container.decodeIfPresent([ListKey: ListLevel].self, forKey: .lists) ?? [:]
+        spaces = try container.decodeIfPresent([MailSpaceID: SpaceLevel].self, forKey: .spaces) ?? [:]
+    }
 
     func level(_ account: MailAccountID) -> AccountLevel { accounts[account] ?? .focused }
 
@@ -40,6 +61,8 @@ struct NotificationSettings: Codable, Equatable {
         guard let list else { return .automatic }
         return lists[ListKey(account: account, list: list)] ?? .automatic
     }
+
+    func level(space: MailSpaceID) -> SpaceLevel { spaces[space] ?? .automatic }
 
     /// Lists with a choice of their own, for the settings sheet.
     var customLists: [(key: ListKey, level: ListLevel)] {
@@ -49,14 +72,17 @@ struct NotificationSettings: Codable, Equatable {
 
     /// Whether a message that just arrived may notify. Uncertain mail lives in Focused, so it
     /// notifies like the rest of Focused; promotions, newsletters and routine updates are silent.
+    ///
+    /// Its list and every space it is in each have a say (MAIL-085): Never anywhere wins, then
+    /// Always anywhere, else where it lives decides. An account that is off, Quarantine and a
+    /// sender rule that silences it are never overruled.
     func notifies(_ arrival: MailArrival) -> Bool {
         // Muted and silently archived by your sender rule (GKM-019): never, whatever else says so.
         guard arrival.isUnread, arrival.home != .quarantine, !arrival.isSilenced, level(arrival.account) == .focused else { return false }
-        switch level(list: arrival.listID, account: arrival.account) {
-        case .muted: return false
-        case .always: return true
-        case .automatic: return arrival.home.asksForAttention
-        }
+        let levels = [level(list: arrival.listID, account: arrival.account)] + arrival.spaces.map { level(space: $0) }
+        if levels.contains(.muted) { return false }
+        if levels.contains(.always) { return true }
+        return arrival.home.asksForAttention
     }
 
     static func url(deviceFolder: URL) -> URL {

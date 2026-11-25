@@ -67,6 +67,9 @@ public struct MailArrival: Sendable, Equatable {
     /// The sender rule that won, and where it put the message (GKM-019).
     public var senderRule: String?
     public var disposition: SenderDisposition?
+    /// The spaces it is in when it is considered (GKM-037): what per-space notification
+    /// settings look at. A space's rules run over new mail before notifications do.
+    public var spaces: Set<MailSpaceID> = []
     /// Muted and silently archived mail never notifies.
     public var isSilenced: Bool { disposition == .muted || disposition == .archived }
 }
@@ -335,13 +338,18 @@ extension MailIndex {
         return try statement.step() ? Int64(statement.int(0)) : 0
     }
 
+    /// Arrivals after a number, with the spaces each is in (GKM-037), looked up through
+    /// `space_members_by_message`, never a scan of every membership.
+    static let arrivalsSQL = """
+        SELECT c.arrival, c.local_id, c.account_id, c.home, c.list_id, m.from_name, m.from_address, m.subject, m.sort_date, m.seen,
+               c.sender_rule, c.disposition,
+               (SELECT group_concat(s.space_id) FROM space_members s WHERE s.local_id = c.local_id)
+        FROM message_classes c JOIN messages m ON m.local_id = c.local_id
+        WHERE c.arrival > ? ORDER BY c.arrival LIMIT ?
+        """
+
     func arrivals(after sequence: Int64, limit: Int) throws -> [MailArrival] {
-        let statement = try database.prepare("""
-            SELECT c.arrival, c.local_id, c.account_id, c.home, c.list_id, m.from_name, m.from_address, m.subject, m.sort_date, m.seen,
-                   c.sender_rule, c.disposition
-            FROM message_classes c JOIN messages m ON m.local_id = c.local_id
-            WHERE c.arrival > ? ORDER BY c.arrival LIMIT ?
-            """).bind([.int(sequence), .int(Int64(limit))])
+        let statement = try database.prepare(Self.arrivalsSQL).bind([.int(sequence), .int(Int64(limit))])
         var result: [MailArrival] = []
         while try statement.step() {
             guard let raw = statement.text(1), let id = MailMessageID(raw), let account = statement.text(2),
@@ -350,7 +358,8 @@ extension MailIndex {
                                       listID: statement.text(4), fromName: statement.text(5), fromAddress: statement.text(6),
                                       subject: statement.text(7), received: Date(timeIntervalSince1970: statement.double(8)),
                                       isUnread: statement.int(9) == 0, senderRule: statement.text(10),
-                                      disposition: statement.text(11).flatMap(SenderDisposition.init(rawValue:))))
+                                      disposition: statement.text(11).flatMap(SenderDisposition.init(rawValue:)),
+                                      spaces: Set((statement.text(12) ?? "").split(separator: ",").compactMap { MailSpaceID(String($0)) })))
         }
         return result
     }

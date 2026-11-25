@@ -333,6 +333,129 @@ final class ClassificationAppTests: XCTestCase {
         let posted = await poster.posted
         XCTAssertEqual(posted, [])
     }
+
+    // MARK: Notifications per space, and opening them (GKM-037)
+
+    func testSpacesHaveTheirOwnNotificationLevel() async throws {
+        let poster = RecordingPoster(permission: .allowed, answer: .allowed)
+        let model = await openModel(poster: poster)
+        let store = try XCTUnwrap(model.mailStore)
+        let createdTrip = await model.spaces.create(name: "Trip", icon: "airplane", color: "blue", rules: [SpaceRule(domain: "travel.example.com")])
+        let trip = try XCTUnwrap(createdTrip)
+        let createdQuiet = await model.spaces.create(name: "Quiet", icon: "moon", color: "grey", rules: [SpaceRule(sender: "jo.lee@example.org")])
+        let quiet = try XCTUnwrap(createdQuiet)
+        let offer = { (subject: String) in Self.eml(from: "deals@travel.example.com", to: self.me, subject: subject,
+                                                    headers: ["List-Unsubscribe: <https://travel.example.com/u>"]) }
+
+        // Like the rest of Focused: an offer in the space is silent, as anywhere.
+        try await store.ingest(offer("Flights from 49"), account: account)
+        await model.refreshAfterSync()
+        var posted = await poster.posted
+        XCTAssertEqual(posted, [], "a promotion in a space stays silent by default")
+
+        // Always: the space's new mail notifies outside Focused, never from Quarantine.
+        await model.attention.setLevel(.always, space: trip.id, accounts: model.accounts)
+        try await store.ingest(offer("Hotels from 29"), account: account)
+        try await store.ingest(offer("You won a free cruise"), account: account,
+                               remote: RemoteLocation(mailbox: "Junk", uidValidity: 1, uid: 1))
+        await model.refreshAfterSync()
+        posted = await poster.posted
+        XCTAssertEqual(posted.map(\.body), ["Hotels from 29"])
+        let spam = try await store.search(SearchQuery(text: "cruise"), limit: 5).first
+        let spamID = try XCTUnwrap(spam?.id)
+        let spamHome = try await store.verdict(of: spamID)?.home
+        XCTAssertEqual(spamHome, .quarantine, "the provider's junk folder is its spam verdict")
+
+        // Never: Focused mail in a muted space is silent, and Never wins over a list set to Always.
+        await poster.reset()
+        await model.attention.setLevel(.muted, space: quiet.id, accounts: model.accounts)
+        let list = ["List-ID: <walkers.lists.example.org>", "List-Post: <mailto:walkers@lists.example.org>"]
+        await model.attention.setLevel(.always, list: "walkers.lists.example.org", account: account, accounts: model.accounts)
+        try await store.ingest(Self.eml(from: "Jo Lee <jo.lee@example.org>", to: me, subject: "Dinner tonight?"), account: account)
+        try await store.ingest(Self.eml(from: "Jo Lee <jo.lee@example.org>", to: me, subject: "Ridge trail", headers: list), account: account)
+        try await store.ingest(Self.eml(from: "Ravi <ravi.patel@example.org>", to: me, subject: "Ridge trail too", headers: list), account: account)
+        await model.refreshAfterSync()
+        posted = await poster.posted
+        XCTAssertEqual(posted.map(\.title), ["Ravi"], "the list's Always holds outside the muted space only")
+
+        // An account that is off is never overruled by a space.
+        await poster.reset()
+        await model.attention.setLevel(.off, for: account, accounts: model.accounts)
+        try await store.ingest(offer("Trains from 9"), account: account)
+        await model.refreshAfterSync()
+        posted = await poster.posted
+        XCTAssertEqual(posted, [])
+
+        // Kept on this device; a file from before spaces had a choice still reads.
+        let reloaded = try NotificationSettings.load(deviceFolder: locations.deviceFolder)
+        XCTAssertEqual(reloaded.level(space: trip.id), .always)
+        XCTAssertEqual(reloaded.level(space: quiet.id), .muted)
+        await model.attention.setLevel(.automatic, space: trip.id, accounts: model.accounts)
+        XCTAssertNil(model.attention.settings.spaces[trip.id], "the default is not stored")
+        let url = NotificationSettings.url(deviceFolder: locations.deviceFolder)
+        try Data(#"{"accounts":[],"lists":[]}"#.utf8).write(to: url)
+        let old = try NotificationSettings.load(deviceFolder: locations.deviceFolder)
+        XCTAssertEqual(old, NotificationSettings())
+    }
+
+    func testOpeningANotificationShowsItsConversation() async throws {
+        let poster = RecordingPoster(permission: .allowed, answer: .allowed)
+        let model = await openModel(poster: poster)
+        let store = try XCTUnwrap(model.mailStore)
+        let first = try await store.ingest(Self.eml(from: "Jo Lee <jo.lee@example.org>", to: me, subject: "Dinner tonight?", id: "dinner-1"),
+                                           account: account).id
+        try await store.ingest(Self.eml(from: "Ravi <ravi.patel@example.org>", to: me, subject: "Ridge trail"), account: account)
+        try await store.ingest(Self.eml(from: "Jo Lee <jo.lee@example.org>", to: me, subject: "Re: Dinner tonight?",
+                                        headers: ["In-Reply-To: <dinner-1@example.net>"]), account: account)
+        await model.refreshAfterSync()
+        let posted = await poster.posted
+        XCTAssertEqual(posted.count, 3)
+        // The first of the conversation, though a reply came after it: that one is shown.
+        let notified = try XCTUnwrap(posted.first { $0.body == "Dinner tonight?" }?.message)
+        XCTAssertEqual(notified, first)
+        let notifiedSummary = try await store.summary(of: notified)
+        let thread = try XCTUnwrap(notifiedSummary).threadID
+
+        // From the drafts, with a search running: Focused, the search cleared, the conversation open.
+        await model.select(.drafts)
+        await model.browser.search("ridge")
+        await model.openFromNotification(notified)
+        XCTAssertEqual(model.selection, .category(.focused))
+        XCTAssertFalse(model.browser.isSearching)
+        XCTAssertEqual(model.browser.openThread?.id, thread)
+        XCTAssertEqual(model.browser.openThread?.messages.count, 2)
+        XCTAssertEqual(model.browser.openThread?.messages.filter(\.isExpanded).map(\.id), [notified])
+        XCTAssertEqual(model.browser.selectedRowID, model.browser.rows.first { $0.threadID == thread }?.id)
+        XCTAssertNotNil(model.browser.selectedRowID)
+        XCTAssertEqual(model.notificationOpens, 1)
+        let read = try await store.summary(of: notified)
+        XCTAssertEqual(read?.isUnread, false, "opened is read, as if it had been chosen")
+
+        // A view that already lists it stays.
+        await model.select(.account(account))
+        await model.browser.select(nil)
+        await model.openFromNotification(notified)
+        XCTAssertEqual(model.selection, .account(account))
+        XCTAssertEqual(model.browser.openThread?.id, thread)
+
+        // A message that is gone says so.
+        let gone = MailMessageID()
+        await model.openFromNotification(gone)
+        XCTAssertNotNil(model.actionError)
+    }
+
+    func testANotificationThatLaunchedTheAppOpensOnceTheStoreIsOpen() async throws {
+        let seeding = try await MailStore.open(locations)
+        try await seeding.save(MailAccount(id: account, displayName: "Corpus", address: me))
+        let id = try await seeding.ingest(Self.eml(from: "Jo Lee <jo.lee@example.org>", to: me, subject: "Dinner tonight?"), account: account).id
+
+        let model = AppModel(locations: locations, notifications: RecordingPoster(permission: .allowed, answer: .allowed))
+        await model.openFromNotification(id)
+        XCTAssertNil(model.browser.openThread, "nothing to show before the store is open")
+        await model.open()
+        XCTAssertEqual(model.browser.openThread?.messages.filter(\.isExpanded).map(\.id), [id])
+        XCTAssertEqual(model.notificationOpens, 1)
+    }
 }
 
 /// Records what would be posted, and answers the permission question as told.

@@ -65,9 +65,16 @@ struct MailSplitView: View {
             model.senders.undoManager = undo
             // Opening an empty app on the list of nothing helps no one: start where accounts are added.
             if model.accounts.isEmpty { router.compactColumn = .sidebar }
+            // A notification opened before the split view existed (a launch from it).
+            if model.notificationOpens > 0, model.browser.openThread != nil { router.compactColumn = .detail }
         }
         .onChange(of: model.browser.selectedRowID) { _, id in
             if id != nil { router.compactColumn = .detail }
+        }
+        // A notification was tapped (GKM-037): its conversation, even when the list doesn't show it.
+        .onChange(of: model.notificationOpens) {
+            router.showsSettings = false
+            router.compactColumn = .detail
         }
     }
 

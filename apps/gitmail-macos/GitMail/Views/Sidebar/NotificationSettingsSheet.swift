@@ -1,8 +1,9 @@
 import MailCore
+import MailStore
 import SwiftUI
 
-/// Which new mail may notify, per account and per list (GKM-018). Quiet by default: only new
-/// mail in Focused notifies and counts on the Dock badge.
+/// Which new mail may notify, per account, space and list (GKM-018, GKM-037). Quiet by default:
+/// only new mail in Focused notifies and counts on the Dock badge.
 struct NotificationSettingsSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -33,6 +34,25 @@ struct NotificationSettingsSheet: View {
                             Text("Off").tag(NotificationSettings.AccountLevel.off)
                         }
                     }
+                }
+            }
+
+            if !model.spaces.spaces.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("SPACES").font(.caption.weight(.semibold)).tracking(0.6).foregroundStyle(.secondary)
+                    ForEach(model.spaces.spaces) { space in
+                        Picker(selection: level(space.id)) {
+                            Text("Like the Rest of Focused").tag(NotificationSettings.SpaceLevel.automatic)
+                            Text("Always").tag(NotificationSettings.SpaceLevel.always)
+                            Text("Never").tag(NotificationSettings.SpaceLevel.muted)
+                        } label: {
+                            Label(space.name, systemImage: space.icon)
+                        }
+                    }
+                    Text("Always notifies for new mail in the space wherever it lives, except Quarantine. Never keeps it silent, even from a list set to Always.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -67,6 +87,15 @@ struct NotificationSettingsSheet: View {
         }
         .padding(24)
         .frame(width: 460)
+        // The person may have changed it in System Settings since.
+        .task { await attention.refreshPermission() }
+    }
+
+    private func level(_ space: MailSpaceID) -> Binding<NotificationSettings.SpaceLevel> {
+        Binding(
+            get: { attention.settings.level(space: space) },
+            set: { level in Task { await attention.setLevel(level, space: space, accounts: model.accounts) } }
+        )
     }
 
     private func level(_ account: MailAccountID) -> Binding<NotificationSettings.AccountLevel> {

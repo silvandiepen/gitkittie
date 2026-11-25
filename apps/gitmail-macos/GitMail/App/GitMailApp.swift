@@ -5,9 +5,16 @@ import SwiftUI
 
 @main
 struct GitMailApp: App {
-    // Attachment text for search comes from the sandboxed GitMailExtractor.xpc, never this process.
-    @State private var model = AppModel(extractor: IsolatedTextExtractor(serviceName: "app.hakobs.gitmail.extractor"),
-                                        notifications: UserNotificationPoster())
+    @State private var model: AppModel
+
+    init() {
+        // Attachment text for search comes from the sandboxed GitMailExtractor.xpc, never this process.
+        let model = AppModel(extractor: IsolatedTextExtractor(serviceName: "app.hakobs.gitmail.extractor"),
+                             notifications: UserNotificationPoster())
+        // Before launch finishes, so the notification that launched the app opens its message.
+        model.respondToNotifications()
+        _model = State(initialValue: model)
+    }
 
     var body: some Scene {
         WindowGroup {

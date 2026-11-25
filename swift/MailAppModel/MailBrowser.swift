@@ -252,6 +252,14 @@ final class MailBrowser {
         await reload()
     }
 
+    /// Back to the plain list of the scope: no search text, no chips.
+    func clearSearch() async {
+        guard isSearching else { return }
+        searchText = ""
+        filters = SearchFilters()
+        await reload()
+    }
+
     /// The query the list runs: the scope, then the search text's own syntax, then the chips.
     var query: SearchQuery {
         var query = SearchQuery.parse(searchText, calendar: calendar)
@@ -419,18 +427,32 @@ final class MailBrowser {
 
     // MARK: The open thread
 
+    /// Opens a message from its notification (GKM-037): its conversation, selected in the list
+    /// when the list shows it, with that message expanded and read, as if it had been chosen.
+    func reveal(_ message: MailMessageID, threadID: String) async {
+        selectedRowID = rows.first { $0.threadID == threadID }?.id
+        await openThread(threadID, focus: message, rowID: selectedRowID)
+    }
+
     private func open(_ row: ListRow) async {
+        // Newest expanded; while searching, the hit itself.
+        let hit: MailMessageID? = if case .message(let hit) = row { hit.id } else { nil }
+        await openThread(row.threadID, focus: hit, rowID: row.id)
+    }
+
+    /// Opens a conversation with `focus` expanded (the newest message when nil or not in it),
+    /// unless the selection moved on to `rowID`'s successor meanwhile.
+    private func openThread(_ threadID: String, focus wanted: MailMessageID?, rowID: String?) async {
         guard let store else { return }
         do {
-            let summaries = try await store.thread(row.threadID)
-            guard selectedRowID == row.id else { return }
-            // Newest expanded; while searching, the hit itself.
-            let focus: MailMessageID? = if case .message(let hit) = row { hit.id } else { summaries.last?.id }
-            var thread = OpenThread(id: row.threadID, messages: summaries.map { ThreadMessage(summary: $0, isExpanded: $0.id == focus) })
+            let summaries = try await store.thread(threadID)
+            guard selectedRowID == rowID else { return }
+            let focus = summaries.contains { $0.id == wanted } ? wanted : summaries.last?.id
+            var thread = OpenThread(id: threadID, messages: summaries.map { ThreadMessage(summary: $0, isExpanded: $0.id == focus) })
             for index in thread.messages.indices where thread.messages[index].isExpanded {
                 thread.messages[index] = await loaded(thread.messages[index], store: store)
             }
-            guard selectedRowID == row.id else { return }
+            guard selectedRowID == rowID else { return }
             openThread = thread
             await onMessagesOpened?(thread.messages.filter(\.isExpanded).map(\.id))
             await markRead(thread.messages.filter { $0.summary.isUnread }.map(\.id))

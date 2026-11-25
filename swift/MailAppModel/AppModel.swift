@@ -98,6 +98,13 @@ final class AppModel {
     /// Focused is where the window opens (GKM-018).
     private(set) var selection: SidebarSelection = .category(.focused)
 
+    /// A notification that was opened before the store was (GKM-037): shown once it is.
+    @ObservationIgnored private var pendingNotification: MailMessageID?
+    /// Counts the conversations opened from a notification, so the iPhone can show the reader.
+    private(set) var notificationOpens = 0
+    /// Holds the notification centre's delegate, which it keeps only weakly.
+    @ObservationIgnored var notificationResponder: AnyObject?
+
     /// Drafts and the outbox; nil until the store is open.
     private(set) var sending: MailSending?
     /// The mail folder `sending` belongs to.
@@ -196,6 +203,10 @@ final class AppModel {
             senders.unsubscribe.sending = sending
             try await reload()
             phase = .ready
+            if let pending = pendingNotification {
+                pendingNotification = nil
+                await openFromNotification(pending)
+            }
             await sync.start(accounts, store: opened)
             await registerForSending(accounts)
             indexAttachmentTextInBackground()
@@ -210,6 +221,36 @@ final class AppModel {
         self.selection = selection
         await browser.setScope(selection.scope)
         if case .folder(let account, let name) = selection { await sync.setActiveFolder(name, account: account) }
+    }
+
+    /// A notification was clicked (GKM-037, MAIL-086): show its conversation. The list stays
+    /// where it is when it already shows the conversation; otherwise it goes to the view the
+    /// message lives in (Focused, or the category an Always list or space notified from), with
+    /// the search cleared. Before the store is open, it waits for it.
+    func openFromNotification(_ id: MailMessageID) async {
+        guard phase == .ready, let store else {
+            pendingNotification = id
+            return
+        }
+        do {
+            guard let summary = try await store.summary(of: id) else {
+                actionError = "That message is no longer on \(DeviceWords.this)."
+                return
+            }
+            let showsMail: Bool = switch selection {
+            case .allMail, .category, .account, .folder, .space: true
+            case .drafts, .outbox, .attachments, .senders, .cleanup: false
+            }
+            if !showsMail || browser.isSearching || !browser.rows.contains(where: { $0.threadID == summary.threadID }) {
+                let home = try await store.verdict(of: id)?.home ?? .focused
+                await browser.clearSearch()
+                await select(.category(home))
+            }
+            await browser.reveal(id, threadID: summary.threadID)
+            notificationOpens += 1
+        } catch {
+            actionError = String(describing: error)
+        }
     }
 
     /// File ▸ Import Messages…: `.eml` files and folders of them, into "On My Mac".

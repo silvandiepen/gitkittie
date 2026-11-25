@@ -10,6 +10,9 @@ struct GitMailApp: App {
         _session = State(initialValue: session)
         // Before launch finishes, or iOS drops the background tasks (MAIL-053).
         if !Launch.isUITest { MailBackgroundTasks.register(session) }
+        // Before launch finishes too, so the notification that launched the app opens its
+        // message (GKM-037).
+        session.model.respondToNotifications()
     }
 
     var body: some Scene {

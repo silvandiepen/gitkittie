@@ -35,4 +35,13 @@ final class IndexQueryPlanTests: XCTestCase {
         XCTAssertFalse(plan.contains { $0.hasPrefix("SCAN") }, "\(plan)")
         XCTAssertTrue(plan.contains { $0.contains("USING COVERING INDEX message_classes_by_arrival") }, "\(plan)")
     }
+
+    /// The spaces of each arrival come from the membership index, not a scan of every space's
+    /// members per message (GKM-037).
+    func testArrivalsLookUpTheirSpacesThroughTheMembershipIndex() throws {
+        let index = try MailIndex(url: root.appendingPathComponent("index.sqlite"))
+        let plan = try index.queryPlan(MailIndex.arrivalsSQL)
+        XCTAssertFalse(plan.contains { $0.hasPrefix("SCAN") }, "\(plan)")
+        XCTAssertTrue(plan.contains { $0.contains("space_members_by_message") }, "\(plan)")
+    }
 }

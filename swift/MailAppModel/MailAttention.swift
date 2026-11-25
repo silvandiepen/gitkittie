@@ -133,6 +133,16 @@ final class MailAttention {
         await saveSettings(accounts: accounts)
     }
 
+    func setLevel(_ level: NotificationSettings.SpaceLevel, space: MailSpaceID, accounts: [MailAccount]) async {
+        settings.spaces[space] = level == .automatic ? nil : level
+        await saveSettings(accounts: accounts)
+    }
+
+    /// Reads what the system allows again: the person may have changed it in Settings.
+    func refreshPermission() async {
+        if let poster { permission = await poster.permission() }
+    }
+
     private func saveSettings(accounts: [MailAccount]) async {
         guard let deviceFolder else { return }
         do {
