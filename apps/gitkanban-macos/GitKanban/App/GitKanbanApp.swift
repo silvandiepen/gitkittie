@@ -5,6 +5,13 @@ import GitKanbanKit
 struct GitKanbanApp: App {
     @State private var model = AppModel()
 
+    init() {
+        // Thin overlay scrollbars that only show while scrolling, whatever System Settings says
+        // (the wide "Always" ones draw a light track across the dark window). This app's own
+        // preference: it changes nothing for other apps.
+        UserDefaults.standard.set("WhenScrolling", forKey: "AppleShowScrollBars")
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
