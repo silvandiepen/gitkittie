@@ -229,7 +229,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.importReport, ImportReport(imported: 2, duplicates: 0, skipped: ["broken.eml"]))
         XCTAssertEqual(model.accounts.map(\.displayName), ["On My Mac"])
         XCTAssertEqual(subjects(model.browser), ["Two", "One"])
-        XCTAssertEqual(model.browser.rows.map(\.isUnread), [false, false], "imported mail arrives read")
+        XCTAssertEqual(model.browser.rows.map(\.isUnread), [true, true], "imported mail arrives unread (MAIL-073)")
 
         await model.importMessages(from: [folder.appendingPathComponent("one.eml")])
         XCTAssertEqual(model.importReport, ImportReport(imported: 0, duplicates: 1, skipped: []))

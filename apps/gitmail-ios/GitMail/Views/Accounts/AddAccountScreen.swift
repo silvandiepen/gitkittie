@@ -37,10 +37,19 @@ struct AddAccountScreen: View {
                     SecureField(draft.provider == .iCloud ? "App-specific password" : "Password or app password", text: $draft.password)
                         .textContentType(.password)
                         .accessibilityIdentifier("passwordField")
-                    TextField(draft.displayName.isEmpty ? "Name (optional)" : draft.displayName, text: $draft.name)
-                        .accessibilityIdentifier("nameField")
                 } footer: {
                     passwordNote
+                }
+
+                Section {
+                    // On mail you send (MAIL-074); the account name is only for this app.
+                    TextField("Your name", text: $draft.senderName)
+                        .textContentType(.name)
+                        .accessibilityIdentifier("senderNameField")
+                    TextField(draft.displayName.isEmpty ? "Account name (optional)" : draft.displayName, text: $draft.name)
+                        .accessibilityIdentifier("nameField")
+                } footer: {
+                    Text("Your name is what people see on mail you send.")
                 }
 
                 if draft.provider == .other { servers }

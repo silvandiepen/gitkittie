@@ -7,12 +7,14 @@ enum AccountSheet: Identifiable {
     case add
     case remove(MailAccount)
     case signIn(MailAccount)
+    case settings(MailAccount)
 
     var id: String {
         switch self {
         case .add: "add"
         case .remove(let account): "remove-\(account.id.rawValue)"
         case .signIn(let account): "sign-in-\(account.id.rawValue)"
+        case .settings(let account): "settings-\(account.id.rawValue)"
         }
     }
 
@@ -21,6 +23,7 @@ enum AccountSheet: Identifiable {
         case .add: AddAccountSheet()
         case .remove(let account): RemoveAccountSheet(account: account)
         case .signIn(let account): UpdatePasswordSheet(account: account)
+        case .settings(let account): AccountSettingsSheet(account: account)
         }
     }
 }
@@ -83,6 +86,7 @@ struct AccountsSidebarSection: View {
         if account.connection != nil {
             Button("Sync Now") { Task { await model.sync.syncNow() } }
         }
+        Button("Account Settings…") { sheet = .settings(account) }
         Button("Export Account…") { Task { await Platform.export(.account(account.id), what: account.displayName, model: model) } }
         if (model.sync.replay[account.id]?.status.failed ?? 0) > 0 {
             Button("Try Failed Changes Again") { Task { await model.actions.retryFailed(account: account.id) } }

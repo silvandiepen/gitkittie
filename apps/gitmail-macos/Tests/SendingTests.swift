@@ -87,6 +87,38 @@ final class SendingTests: XCTestCase {
         await sending.stop()
     }
 
+    /// GKM-011, answered by Sil (MAIL-074): the name on mail you send is "Your name", asked when
+    /// the account is added and changeable later, never the account's sidebar name.
+    func testYourNameIsOnMailYouSendNotTheAccountsName() async throws {
+        let (model, sending) = try await openModel()
+        // "Ada Lovelace" is only the sidebar name here: nothing was given as "Your name".
+        let before = await sending.identities(accounts: model.accounts).map(\.address)
+        XCTAssertEqual(before, [MailAddress(address: "ada@example.com")], "the account's name is never put on sent mail")
+
+        try await model.updateAccountSettings(work, displayName: "Work", senderName: "  Ada Lovelace ", removesMailDeletedElsewhere: false)
+        XCTAssertEqual(model.accounts.first?.displayName, "Work")
+        XCTAssertEqual(model.accounts.first?.senderName, "Ada Lovelace")
+        let reopened = try await MailStore.open(locations).accounts().first
+        XCTAssertEqual(reopened?.senderName, "Ada Lovelace", "kept in the account's account.json")
+
+        let idValue = await model.composeNew()
+        let compose = await compose(try XCTUnwrap(idValue), model, sending)
+        let identity = try XCTUnwrap(compose.selectedIdentity?.address)
+        XCTAssertEqual(identity, MailAddress(name: "Ada Lovelace", address: "ada@example.com"))
+        var draft = ComposeDraft(account: work, from: identity)
+        draft.to = [MailAddress(address: "bo@example.net")]
+        draft.subject = "Hello"
+        let composed = try MessageComposer.compose(draft, attachments: [])
+        let header = String(decoding: composed.rawMessage.prefix(2_000), as: UTF8.self)
+        XCTAssertTrue(header.contains("From: Ada Lovelace <ada@example.com>\r\n"), header)
+
+        // Cleared: the address alone.
+        try await model.updateAccountSettings(work, displayName: "Work", senderName: "", removesMailDeletedElsewhere: false)
+        let cleared = await sending.identities(accounts: model.accounts).map(\.address)
+        XCTAssertEqual(cleared, [MailAddress(address: "ada@example.com")])
+        await sending.stop()
+    }
+
     /// GKM-013 acceptance: a crash while writing loses at most a few seconds. What was typed is
     /// on disk once the autosave interval has passed, without closing or sending.
     func testTypingIsOnDiskWithinTheAutosaveInterval() async throws {

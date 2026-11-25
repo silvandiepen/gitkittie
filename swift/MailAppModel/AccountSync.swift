@@ -15,6 +15,9 @@ struct AccountServices {
     var verifier: AccountVerifier
     var syncOptions: SyncOptions
     var defaults: UserDefaults
+    /// The most the offline cache of attachments keeps (GKM-036); `nil` takes the Mac's default.
+    /// The iPhone sets its storage budget's cache here (MAIL-079).
+    var offlineCacheBytes: Int64? = nil
 
     static var live: AccountServices {
         var options = SyncOptions()
@@ -104,8 +107,10 @@ final class AccountSync {
             return
         }
         let connector = services.connections.imap(connection, password: secret)
+        var options = services.syncOptions
+        options.removesMailDeletedElsewhere = account.removesDeletedMail
         let coordinator = SyncCoordinator(account: account.id, connector: connector,
-                                          store: store, options: services.syncOptions, log: services.connections.log)
+                                          store: store, options: options, log: services.connections.log)
         coordinators[account.id] = coordinator
         let id = account.id
         // Everyday actions go over their own connection, so a flag never waits for an import.

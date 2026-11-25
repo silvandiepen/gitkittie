@@ -162,7 +162,9 @@ final class StoreClassificationTests: XCTestCase {
         for category in MailCategory.allCases {
             let expected = Set(expectations.fixtures.filter { fixture in
                 let home = MailCategory.home(purpose: fixture.purpose, risk: fixture.risk, urgency: fixture.urgency)
-                return home == category || (category.purpose == fixture.purpose && home != .quarantine)
+                // Nothing is read yet, so every receipt is in Focused too (MAIL-076).
+                let unreadReceipt = category == .focused && home == .transactions && fixture.purpose == .transaction
+                return home == category || (category.purpose == fixture.purpose && home != .quarantine) || unreadReceipt
             }.map(\.file))
             let shown = try await files(category)
             XCTAssertEqual(shown, expected, "\(category)")
@@ -183,7 +185,7 @@ final class StoreClassificationTests: XCTestCase {
         let transactions = try await files(.transactions)
         XCTAssertTrue(transactions.contains("txn-payment-failed-en.eml"), "actionable transactions are in Transactions too")
         XCTAssertTrue(focused.contains("txn-payment-failed-en.eml"))
-        XCTAssertFalse(focused.contains("txn-receipt-en.eml"))
+        XCTAssertTrue(focused.contains("txn-receipt-en.eml"), "an unread receipt is in Focused (MAIL-076)")
 
         // Threads and the search syntax use the same filter.
         let threadFiles = Set(try await store.threads(SearchQuery(account: account, category: .promotions), limit: 500).map(\.latest.id).compactMap { fileOf[$0] })
@@ -205,6 +207,28 @@ final class StoreClassificationTests: XCTestCase {
         let after = try await store.categoryCounts(account: account)
         XCTAssertEqual(after[.focused]?.unread, (counts[.focused]?.unread ?? 0) - 1)
         XCTAssertEqual(after[.focused]?.total, counts[.focused]?.total)
+
+        // GKM-018, answered by Sil: a receipt stays in Focused until it is read, then it is only
+        // in Transactions. Its home stays Transactions throughout.
+        let receipt = try XCTUnwrap(ids["txn-receipt-en.eml"])
+        let receiptVerdict = try await store.verdict(of: receipt)
+        XCTAssertEqual(receiptVerdict?.home, .transactions)
+        try await store.setFlags(MessageFlags(seen: true), for: receipt)
+        let focusedAfterReading = try await files(.focused)
+        XCTAssertFalse(focusedAfterReading.contains("txn-receipt-en.eml"), "read: only in Transactions")
+        let transactionsAfterReading = try await files(.transactions)
+        XCTAssertTrue(transactionsAfterReading.contains("txn-receipt-en.eml"))
+        let readReceipt = try await store.categoryCounts(account: account)
+        XCTAssertEqual(readReceipt[.focused]?.total, (after[.focused]?.total ?? 0) - 1)
+        XCTAssertEqual(readReceipt[.focused]?.unread, (after[.focused]?.unread ?? 0) - 1)
+        XCTAssertEqual(readReceipt[.transactions]?.total, after[.transactions]?.total)
+        XCTAssertEqual(readReceipt[.transactions]?.unread, (after[.transactions]?.unread ?? 0) - 1)
+        let threadsInFocused = Set(try await store.threads(SearchQuery(account: account, category: .focused), limit: 500)
+            .map(\.latest.id).compactMap { fileOf[$0] })
+        XCTAssertFalse(threadsInFocused.contains("txn-receipt-en.eml"))
+        try await store.setFlags(MessageFlags(seen: false), for: receipt)
+        let focusedWhenUnreadAgain = try await files(.focused)
+        XCTAssertTrue(focusedWhenUnreadAgain.contains("txn-receipt-en.eml"), "marked unread: back in Focused")
     }
 
     func testUnclassifiedMailCountsAsFocusedUntilTheBackgroundPassClassifiesIt() async throws {

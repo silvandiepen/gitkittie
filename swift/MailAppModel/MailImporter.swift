@@ -20,7 +20,8 @@ struct ImportReport: Equatable {
 
 /// File ▸ Import Messages… (GKM-012): `.eml` files, or folders of them, go into a local
 /// "On My Mac" account. Nothing is uploaded anywhere; the files are stored like synced mail
-/// (original + Markdown in the mail folder) and arrive marked as read.
+/// (original + Markdown in the mail folder) and arrive unread, so they show up as new until
+/// opened (decided by Sil, GKM-012; MAIL-073).
 enum MailImporter {
     static let account = MailAccount(id: MailAccountID("on-my-mac"), displayName: "On My Mac", address: "")
     /// Larger files are not read: a message this size is almost certainly not mail.
@@ -47,7 +48,7 @@ enum MailImporter {
                         report.duplicates += 1
                         continue
                     }
-                    try await store.ingest(data, account: account.id, flags: MessageFlags(seen: true))
+                    try await store.ingest(data, account: account.id, flags: MessageFlags(seen: false))
                     report.imported += 1
                 } catch {
                     report.skipped.append(file.lastPathComponent)

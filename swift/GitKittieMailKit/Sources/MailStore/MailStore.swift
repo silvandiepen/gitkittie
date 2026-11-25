@@ -446,16 +446,20 @@ public actor MailStore {
     public func record(_ location: RemoteLocation, for id: MailMessageID, account: MailAccountID) throws {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         try mapping.record(location, for: id)
+        try index.setDeletedAtProvider(nil, for: id) // at the provider after all (MAIL-075)
         try refreshIndex([id], account: account, mapping: mapping)
         reclassifyIfClassified(id) // a move into or out of Junk is the provider's verdict
     }
 
     /// The message left `location` (moved or expunged at the provider). The local message stays.
-    public func forget(_ location: RemoteLocation, account: MailAccountID) throws {
+    /// When it was its last location, the deletion is noticed; the sync confirms it after a
+    /// pass over every folder has not found it anywhere (MAIL-075).
+    public func forget(_ location: RemoteLocation, account: MailAccountID, now: Date = Date()) throws {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         let id = try mapping.localID(at: location)
         try mapping.forget(location)
         guard let id else { return }
+        try mapping.noticeDeletionsWithoutLocation([id], at: now)
         // Open moves out of that folder cannot happen any more and must not bring it back.
         try supersedeLocationRows(of: id, leaving: location.mailbox, mapping: mapping, now: Date())
         try refreshIndex([id], account: account, mapping: mapping)
@@ -541,6 +545,8 @@ public actor MailStore {
             try index.restore(flags: mapping.allFlags(), locations: mapping.allMemberships(), account: MailAccountID(name))
             // Changes not at the provider yet stay visible after a rebuild (GKM-015).
             try reapplyOverlay(account: MailAccountID(name), mapping: mapping)
+            // And so does what the provider deleted (MAIL-075).
+            try restoreProviderDeletions(account: MailAccountID(name), mapping: mapping)
         }
     }
 

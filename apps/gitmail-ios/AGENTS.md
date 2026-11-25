@@ -2,7 +2,7 @@
 
 The iOS and iPadOS app (GKM-027). The product docs are the Mac app's: read
 `apps/gitmail-macos/AGENTS.md` and its `docs/` (Architecture.md "iOS and iPadOS", Decisions
-MAIL-050..053, MAIL-067..070 and MAIL-072, ThreatModel.md) first. Follow the root `AGENTS.md`.
+MAIL-050..053, MAIL-067..070, MAIL-072 and MAIL-073..080, ThreatModel.md) first. Follow the root `AGENTS.md`.
 
 ## Where things live
 
@@ -11,7 +11,7 @@ MAIL-050..053, MAIL-067..070 and MAIL-072, ThreatModel.md) first. Follow the roo
 - `GitMail/App` — the entry point, the background tasks (`BGAppRefreshTask`,
   `BGProcessingTask`, `beginBackgroundTask`) and `UITestLaunch` (Debug only).
 - `GitMail/Support` — UI-free iOS parts: `MobileSession` (lifecycle, background runs, MAIL-069),
-  `StorageBudget` / `DeviceCache` (MAIL-068; the 30-day history window, MAIL-072), `MailFolderCheck` (Files changed the folder).
+  `StorageBudget` / `DeviceCache` (MAIL-068, MAIL-079: 14 days, attachments when opened, a 250 MB cache; the history window, MAIL-072), `MailFolderCheck` (Files changed the folder).
 - `GitMail/Views` — SwiftUI: `RootView` (three-column split view), `MailboxesView`,
   `MessageListScreen` + `SearchChips`, `Reader/` (the safe reader: `MailReaderWeb`, link sheet),
   `Compose/` (compose, drafts, outbox), `Accounts/`, `Settings/`.
