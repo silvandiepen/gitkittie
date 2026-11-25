@@ -26,6 +26,7 @@ struct SpaceEditorSheet: View {
                     SettingsPanel {
                         FieldRow(label: "Name") {
                             TextField("Garden project", text: $name)
+                                .accessibilityLabel("Name")
                         }
                         SettingsDivider()
                         FieldRow(label: "Colour") { colourPicker }
@@ -151,13 +152,13 @@ private struct RuleEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SettingsPanel {
-                FieldRow(label: "Sender") { TextField("ada@example.com", text: text(\.sender)) }
+                FieldRow(label: "Sender") { TextField("ada@example.com", text: text(\.sender)).accessibilityLabel("Sender") }
                 SettingsDivider()
-                FieldRow(label: "Domain") { TextField("example.com", text: text(\.domain)) }
+                FieldRow(label: "Domain") { TextField("example.com", text: text(\.domain)).accessibilityLabel("Domain") }
                 SettingsDivider()
-                FieldRow(label: "Mailing list") { TextField("news.example.org", text: text(\.list)) }
+                FieldRow(label: "Mailing list") { TextField("news.example.org", text: text(\.list)).accessibilityLabel("Mailing list") }
                 SettingsDivider()
-                FieldRow(label: "Subject words") { TextField("invoice garden", text: text(\.subjectWords)) }
+                FieldRow(label: "Subject words") { TextField("invoice garden", text: text(\.subjectWords)).accessibilityLabel("Subject words") }
                 SettingsDivider()
                 FieldRow(label: "Account") {
                     Picker("Account", selection: $rule.account) {
@@ -196,7 +197,7 @@ private struct RuleEditor: View {
             if let previewError {
                 Text(previewError).font(.caption).foregroundStyle(.orange)
             } else if rule.isEmpty {
-                Text("Fill in at least one condition.").font(.caption).foregroundStyle(.tertiary)
+                Text("Fill in at least one condition.").font(.caption).foregroundStyle(.secondary)
             } else if let preview {
                 Text(preview.matchCount == 1 ? "Matches 1 message" : "Matches \(preview.matchCount) messages")
                     .font(.caption.weight(.medium))

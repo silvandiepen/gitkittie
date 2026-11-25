@@ -55,7 +55,7 @@ struct SendersListView: View {
             }
             Text("“Opened here” counts only what you open in this app on this Mac.")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
@@ -114,7 +114,7 @@ private struct SenderRow: View {
                 Text("\(sender.messages)").font(.callout.monospacedDigit())
                     .accessibilityLabel("\(sender.messages) messages")
                 Text(sender.lastSeen, format: .relative(presentation: .named))
-                    .font(.caption).foregroundStyle(.tertiary)
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 3)
@@ -140,7 +140,7 @@ struct RuleOrderSheet: View {
                             Text(SenderRuleText.title(rule.action)).font(.body.weight(.medium))
                             Text(rule.scope.name).font(.caption).foregroundStyle(.secondary)
                         }
-                        if !rule.isEnabled { Text("Off").font(.caption).foregroundStyle(.tertiary) }
+                        if !rule.isEnabled { Text("Off").font(.caption).foregroundStyle(.secondary) }
                         Spacer()
                         Button("Move Up", systemImage: "chevron.up") { Task { await move(rule, by: -1) } }
                             .labelStyle(.iconOnly)
@@ -162,6 +162,8 @@ struct RuleOrderSheet: View {
         .padding(22)
         .frame(width: 480)
         .background(Theme.window)
+        // Escape closes it, as Done does.
+        .onExitCommand { dismiss() }
     }
 
     private func move(_ rule: SenderRule, by offset: Int) async {

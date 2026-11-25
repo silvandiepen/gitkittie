@@ -104,9 +104,9 @@ private struct PreviewRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 if let protection = item.protection {
-                    Text(SenderRuleText.protection(protection)).font(.caption).foregroundStyle(.tertiary)
+                    Text(SenderRuleText.protection(protection)).font(.caption).foregroundStyle(.secondary)
                 } else if item.isExcluded {
-                    Text("Kept out of the rule by you.").font(.caption).foregroundStyle(.tertiary)
+                    Text("Kept out of the rule by you.").font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

@@ -46,7 +46,7 @@ private struct SenderHeader: View {
                 .foregroundStyle(.secondary).textSelection(.enabled)
             if let organisation = sender.organisation {
                 Text("From \(organisation). Senders are grouped by domain for reference only; one domain doesn’t prove one company.")
-                    .font(.caption).foregroundStyle(.tertiary)
+                    .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -72,7 +72,7 @@ private struct SenderStats: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(opened)
                     Text("Only what you open in this app on this Mac. Mail read elsewhere isn’t counted.")
-                        .font(.caption).foregroundStyle(.tertiary)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
             SettingsDivider()
@@ -80,7 +80,7 @@ private struct SenderStats: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Everything is kept.")
                     Text("Suggested for \(sender.mainCategory.title.lowercased()): \(Self.suggestedRetention(sender.mainCategory)). Nothing is ever deleted on its own.")
-                        .font(.caption).foregroundStyle(.tertiary)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
@@ -193,7 +193,7 @@ private struct RuleRow: View {
             }
             if !rule.excluded.isEmpty {
                 Text(rule.excluded.count == 1 ? "1 message kept out of this rule" : "\(rule.excluded.count) messages kept out of this rule")
-                    .font(.caption).foregroundStyle(.tertiary)
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 14)

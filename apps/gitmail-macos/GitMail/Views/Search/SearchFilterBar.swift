@@ -162,7 +162,8 @@ struct Chip: View {
             .lineLimit(1)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .foregroundStyle(isActive ? Theme.accent : .secondary)
+            // On, the text is primary on the tint: the accent on its own tint is under 4.5:1.
+            .foregroundStyle(isActive ? .primary : .secondary)
             .background(Capsule().fill(isActive ? Theme.accent.opacity(0.2) : Theme.panel))
             .contentShape(Capsule())
             .accessibilityAddTraits(isActive ? .isSelected : [])

@@ -66,7 +66,7 @@ struct CleanupDashboardView: View {
                 if let overview = model.cleanup.overview {
                     Text("Read \(overview.analysedAt.formatted(date: .omitted, time: .shortened))")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -90,7 +90,7 @@ struct CleanupDashboardView: View {
                                 Spacer()
                                 Text("\(count.total.formatted()) · \(count.unread.formatted()) unread")
                                     .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -99,7 +99,7 @@ struct CleanupDashboardView: View {
             if overview.unclassified > 0 {
                 Text("\(CleanupText.messages(overview.unclassified)) not sorted yet; they’re never suggested.")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -108,7 +108,7 @@ struct CleanupDashboardView: View {
         VStack(alignment: .leading, spacing: 6) {
             SectionTitle(title)
             if groups.isEmpty {
-                Text(empty).font(.callout).foregroundStyle(.tertiary)
+                Text(empty).font(.callout).foregroundStyle(.secondary)
             }
             ForEach(groups) { group in
                 CleanupGroupRow(group: group, accountName: accountName(group.id.account),
@@ -150,7 +150,7 @@ private struct CleanupGroupRow: View {
                 if let detail = group.detail ?? accountName {
                     Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
-                Text(CleanupText.stats(group)).font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
+                Text(CleanupText.stats(group)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 6)

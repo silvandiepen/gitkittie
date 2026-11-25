@@ -9,6 +9,7 @@ struct RootView: View {
         case .opening:
             ProgressView()
                 .controlSize(.small)
+                .accessibilityLabel("Opening your mail")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.window)
         case .failed(let reason):
@@ -22,6 +23,7 @@ struct RootView: View {
 /// Sidebar, message list, reader.
 struct MailWindow: View {
     @Environment(AppModel.self) private var model
+    @Environment(MailWindowRequests.self) private var requests
 
     /// Sidebar, middle column, detail; split out of `body` so the alerts below type-check quickly.
     private var columns: some View {
@@ -40,6 +42,8 @@ struct MailWindow: View {
         @Bindable var model = model
         columns
         .toolbar { ComposeToolbar(model: model) }
+        // The sidebar's sheets, opened from it or from the Mailbox menu (GKM-061).
+        .mailWindowSheets(requests, model: model)
         // Undo for actions, the Delete Permanently confirmation and action notices (GKM-015).
         .mailActionChrome(model)
         .onChange(of: model.attention.badgeCount, initial: true) { _, count in DockBadge.show(count) }

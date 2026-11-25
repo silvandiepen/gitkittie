@@ -8,8 +8,10 @@ import SwiftUI
 /// matching messages. Arrow keys move the selection; the selected row is a tinted fill.
 struct MessageListView: View {
     @Environment(AppModel.self) private var model
-    @State private var showsFilters = false
+    @Environment(MailWindowRequests.self) private var requests
     @FocusState private var listFocused: Bool
+    @FocusState private var searchFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var browser: MailBrowser { model.browser }
 
@@ -19,7 +21,7 @@ struct MessageListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if showsFilters || !browser.filters.isEmpty {
+            if requests.showsFilters || !browser.filters.isEmpty {
                 SearchFilterBar()
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -31,15 +33,19 @@ struct MessageListView: View {
         .navigationTitle(title)
         .navigationSubtitle(browser.filters.sender.map { "From \(SenderText.name($0))" } ?? "")
         .searchable(text: searchText, placement: .toolbar, prompt: "Search mail")
+        // Edit ▸ Find ▸ Search Mail (⌥⌘F).
+        .searchFocused($searchFocused)
+        .onChange(of: requests.searchRequests) { searchFocused = true }
         .toolbar { MessageActionToolbar(model: model) }
         .toolbar {
             ToolbarItem {
                 Button {
-                    showsFilters.toggle()
+                    requests.showsFilters.toggle()
                 } label: {
                     Label("Filters", systemImage: browser.filters.isEmpty ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
                 }
                 .help("Filter by account, category, person, date, attachments, folder or unread")
+                .accessibilityValue(browser.filters.isEmpty ? "" : "On")
             }
         }
     }
@@ -71,6 +77,12 @@ struct MessageListView: View {
                                     browser.clearMarks()
                                     Task { await browser.select(row.id) }
                                 }
+                                // VoiceOver: VO-Space opens it; the row menu's actions are its actions.
+                                .accessibilityAction {
+                                    browser.clearMarks()
+                                    Task { await browser.select(row.id) }
+                                }
+                                .rowActions(row, model: model)
                                 .draggable(SpaceLook.dragPayload(browser.threadIDs(actingOn: row.id)))
                                 .contextMenu {
                                     SeeAllMailFromButton(row: row)
@@ -108,7 +120,8 @@ struct MessageListView: View {
                     }
                 }
                 .onChange(of: browser.selectedRowID) { _, id in
-                    if let id { withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(id) } }
+                    // Reduce Motion: the list jumps to the row instead of scrolling to it.
+                    if let id { withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) { proxy.scrollTo(id) } }
                 }
             }
         }
@@ -195,7 +208,7 @@ private struct MessageRow: View {
                         .lineLimit(1)
                 }
                 if showsAccount, let accountName {
-                    Text(accountName).font(.caption).foregroundStyle(.tertiary)
+                    Text(accountName).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
@@ -264,7 +277,7 @@ struct QuietNote: View {
     var body: some View {
         Text(text)
             .font(.callout)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .padding(24)
     }

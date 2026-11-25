@@ -15,14 +15,17 @@ struct LinkSheet: View {
             if !link.link.text.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("SHOWN AS").font(.caption.weight(.semibold)).tracking(0.6).foregroundStyle(.secondary)
+                        .accessibilityAddTraits(.isHeader)
                     Text(link.link.text).font(.callout).lineLimit(3).textSelection(.enabled)
                 }
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("GOES TO").font(.caption.weight(.semibold)).tracking(0.6).foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+                // All of it, however long: the part that gives a link away can be at the end.
                 Text(destination)
                     .font(.callout.monospaced())
-                    .lineLimit(6)
+                    .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
             if !link.warnings.isEmpty {

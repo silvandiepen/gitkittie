@@ -8,6 +8,7 @@ import SwiftUI
 /// offer to make a rule for its sender or list. Nothing here touches the provider.
 struct ClassificationPanel: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let message: ThreadMessage
     @State private var showsReasons = false
     @State private var rule: ClassificationRule?
@@ -21,7 +22,7 @@ struct ClassificationPanel: View {
                         .foregroundStyle(verdict.home == .quarantine ? Color.orange : Color.secondary)
                         .accessibilityHidden(true)
                     Text(VerdictText.summary(verdict)).foregroundStyle(.secondary)
-                    Button(showsReasons ? "Hide" : "Why?") { withAnimation(.easeOut(duration: 0.15)) { showsReasons.toggle() } }
+                    Button(showsReasons ? "Hide" : "Why?") { withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { showsReasons.toggle() } }
                         .buttonStyle(.link)
                         .accessibilityHint("Shows why this message is here")
                     Spacer(minLength: 8)
@@ -53,7 +54,7 @@ struct ClassificationPanel: View {
             }
             if verdict.senderRule != nil { SenderRuleReason(message: verdict.id) }
             Text("Sorted on this Mac by rule set \(verdict.classification.ruleSetVersion). Nothing was changed at your mail provider.")
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
                 .padding(.top, 2)
         }
         .font(.callout)
