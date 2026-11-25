@@ -14,6 +14,9 @@ public final class IMAPSession: MailboxSession {
     public private(set) var capabilities: ProviderCapabilities
     private var rawCapabilities: Set<String>
     private var selected: SelectedFolder?
+    /// The hierarchy delimiter once asked for (it may be none, hence the box).
+    private var delimiter: Delimiter?
+    private struct Delimiter { var value: Character? }
     private var isClosed = false
     /// Fault injection: behave as a server without MOVE, so the COPY + UID EXPUNGE path runs
     /// against a real server that has MOVE.
@@ -127,6 +130,57 @@ public final class IMAPSession: MailboxSession {
         }
         let result = try await wire.run(.delete(Self.mailbox(folder)), logAs: "DELETE \(folder)")
         try Self.check(result, "DELETE \(folder)")
+    }
+
+    public func renameFolder(_ folder: String, to newName: String) async throws {
+        if let selected, selected.id == folder || isInside(selected.id, folder) {
+            // Leave it first; some servers refuse to rename the selected mailbox.
+            _ = try await select("INBOX", refresh: true)
+        }
+        let result = try await wire.run(.rename(from: Self.mailbox(folder), to: Self.mailbox(newName), parameters: [:]),
+                                        logAs: "RENAME \(folder) \(newName)")
+        guard result.isOK else {
+            if case .nonExistent = result.responseText.code { throw MailProviderError.folderNotFound(folder) }
+            throw MailProviderError.commandFailed("RENAME \(folder): \(result.responseText.text)")
+        }
+    }
+
+    public func hierarchyDelimiter() async throws -> Character? {
+        if let delimiter { return delimiter.value }
+        // LIST "" "" asks only for the delimiter (RFC 9051 6.3.9).
+        let result = try await wire.run(.list(nil, reference: MailboxName(ByteBuffer()), .mailbox(ByteBuffer()), []), logAs: "LIST \"\" \"\"")
+        try Self.check(result, "LIST")
+        var found: Character?
+        for case .mailboxData(.list(let info)) in result.untagged { found = info.path.pathSeparator }
+        delimiter = Delimiter(value: found)
+        return found
+    }
+
+    public func folderID(for path: [String]) async throws -> String {
+        let parts = path.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard let first = parts.first, parts.allSatisfy({ !$0.isEmpty }) else {
+            throw MailProviderError.invalidName("a folder needs a name")
+        }
+        let separator = try await hierarchyDelimiter()
+        if let separator, let part = parts.first(where: { $0.contains(separator) }) {
+            throw MailProviderError.invalidName("“\(part)” can’t contain “\(separator)”")
+        }
+        guard parts.count == 1 || separator != nil else {
+            throw MailProviderError.invalidName("this provider has no folders inside folders")
+        }
+        do {
+            var mailbox = try MailboxPath.makeRootMailbox(displayName: first, pathSeparator: separator)
+            for part in parts.dropFirst() { mailbox = try mailbox.makeSubMailbox(displayName: part) }
+            return String(decoding: mailbox.name.bytes, as: UTF8.self)
+        } catch {
+            throw MailProviderError.invalidName("the name is too long")
+        }
+    }
+
+    /// True when `folder` is inside `parent` (its id starts with the parent's and the delimiter).
+    private func isInside(_ folder: String, _ parent: String) -> Bool {
+        guard let separator = delimiter?.value else { return false }
+        return folder.hasPrefix(parent + String(separator))
     }
 
     @discardableResult

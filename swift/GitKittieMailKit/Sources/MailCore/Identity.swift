@@ -68,16 +68,26 @@ public struct MailAccount: Hashable, Codable, Sendable, Identifiable {
     /// "Remove mail deleted elsewhere" (MAIL-075): `true` deletes the local copy of mail the
     /// provider deleted. Missing is off: the copy stays, shown as deleted at the provider.
     public var removesMailDeletedElsewhere: Bool?
+    /// Which folders sync and show, their order, and the special folders chosen by hand
+    /// (GKM-066, MAIL-093). Missing is the provider's folders as they are.
+    public var mailboxes: MailboxSettings?
 
     public init(id: MailAccountID = MailAccountID(), displayName: String, address: String,
                 connection: MailConnectionSettings? = nil, senderName: String? = nil,
-                removesMailDeletedElsewhere: Bool? = nil) {
+                removesMailDeletedElsewhere: Bool? = nil, mailboxes: MailboxSettings? = nil) {
         self.id = id
         self.displayName = displayName
         self.address = address
         self.connection = connection
         self.senderName = senderName
         self.removesMailDeletedElsewhere = removesMailDeletedElsewhere
+        self.mailboxes = mailboxes
+    }
+
+    /// The account's folder choices; empty when none were made.
+    public var mailboxSettings: MailboxSettings {
+        get { mailboxes ?? MailboxSettings() }
+        set { mailboxes = newValue.isEmpty ? nil : newValue }
     }
 
     /// The address mail from this account is sent from: "Your name" and the address. The

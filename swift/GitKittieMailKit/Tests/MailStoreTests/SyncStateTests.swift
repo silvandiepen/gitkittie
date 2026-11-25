@@ -104,6 +104,71 @@ final class SyncStateTests: XCTestCase {
         XCTAssertEqual(folders, [])
     }
 
+    // MARK: - Mailbox settings (GKM-066)
+
+    func testChosenSpecialFoldersApplyAtOnceAndTheDetectedRolesStay() async throws {
+        let store = try await MailStore.open(locations)
+        try await store.replaceSyncedFolders([
+            SyncedFolder(name: "INBOX", path: ["INBOX"], role: "inbox"),
+            SyncedFolder(name: "Sent", path: ["Sent"], role: "sent"),
+            SyncedFolder(name: "Outgoing", path: ["Outgoing"]),
+            SyncedFolder(name: "All Mail", path: ["All Mail"], role: "all"),
+        ], account: account)
+        var settings = MailboxSettings()
+        settings.setSpecialFolder("Outgoing", for: "sent")
+        settings.setSpecialFolder("All Mail", for: "trash") // a fixed role is never moved
+        let folders = try await store.applyMailboxSettings(settings, account: account)
+        XCTAssertEqual(folders.map(\.role), ["inbox", nil, "sent", "all"])
+        XCTAssertEqual(folders.map(\.detectedRole), ["inbox", "sent", nil, "all"])
+
+        let back = try await store.applyMailboxSettings(MailboxSettings(), account: account)
+        XCTAssertEqual(back.map(\.role), ["inbox", "sent", nil, "all"], "back to what the provider marked")
+    }
+
+    func testAVersionFiveMappingKeepsItsRolesAsDetected() async throws {
+        let first = try await MailStore.open(locations)
+        try await first.replaceSyncedFolders([
+            SyncedFolder(name: "INBOX", path: ["INBOX"], role: "inbox"),
+            SyncedFolder(name: "Sent Messages", path: ["Sent Messages"], role: "sent"),
+        ], account: account)
+        try writeMapping("ALTER TABLE folder_state DROP COLUMN detected_role; PRAGMA user_version = 5;")
+        let store = try await MailStore.open(locations)
+        let folders = try await store.syncedFolders(account: account)
+        XCTAssertEqual(folders.map(\.role), ["inbox", "sent"])
+        XCTAssertEqual(folders.map(\.detectedRole), ["inbox", "sent"])
+    }
+
+    func testARenamedFolderKeepsItsMailCursorAndSubfolders() async throws {
+        let store = try await MailStore.open(locations)
+        try await store.replaceSyncedFolders([
+            SyncedFolder(name: "INBOX", path: ["INBOX"], role: "inbox"),
+            SyncedFolder(name: "Projects", path: ["Projects"]),
+            SyncedFolder(name: "Projects/Old", path: ["Projects", "Old"]),
+            SyncedFolder(name: "Projectsish", path: ["Projectsish"]),
+        ], account: account)
+        try await store.saveCursor(folder: "Projects", uidValidity: 7, highestUID: 4, historyComplete: true, serverCount: 1, account: account)
+        let a = try await store.ingest(SyntheticMail.plain(subject: "a", body: "a"), account: account, remote: location("Projects", 4))
+        let b = try await store.ingest(SyntheticMail.plain(subject: "b", body: "b"), account: account, remote: location("Projects/Old", 1))
+        let c = try await store.ingest(SyntheticMail.plain(subject: "c", body: "c"), account: account, remote: location("Projectsish", 1))
+
+        try await store.renameSyncedFolder("Projects", to: "Work", delimiter: "/", account: account)
+
+        let names = try await store.syncedFolders(account: account).map(\.name)
+        XCTAssertEqual(names, ["INBOX", "Work", "Work/Old", "Projectsish"], "a folder whose name only starts the same stays")
+        let work = try await store.knownUIDs(mailbox: "Work", uidValidity: 7, account: account)
+        XCTAssertEqual(work, [4: a.id], "the mail in it is known under the new name: nothing downloads again")
+        let inside = try await store.knownUIDs(mailbox: "Work/Old", uidValidity: 7, account: account)
+        XCTAssertEqual(inside, [1: b.id])
+        let cursor = try await store.syncedFolders(account: account).first { $0.name == "Work" }
+        XCTAssertEqual(cursor?.highestUID, 4)
+        let listed = try await store.summaries(account: account, mailbox: "Work").map(\.id)
+        XCTAssertEqual(listed, [a.id], "the folder view follows")
+        let old = try await store.summaries(account: account, mailbox: "Projects")
+        XCTAssertEqual(old, [])
+        let untouched = try await store.knownUIDs(mailbox: "Projectsish", uidValidity: 7, account: account)
+        XCTAssertEqual(untouched, [1: c.id])
+    }
+
     private func writeMapping(_ sql: String) throws {
         let url = locations.deviceFolder.appendingPathComponent("state/acct-1/sync.sqlite")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
