@@ -152,8 +152,8 @@ extension MailIndex {
         let c = verdict.classification
         var next: Int64?
         if arrival {
-            let statement = try database.prepare("SELECT COALESCE(MAX(arrival), 0) + 1 FROM message_classes")
-            next = try statement.step() ? Int64(statement.int(0)) : 1
+            let statement = try database.prepare(Self.latestArrivalSQL)
+            next = try statement.step() ? Int64(statement.int(0)) + 1 : 1
         }
         try database.prepare("""
             INSERT INTO message_classes (local_id, account_id, home, purpose, risk, urgency, verdict, rule_version, corrected,
@@ -309,8 +309,13 @@ extension MailIndex {
         }
     }
 
+    /// The newest arrival number, from the partial arrival index. Without `arrival IS NOT NULL`
+    /// SQLite cannot use that index and reads every verdict: once for every arriving message,
+    /// which made a large first sync slower with every message stored (GKM-040).
+    static let latestArrivalSQL = "SELECT COALESCE(MAX(arrival), 0) FROM message_classes WHERE arrival IS NOT NULL"
+
     func latestArrival() throws -> Int64 {
-        let statement = try database.prepare("SELECT COALESCE(MAX(arrival), 0) FROM message_classes")
+        let statement = try database.prepare(Self.latestArrivalSQL)
         return try statement.step() ? Int64(statement.int(0)) : 0
     }
 
