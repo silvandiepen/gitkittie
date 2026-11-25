@@ -28,9 +28,13 @@ struct MessageCard: View {
                 body(content)
                     .padding(.top, 18)
                 if !content.attachments.isEmpty {
-                    AttachmentList(attachments: content.attachments) { attachment in
+                    AttachmentList(attachments: content.attachments, message: message.id) { attachment in
                         Task {
-                            do { previewURL = try await browser.previewFile(for: attachment) } catch { browser.actionError = String(describing: error) }
+                            do {
+                                previewURL = try await browser.previewFile(for: attachment, of: message.id)
+                            } catch {
+                                browser.actionError = String(describing: error)
+                            }
                         }
                     }
                     .padding(.top, 22)
@@ -213,7 +217,9 @@ struct Notice: View {
 /// Attachments with their cleaned names, type and size. Nothing is opened or previewed until
 /// the user clicks one; then Quick Look shows a private, quarantined copy.
 struct AttachmentList: View {
+    @Environment(AppModel.self) private var model
     let attachments: [AttachmentReference]
+    let message: MailMessageID
     let open: (AttachmentReference) -> Void
 
     var body: some View {
@@ -223,11 +229,17 @@ struct AttachmentList: View {
                 .tracking(0.6)
                 .foregroundStyle(.secondary)
             ForEach(attachments, id: \.self) { attachment in
+                // A part still at the provider (GKM-036) says so; opening fetches it once.
+                let isDownloading = model.browser.downloading.contains(MailBrowser.downloadKey(attachment, of: message))
                 Button { open(attachment) } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "doc").foregroundStyle(.secondary)
+                        if isDownloading {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: attachment.isDownloaded ? "doc" : "icloud.and.arrow.down").foregroundStyle(.secondary)
+                        }
                         Text(attachment.fileName).lineLimit(1).truncationMode(.middle)
-                        Text("\(attachment.mediaType), \(MessageDate.byteCount(attachment.size))")
+                        Text(detail(attachment, downloading: isDownloading))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -235,10 +247,17 @@ struct AttachmentList: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Preview with Quick Look")
-                .accessibilityLabel("\(attachment.fileName), \(MessageDate.byteCount(attachment.size))")
-                .accessibilityHint("Previews the attachment")
+                .disabled(isDownloading)
+                .help(attachment.isDownloaded ? "Preview with Quick Look" : "Download from your provider and preview")
+                .accessibilityLabel("\(attachment.fileName), \(detail(attachment, downloading: isDownloading))")
+                .accessibilityHint(attachment.isDownloaded ? "Previews the attachment" : "Downloads the attachment, then previews it")
             }
         }
+    }
+
+    private func detail(_ attachment: AttachmentReference, downloading: Bool) -> String {
+        if downloading { return "Downloading…" }
+        let size = MessageDate.byteCount(attachment.size)
+        return attachment.isDownloaded ? "\(attachment.mediaType), \(size)" : "\(attachment.mediaType), about \(size), not downloaded"
     }
 }

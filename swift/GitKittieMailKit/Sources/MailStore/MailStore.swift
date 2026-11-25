@@ -25,6 +25,10 @@ public struct StoredMessage: Sendable {
     public var htmlBody: String?
     /// What the parser found malformed in the original, for the reader to say so.
     public var parseProblems: [String]
+    /// A partial message (GKM-036, MAIL-062): some attachments are still only at the provider.
+    /// `emlURL` is then the skeleton in the device folder, never an original: it is not to be
+    /// shown, saved or sent as one. ``MailStore/originalData(of:)`` refuses it.
+    public var isPartial = false
 
     public var hasHTMLBody: Bool { htmlBody != nil }
 
@@ -115,6 +119,9 @@ public actor MailStore {
         var parsed: ParsedMessage
         var remote: RemoteLocation?
         var receivedAt: Date
+        /// The id of the partial message these bytes complete (GKM-036): written under that id,
+        /// and the partial copy goes once the original is in place.
+        var completes: MailMessageID? = nil
     }
 
     /// Writes new messages as one unit of durability (GKM-035): one journal file lists them all;
@@ -126,18 +133,21 @@ public actor MailStore {
     func write(_ messages: [NewMessage], account: MailAccountID) throws -> [MailMessageID] {
         guard !messages.isEmpty else { return [] }
         let accountName = try SafePath.component(account.rawValue)
-        var planned: [(id: MailMessageID, derived: Derived, directory: URL, remote: RemoteLocation?, eml: Data)] = []
+        var planned: [(id: MailMessageID, derived: Derived, directory: URL, remote: RemoteLocation?, eml: Data, completes: Bool)] = []
         for message in messages {
-            let id = MailMessageID()
+            let id = message.completes ?? MailMessageID()
             // Whole seconds: the received date is stored as ISO 8601 and must read back equal.
             let received = Date(timeIntervalSince1970: message.receivedAt.timeIntervalSince1970.rounded(.down))
             let derived = try derive(message.eml, parsed: message.parsed, id: id, account: account, received: received)
-            planned.append((id, derived, try messageDirectory(account: accountName, date: derived.front.sortDate), message.remote, message.eml))
+            planned.append((id, derived, try messageDirectory(account: accountName, date: derived.front.sortDate), message.remote, message.eml,
+                            message.completes != nil))
         }
 
         let journalURL = locations.journalFolder.appendingPathComponent("\(planned.count == 1 ? planned[0].id.rawValue : UUID().uuidString.lowercased()).json")
         let entries = planned.map { JournalEntry(id: $0.id, account: account, directory: relativePath(of: $0.directory),
                                                  remote: $0.remote, received: $0.derived.front.received) }
+        // Hand-off: a completed original wins over its partial copy from the moment its `.eml`
+        // is in place (recovery and rebuild both drop a partial copy that has an original).
         try writer.write(JSONCoding.encoder.encode(entries), to: journalURL)
 
         var directories = Set<URL>()
@@ -175,13 +185,21 @@ public actor MailStore {
         try mapping.database.transaction {
             for message in planned { if let remote = message.remote { try mapping.record(remote, for: message.id) } }
         }
+        for message in planned where message.completes { try removePartialFiles(message.id, account: accountName) }
         try FileManager.default.removeItem(at: journalURL)
         // Read-only classification of the now durable messages (GKM-017): index only, one
         // commit for the batch. A failure never undoes a stored message: it is recorded, and
-        // the message waits, unclassified (Focused), for `classifyPending`.
+        // the message waits, unclassified (Focused), for `classifyPending`. A completed partial
+        // message was classified when it arrived; it is classified again, as no new arrival.
         do {
             try index.batch {
-                for message in planned { classifyAfterIngest(message.id, account: account, parsed: message.derived.message) }
+                for message in planned {
+                    if message.completes {
+                        reclassifyIfClassified(message.id)
+                    } else {
+                        classifyAfterIngest(message.id, account: account, parsed: message.derived.message)
+                    }
+                }
             }
         } catch {
             classification.lastError = String(describing: error)
@@ -313,13 +331,13 @@ public actor MailStore {
     }
 
     public func message(_ id: MailMessageID) throws -> StoredMessage {
-        let emlURL = try url(of: id)
+        let (emlURL, isPartial) = try fileLocation(of: id)
         let markdownURL = emlURL.deletingPathExtension().appendingPathExtension("md")
         let markdown = try String(contentsOf: markdownURL, encoding: .utf8)
         let parsed = try parser.parse(Data(contentsOf: emlURL))
         return StoredMessage(front: try DerivedMarkdown.frontMatter(of: markdown), markdown: markdown, emlURL: emlURL,
                              markdownURL: markdownURL, textBody: parsed.textBody, htmlBody: parsed.htmlBody,
-                             parseProblems: parsed.problems)
+                             parseProblems: parsed.problems, isPartial: isPartial)
     }
 
     /// Several messages' summaries by id, in the order given; ids not stored are left out.
@@ -342,6 +360,8 @@ public actor MailStore {
     /// The original bytes, checked against the hash recorded when they were stored.
     public func originalData(of id: MailMessageID) throws -> Data {
         let stored = try message(id)
+        // A partial message has no original yet; its skeleton must never pass for one (MAIL-062).
+        guard !stored.isPartial else { throw MailStoreError.partialMessage(id.rawValue) }
         let data = try Data(contentsOf: stored.emlURL)
         guard Hashing.sha256Hex(data) == stored.front.emlSha256 else {
             throw MailStoreError.integrityMismatch(path: relativePath(of: stored.emlURL))
@@ -349,43 +369,65 @@ public actor MailStore {
         return data
     }
 
-    /// An attachment's bytes, checked against the hash that names them.
+    /// An attachment's bytes, checked against the hash that names them. A part of a partial
+    /// message that is still at the provider throws ``MailStoreError/attachmentNotDownloaded(_:)``:
+    /// fetch it first (MailSync's `OnDemandFetcher`).
     public func attachmentData(_ reference: AttachmentReference) throws -> Data {
-        guard SafePath.isSHA256Hex(reference.blob) else { throw MailStoreError.unsafePathComponent(reference.blob) }
-        let url = locations.blobsFolder.appendingPathComponent(reference.blob)
-        let data = try Data(contentsOf: url)
-        guard Hashing.sha256Hex(data) == reference.blob else { throw MailStoreError.integrityMismatch(path: relativePath(of: url)) }
-        return data
+        guard reference.isDownloaded else { throw MailStoreError.attachmentNotDownloaded(reference.fileName) }
+        return try blobData(reference.blob)
     }
 
-    /// A blob's bytes by its hash, checked.
+    /// A blob's bytes by its hash, checked: from the mail folder, or from the device cache, where
+    /// the parts of partial messages are kept (GKM-036).
     public func blobData(_ blob: String) throws -> Data {
         guard SafePath.isSHA256Hex(blob) else { throw MailStoreError.unsafePathComponent(blob) }
-        let url = locations.blobsFolder.appendingPathComponent(blob)
+        var url = locations.blobsFolder.appendingPathComponent(blob)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            let cached = cacheBlobURL(blob)
+            if FileManager.default.fileExists(atPath: cached.path) {
+                url = cached
+                markUsed(cached)
+            }
+        }
         let data = try Data(contentsOf: url)
-        guard Hashing.sha256Hex(data) == blob else { throw MailStoreError.integrityMismatch(path: relativePath(of: url)) }
+        guard Hashing.sha256Hex(data) == blob else { throw MailStoreError.integrityMismatch(path: blob) }
         return data
     }
 
     /// Checks every message's original and attachments against their recorded hashes; returns
     /// the ids that fail. Never repairs: an original that changed is the user's to look at.
+    /// A partial message has no original to check and is never counted as checked (MAIL-062):
+    /// only the parts it holds are, and ``integrityReport()`` lists it as partial.
     public func verifyIntegrity() throws -> [MailMessageID] {
-        var failed: [MailMessageID] = []
+        try integrityReport().failed
+    }
+
+    /// The integrity check, with the partial messages it could not check as originals.
+    public func integrityReport() throws -> IntegrityReport {
+        var report = IntegrityReport()
         var offset = 0
         while true {
             let page = try index.summaries(account: nil, limit: 500, offset: offset)
             if page.isEmpty { break }
             for summary in page {
                 do {
-                    _ = try originalData(of: summary.id)
-                    for attachment in try message(summary.id).front.attachments { _ = try attachmentData(attachment) }
+                    let stored = try message(summary.id)
+                    if stored.isPartial {
+                        report.partial.append(summary.id)
+                    } else {
+                        _ = try originalData(of: summary.id)
+                        report.checked += 1
+                    }
+                    for attachment in stored.front.attachments where attachment.isDownloaded { _ = try attachmentData(attachment) }
                 } catch MailStoreError.integrityMismatch {
-                    failed.append(summary.id)
+                    report.failed.append(summary.id)
                 }
             }
             offset += page.count
         }
-        return failed.sorted()
+        report.failed.sort()
+        report.partial.sort()
+        return report
     }
 
     // MARK: - Identity and reconciliation
@@ -451,7 +493,11 @@ public actor MailStore {
         let fileManager = FileManager.default
         try removePartials(in: locations.blobsFolder)
         try index.replaceAll { insert in
-            guard fileManager.fileExists(atPath: locations.accountsFolder.path) else { return }
+            var completed = Set<MailMessageID>()
+            guard fileManager.fileExists(atPath: locations.accountsFolder.path) else {
+                try rebuildPartials(insert, skipping: completed)
+                return
+            }
             for accountFolder in try sortedContents(of: locations.accountsFolder) {
                 guard let accountName = try? SafePath.component(accountFolder.lastPathComponent) else { continue }
                 let messages = accountFolder.appendingPathComponent("messages", isDirectory: true)
@@ -469,10 +515,14 @@ public actor MailStore {
                             guard let id = MailMessageID(file.deletingPathExtension().lastPathComponent),
                                   id.rawValue == file.deletingPathExtension().lastPathComponent else { continue }
                             try insert(complete(id: id, account: MailAccountID(accountName), emlURL: file, fallbackReceived: nil))
+                            completed.insert(id)
                         }
                     }
                 }
             }
+            // Partial messages live in the device folder (GKM-036); one whose original made it
+            // into the mail folder is finished and its partial copy goes.
+            try rebuildPartials(insert, skipping: completed)
         }
         try restoreDeviceState()
         // Space membership is folder content (`Mail/spaces/`); its copy in the index is rebuilt too.
@@ -515,6 +565,10 @@ public actor MailStore {
                 continue
             }
             for entry in entries {
+                if entry.partial == true {
+                    if !(try recoverPartialWrite(entry)) { everyEntryReadable = false }
+                    continue
+                }
                 guard let accountName = try? SafePath.component(entry.account.rawValue),
                       let directory = safeDirectory(entry.directory) else {
                     everyEntryReadable = false
@@ -529,6 +583,8 @@ public actor MailStore {
                         try mapping(for: accountName).record(remote, for: entry.id)
                         try index.setMailboxes(Set(mapping(for: accountName).locations(of: entry.id).map(\.mailbox)), for: entry.id, account: entry.account)
                     }
+                    // The original is in place: a partial copy it completed has had its day.
+                    try removePartialFiles(entry.id, account: accountName)
                 } else if fileManager.fileExists(atPath: markdownURL.path) {
                     try fileManager.removeItem(at: markdownURL)
                 }
@@ -562,14 +618,14 @@ public actor MailStore {
 
     // MARK: - Helpers
 
-    private struct Derived {
+    struct Derived {
         var message: ParsedMessage
         var front: MessageFrontMatter
         var markdown: String
         var blobs: [(hash: String, data: Data)]
     }
 
-    private func derive(_ eml: Data, parsed message: ParsedMessage, id: MailMessageID, account: MailAccountID, received: Date) throws -> Derived {
+    func derive(_ eml: Data, parsed message: ParsedMessage, id: MailMessageID, account: MailAccountID, received: Date) throws -> Derived {
         var blobs: [(hash: String, data: Data)] = []
         let attachments = message.attachments.map { attachment -> AttachmentReference in
             let hash = Hashing.sha256Hex(attachment.data)
@@ -614,12 +670,20 @@ public actor MailStore {
         return calendar.date(from: DateComponents(year: year, month: month, day: 1))
     }
 
+    /// The message's file: its original in the mail folder, or a partial message's skeleton in
+    /// the device folder (GKM-036). Readers that need the original use ``originalData(of:)``.
     func url(of id: MailMessageID) throws -> URL {
-        guard let path = try index.path(of: id), let url = safeFile(path) else { throw MailStoreError.messageNotFound(id.rawValue) }
-        return url
+        try fileLocation(of: id).url
     }
 
-    private func relativePath(of url: URL) -> String {
+    func fileLocation(of id: MailMessageID) throws -> (url: URL, isPartial: Bool) {
+        guard let location = try index.location(of: id),
+              let url = location.isPartial ? safeDeviceFile(location.path) : safeFile(location.path)
+        else { throw MailStoreError.messageNotFound(id.rawValue) }
+        return (url, location.isPartial)
+    }
+
+    func relativePath(of url: URL) -> String {
         let root = locations.mailFolder.standardizedFileURL.pathComponents
         return url.standardizedFileURL.pathComponents.dropFirst(root.count).joined(separator: "/")
     }
@@ -634,12 +698,20 @@ public actor MailStore {
 
     private func safeDirectory(_ relative: String) -> URL? { safeFile(relative) }
 
+    /// A relative path from the index, as a URL inside the device folder's `partial/` (GKM-036).
+    func safeDeviceFile(_ relative: String) -> URL? {
+        let components = relative.split(separator: "/").map(String.init)
+        guard components.first == "partial", !components.contains(where: { $0 == ".." || $0 == "." || $0.isEmpty }) else { return nil }
+        let url = components.reduce(locations.deviceFolder) { $0.appendingPathComponent($1) }
+        return SafePath.isContained(url, in: locations.partialFolder) ? url : nil
+    }
+
     func sortedContents(of folder: URL) throws -> [URL] {
         try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
-    private func removePartials(in folder: URL, prefix: String = ".") throws {
+    func removePartials(in folder: URL, prefix: String = ".") throws {
         guard FileManager.default.fileExists(atPath: folder.path) else { return }
         for file in try FileManager.default.contentsOfDirectory(atPath: folder.path)
         where file.hasPrefix(prefix) && file.hasSuffix(AtomicWriter.partialSuffix) {
@@ -686,13 +758,15 @@ private struct Layout: Codable {
 }
 
 /// A write in progress, in `<device folder>/state/journal/<id>.json`.
-private struct JournalEntry: Codable {
+struct JournalEntry: Codable {
     var id: MailMessageID
     var account: MailAccountID
-    /// The message's folder, relative to the mail folder.
+    /// The message's folder, relative to the mail folder (for a partial message: unused).
     var directory: String
     var remote: RemoteLocation?
     var received: Date
+    /// A partial message's write (GKM-036): its files are in the device folder.
+    var partial: Bool? = nil
 }
 
 enum JSONCoding {

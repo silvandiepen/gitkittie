@@ -169,6 +169,7 @@ public actor SyncCoordinator {
         progress.folders = try await store.syncedFolders(account: account)
         let flagsDue = lastFlagCheck.map { ContinuousClock.now - $0 >= options.flagCheckInterval } ?? true
         try await syncFolders(ordered.map(\.id), session, includeHistory: true, checkFlags: !continuingHistory || flagsDue)
+        try await completePinned(session)
         progress.lastCompletedPass = Date()
     }
 
@@ -207,16 +208,19 @@ public actor SyncCoordinator {
         }
 
         if includeHistory {
+            // A slice ends at a count or a time (GKM-038), whichever comes first; then the next
+            // pass lists the folders again and imports new mail before more history.
             var allowance = options.historyPerPass
+            let sliceEnds = ContinuousClock.now + options.historySlice
             historyPending = false
             progress.historyPausedForBudget = false
             for entry in plans where !entry.plan.history.isEmpty {
-                guard allowance > 0 else { historyPending = true; break }
+                guard allowance > 0, ContinuousClock.now < sliceEnds else { historyPending = true; break }
                 let slice = Array(entry.plan.history.prefix(allowance))
                 progress.activity = .importing(folder: displayName(entry.folder))
                 let result = try await importMessages(slice, folder: entry.folder, uidValidity: entry.uidValidity,
-                                                      session, countsAgainstBudget: true)
-                allowance -= slice.count
+                                                      session, countsAgainstBudget: true, until: sliceEnds)
+                allowance -= result.stored + result.tooLarge
                 missingByFolder[entry.folder] = entry.plan.history.count - result.stored - result.tooLarge
                 updateRemaining()
                 if result.stored + result.tooLarge == entry.plan.history.count {
@@ -277,50 +281,192 @@ public actor SyncCoordinator {
         var tooLarge = 0
     }
 
-    /// Downloads and stores messages, in batches, in the order given (newest first).
-    private func importMessages(_ uids: [UInt32], folder: String, uidValidity: UInt32,
-                                _ session: any MailboxSession, countsAgainstBudget: Bool) async throws -> ImportResult {
+    /// Downloads and stores messages, in batches, in the order given (newest first). With a
+    /// deadline (`until`) it stops between batches once the deadline passes.
+    ///
+    /// Fetching and storing overlap (GKM-038): while one batch is written by the store (an
+    /// actor of its own), the next is already being downloaded. At most one batch is being
+    /// stored at a time and the batches are stored in order; whatever stops the import, the
+    /// batch being stored is finished before this returns or throws, so a cursor saved after it
+    /// covers only what is durable.
+    ///
+    /// Messages larger than ``SyncOptions/onDemandThreshold`` are looked at part by part:
+    /// their large attachments stay at the provider (GKM-036).
+    private func importMessages(_ uids: [UInt32], folder: String, uidValidity: UInt32, _ session: any MailboxSession,
+                                countsAgainstBudget: Bool, until deadline: ContinuousClock.Instant? = nil) async throws -> ImportResult {
         var result = ImportResult()
-        for chunk in SyncPlanner.chunks(uids, of: options.summaryBatch) {
-            try Task.checkCancellation()
-            let ids = chunk.map { RemoteMessageID(folder: folder, uidValidity: uidValidity, uid: $0) }
-            // Summaries give sizes for batching; keep the order asked for.
-            let byUID = Dictionary(try await session.summaries(of: ids).map { ($0.id.uid, $0) }, uniquingKeysWith: { a, _ in a })
-            let ordered = chunk.compactMap { byUID[$0] }
-            let (batches, tooLarge) = SyncPlanner.batches(ordered, maxMessages: options.bodyBatchMessages,
-                                                         maxBytes: options.bodyBatchBytes, maxMessageSize: session.maximumMessageSize)
-            if !tooLarge.isEmpty {
-                log.warning("sync", "\(folder): \(tooLarge.count) messages are too large to download and stay at the provider")
-                tooLargeByFolder[folder, default: []].formUnion(tooLarge.map(\.id.uid))
-                progress.skippedTooLarge = tooLargeByFolder.values.reduce(0) { $0 + $1.count }
-                result.tooLarge += tooLarge.count
-            }
-            for batch in batches {
+        var storing: StoringBatch?
+        do {
+            chunks: for chunk in SyncPlanner.chunks(uids, of: options.summaryBatch) {
                 try Task.checkCancellation()
-                if countsAgainstBudget {
+                if let deadline, ContinuousClock.now >= deadline { break }
+                let ids = chunk.map { RemoteMessageID(folder: folder, uidValidity: uidValidity, uid: $0) }
+                // Summaries give sizes for batching; keep the order asked for.
+                let byUID = Dictionary(try await session.summaries(of: ids).map { ($0.id.uid, $0) }, uniquingKeysWith: { a, _ in a })
+                let ordered = chunk.compactMap { byUID[$0] }
+                let threshold = options.onDemandThreshold
+                let large = threshold.map { limit in ordered.filter { ($0.size ?? 0) > limit } } ?? []
+                let whole = large.isEmpty ? ordered : ordered.filter { ($0.size ?? 0) <= threshold! }
+                let (batches, tooLarge) = SyncPlanner.batches(whole, maxMessages: options.bodyBatchMessages,
+                                                             maxBytes: options.bodyBatchBytes, maxMessageSize: session.maximumMessageSize)
+                reportTooLarge(tooLarge, folder: folder, into: &result)
+                for batch in batches {
+                    try Task.checkCancellation()
+                    if let deadline, ContinuousClock.now >= deadline { break chunks }
                     let next = Int64(batch.reduce(0) { $0 + ($1.size ?? 0) })
-                    let imported = try await store.importedBytes(account: account)
-                    guard SyncPlanner.budgetAllows(alreadyImported: imported, next: next, budget: options.historyBudgetBytes) else {
+                    if countsAgainstBudget, options.historyBudgetBytes != nil {
+                        // The budget is checked against what is actually stored: the batch in the
+                        // store is finished first (no overlap while a budget applies), because a
+                        // server's RFC822.SIZE is only an estimate of the bytes it sends.
+                        try await settle(&storing, into: &result, folder: folder)
+                        let imported = try await store.importedBytes(account: account)
+                        guard SyncPlanner.budgetAllows(alreadyImported: imported, next: next, budget: options.historyBudgetBytes) else {
+                            log.info("sync", "history paused at the storage budget")
+                            progress.historyPausedForBudget = true
+                            return result
+                        }
+                    }
+                    let fetched = try await session.fetchMessages(batch.map(\.id))
+                    let byID = Dictionary(fetched.map { ($0.summary.id, $0) }, uniquingKeysWith: { a, _ in a })
+                    // Stored as one batch: one flush per directory and one commit per database for
+                    // the lot, instead of several per message (GKM-035).
+                    let messages = batch.compactMap { byID[$0.id] }.map(Self.synced) // missing: expunged meanwhile
+                    try await settle(&storing, into: &result, folder: folder)
+                    let store = self.store
+                    let account = self.account
+                    storing = StoringBatch(task: Task { try await store.storeSynced(messages, account: account) })
+                    if !options.pipelineStores { try await settle(&storing, into: &result, folder: folder) }
+                }
+                if !large.isEmpty {
+                    try await settle(&storing, into: &result, folder: folder)
+                    let paused = try await importPartially(large, folder: folder, session, countsAgainstBudget: countsAgainstBudget,
+                                                           into: &result)
+                    if paused {
                         log.info("sync", "history paused at the storage budget")
                         progress.historyPausedForBudget = true
                         return result
                     }
                 }
-                let fetched = try await session.fetchMessages(batch.map(\.id))
-                let byID = Dictionary(fetched.map { ($0.summary.id, $0) }, uniquingKeysWith: { a, _ in a })
-                // Stored as one batch: one flush per directory and one commit per database for
-                // the lot, instead of several per message (GKM-035).
-                let messages = batch.compactMap { byID[$0.id] } // missing: expunged meanwhile
-                let outcomes = try await store.storeSynced(messages.map(Self.synced), account: account)
-                for outcome in outcomes {
-                    if case .matched(let id) = outcome { log.debug("sync", "\(folder): a fetched message matched stored \(id)") }
-                }
-                result.stored += outcomes.count
-                progress.imported += outcomes.count
-                progress.remaining = max(0, progress.remaining - outcomes.count)
             }
+            try await settle(&storing, into: &result, folder: folder)
+        } catch {
+            // Never leave a batch unfinished or uncounted: the store finishes it (durable or not),
+            // and what it stored is counted before the error goes up.
+            try? await settle(&storing, into: &result, folder: folder)
+            throw error
         }
         return result
+    }
+
+    /// A fetched batch the store is writing while the next one downloads.
+    private struct StoringBatch {
+        var task: Task<[SyncedOutcome], any Error>
+    }
+
+    /// Waits for the batch being stored, if any, and counts it.
+    private func settle(_ storing: inout StoringBatch?, into result: inout ImportResult, folder: String) async throws {
+        guard let batch = storing else { return }
+        storing = nil
+        let outcomes = try await batch.task.value
+        for outcome in outcomes {
+            if case .matched(let id) = outcome { log.debug("sync", "\(folder): a fetched message matched stored \(id)") }
+        }
+        result.stored += outcomes.count
+        progress.imported += outcomes.count
+        progress.remaining = max(0, progress.remaining - outcomes.count)
+    }
+
+    private func reportTooLarge(_ tooLarge: [RemoteMessageSummary], folder: String, into result: inout ImportResult) {
+        guard !tooLarge.isEmpty else { return }
+        log.warning("sync", "\(folder): \(tooLarge.count) messages are too large to download and stay at the provider")
+        tooLargeByFolder[folder, default: []].formUnion(tooLarge.map(\.id.uid))
+        progress.skippedTooLarge = tooLargeByFolder.values.reduce(0) { $0 + $1.count }
+        result.tooLarge += tooLarge.count
+    }
+
+    /// Stores large messages without their large attachments (GKM-036): their structure first,
+    /// then the header, every MIME header and the parts at or below the threshold; the rest is
+    /// fetched when opened or pinned. A message whose structure a partial copy cannot be made
+    /// of, or that may be a message already stored whole, is fetched whole.
+    /// Returns true when the history budget stopped it (only when `countsAgainstBudget`): each
+    /// message is weighed by what storing it adds, against what is already stored.
+    private func importPartially(_ summaries: [RemoteMessageSummary], folder: String, _ session: any MailboxSession,
+                                 countsAgainstBudget: Bool, into result: inout ImportResult) async throws -> Bool {
+        let budget = countsAgainstBudget ? options.historyBudgetBytes : nil
+        func allows(_ next: Int) async throws -> Bool {
+            guard let budget else { return true }
+            let imported = try await store.importedBytes(account: account)
+            return SyncPlanner.budgetAllows(alreadyImported: imported, next: Int64(next), budget: budget)
+        }
+        let threshold = options.onDemandThreshold ?? 0
+        let structures = try await session.bodyStructures(of: summaries.map(\.id))
+        var whole: [RemoteMessageSummary] = []
+        var stored = 0
+        for summary in summaries {
+            try Task.checkCancellation()
+            guard let remote = structures[summary.id] else { continue } // expunged meanwhile
+            let structure = Self.part(remote)
+            guard let sections = PartialPlan.sections(of: structure, threshold: threshold) else {
+                whole.append(summary)
+                continue
+            }
+            let fetched = try await session.fetchSections(sections, of: summary.id)
+            // A server that does not return every section (no MIME headers, say) cannot give a
+            // faithful copy: fetch it whole instead.
+            guard let header = fetched["HEADER"], sections.allSatisfy({ fetched[$0] != nil }),
+                  PartialPlan.isConsistent(structure, sections: fetched) else {
+                log.info("sync", "\(folder): the server left out sections of a large message; fetching it whole")
+                whole.append(summary)
+                continue
+            }
+            var parts = fetched
+            parts["HEADER"] = nil
+            let id = summary.id
+            let message = SyncedPartialMessage(
+                header: header, structure: structure, sections: parts, size: summary.size ?? 0,
+                remote: RemoteLocation(mailbox: id.folder, uidValidity: id.uidValidity, uid: id.uid),
+                receivedAt: summary.internalDate ?? Date(), flags: Self.flags(summary.flags))
+            guard try await allows(message.storedSize) else { return true }
+            // One at a time: each is weighed against the budget by what is stored before it.
+            let outcome = try await store.storeSyncedPartials([message], account: account).first ?? nil
+            guard outcome != nil else { whole.append(summary); continue } // compare with a stored original
+            stored += 1
+            result.stored += 1
+            progress.imported += 1
+            progress.remaining = max(0, progress.remaining - 1)
+        }
+        if stored > 0 { log.debug("sync", "\(folder): \(stored) large messages stored without their large attachments") }
+        guard !whole.isEmpty else { return false }
+        let (batches, tooLarge) = SyncPlanner.batches(whole, maxMessages: options.bodyBatchMessages, maxBytes: options.bodyBatchBytes,
+                                                     maxMessageSize: session.maximumMessageSize)
+        reportTooLarge(tooLarge, folder: folder, into: &result)
+        for batch in batches {
+            guard try await allows(batch.reduce(0) { $0 + ($1.size ?? 0) }) else { return true }
+            let fetched = try await session.fetchMessages(batch.map(\.id))
+            let outcomes = try await store.storeSynced(fetched.map(Self.synced), account: account)
+            result.stored += outcomes.count
+            progress.imported += outcomes.count
+            progress.remaining = max(0, progress.remaining - outcomes.count)
+        }
+        return false
+    }
+
+    /// The provider's part tree as the store keeps it.
+    static func part(_ remote: RemoteBodyPart) -> MessagePart {
+        MessagePart(section: remote.section, mediaType: remote.mediaType, boundary: remote.boundary, encoding: remote.encoding,
+                    size: remote.size, fileName: remote.fileName, disposition: remote.disposition, contentID: remote.contentID,
+                    parts: remote.parts.map(part))
+    }
+
+    /// Downloads the whole original of partial messages that a pin covers (GKM-036), a few per
+    /// pass, so pinned mail is all here when the connection goes.
+    private func completePinned(_ session: any MailboxSession) async throws {
+        guard options.onDemandThreshold != nil else { return }
+        let pinned = try await store.pinnedPartialMessages(account: account).prefix(options.pinnedPerPass)
+        guard !pinned.isEmpty else { return }
+        progress.activity = .importing(folder: "pinned messages")
+        let completed = try await OnDemandFetcher.complete(Array(pinned), store: store, session: session, log: log)
+        if completed > 0 { log.info("sync", "\(completed) pinned messages downloaded for offline") }
     }
 
     /// A fetched message as the store takes it.

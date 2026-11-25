@@ -10,8 +10,22 @@ public struct SyncOptions: Sendable {
     /// The most history (bytes of mail) to download for the account; `nil` for no limit. New
     /// mail is always imported.
     public var historyBudgetBytes: Int64?
-    /// History messages imported per pass before new mail is checked again.
+    /// Most history messages imported per pass before new mail is checked again.
     public var historyPerPass: Int
+    /// Longest a pass imports history before it lists the folders and checks for new mail
+    /// again (GKM-038). A pass lists every folder (SELECT + UID SEARCH ALL), so passes cut by
+    /// count alone made a large first sync list every folder again every few seconds.
+    public var historySlice: Duration
+    /// Attachments larger than this (encoded octets) are left at the provider and fetched when
+    /// opened or pinned (GKM-036, MAIL-062); `nil` downloads every message whole. Only messages
+    /// larger than this are looked at part by part, so smaller mail is fetched as before.
+    public var onDemandThreshold: Int?
+    /// Most partial messages a pass completes for pins (GKM-036), so a large pin never holds
+    /// back new mail.
+    public var pinnedPerPass: Int
+    /// Download the next batch while the store writes this one (GKM-038, MAIL-066). Off only to
+    /// measure what it gains.
+    public var pipelineStores: Bool
     /// UIDs per summary or flag fetch.
     public var summaryBatch: Int
     /// Messages and bytes per body fetch. Each fetch is a round trip and each stored batch one
@@ -31,13 +45,19 @@ public struct SyncOptions: Sendable {
     /// longest delay until it is stopped.
     public var reconnect: ReconnectPolicy
 
-    public init(recentPerFolder: Int = 200, historyBudgetBytes: Int64? = nil, historyPerPass: Int = 500,
+    public init(recentPerFolder: Int = 200, historyBudgetBytes: Int64? = nil, historyPerPass: Int = 10_000,
+                historySlice: Duration = .seconds(20), onDemandThreshold: Int? = 1_000_000, pinnedPerPass: Int = 50,
+                pipelineStores: Bool = true,
                 summaryBatch: Int = 500, bodyBatchMessages: Int = 100, bodyBatchBytes: Int = 8 * 1024 * 1024,
                 idleTimeout: Duration = .seconds(9 * 60), flagCheckInterval: Duration = .seconds(120),
                 reconnect: ReconnectPolicy = ReconnectPolicy()) {
         self.recentPerFolder = recentPerFolder
         self.historyBudgetBytes = historyBudgetBytes
         self.historyPerPass = historyPerPass
+        self.historySlice = historySlice
+        self.onDemandThreshold = onDemandThreshold
+        self.pinnedPerPass = pinnedPerPass
+        self.pipelineStores = pipelineStores
         self.summaryBatch = summaryBatch
         self.bodyBatchMessages = bodyBatchMessages
         self.bodyBatchBytes = bodyBatchBytes

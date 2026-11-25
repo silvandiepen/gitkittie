@@ -93,6 +93,9 @@ struct SpacesSidebarSection: View {
     @ViewBuilder private func menu(for space: MailSpace) -> some View {
         Button("Edit Space…") { sheet = .edit(space) }
         Button("Export Space…") { Task { await Platform.export(.space(space.id), what: space.name, model: model) } }
+        // Pin for offline (GKM-036): every message in the space downloaded whole and kept.
+        Button("Keep Offline") { Task { await model.pin(.space(space.id)) } }
+        Button("Don’t Keep Offline") { Task { await model.unpin(.space(space.id)) } }
         Divider()
         Button("Delete Space…", role: .destructive) { deleting = space }
     }

@@ -56,6 +56,8 @@ struct IndexRecord {
     var attachmentText: String
     /// The List-Id, for space rules (GKM-022).
     var listID: String?
+    /// A partial message (GKM-036): `path` is relative to the device folder, not the mail folder.
+    var isPartial = false
 
     init(front: MessageFrontMatter, message: ParsedMessage, path: String, attachmentText: String = "") {
         self.front = front
@@ -198,7 +200,7 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
 /// is the smallest local id in the group, so building the threads incrementally and rebuilding
 /// them from scratch give the same ids.
 final class MailIndex {
-    static let schemaVersion = 5
+    static let schemaVersion = 6
 
     let database: SQLiteDatabase
     /// True when the file was new, damaged, or from a version without a migration path; the
@@ -230,17 +232,37 @@ final class MailIndex {
     /// 3 → 4 adds the classification tables (GKM-017); the messages are classified afterwards,
     /// in the background, and count as Focused until then. 4 → 5 adds the winning sender rule and
     /// its disposition to each verdict (GKM-019); until a rule changes they are empty, as they
-    /// were.
+    /// were. 5 → 6 marks partial messages and the left-out parts of their attachments (GKM-036,
+    /// MAIL-062); every message indexed before is complete, which is what the defaults say.
     private func migrate(from version: Int) throws -> Bool {
         for step in version..<Self.schemaVersion {
             switch step {
             case 3: try database.execute(Self.classificationSQL)
             case 4: try database.execute(Self.senderRuleColumnsSQL)
+            case 5: try addPartialColumns()
             default: return false
             }
         }
         try database.setUserVersion(Self.schemaVersion)
         return true
+    }
+
+    /// Schema 5 → 6 in place (GKM-036). Each column only when missing: an index taken back to
+    /// an older version (tests do that) may already have them.
+    private func addPartialColumns() throws {
+        func columns(_ table: String) throws -> Set<String> {
+            let statement = try database.prepare("PRAGMA table_info(\(table))")
+            var names = Set<String>()
+            while try statement.step() { if let name = statement.text(1) { names.insert(name) } }
+            return names
+        }
+        if try !columns("messages").contains("partial") {
+            try database.execute("ALTER TABLE messages ADD COLUMN partial INTEGER NOT NULL DEFAULT 0")
+        }
+        if try !columns("message_blobs").contains("section") {
+            try database.execute("ALTER TABLE message_blobs ADD COLUMN section TEXT")
+        }
+        try database.execute("CREATE INDEX IF NOT EXISTS messages_partial ON messages (account_id) WHERE partial = 1")
     }
 
     /// Empties the index and refills it in one transaction: `produce` hands each record to the
@@ -301,13 +323,14 @@ final class MailIndex {
         try database.prepare("""
             INSERT OR REPLACE INTO messages
               (local_id, account_id, path, message_id, fingerprint, subject, from_name, from_address,
-               sort_date, has_attachments, snippet, eml_sha256, thread_id, seen, flagged, list_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               sort_date, has_attachments, snippet, eml_sha256, thread_id, seen, flagged, list_id, partial)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """).run([
                 id, .text(front.account.rawValue), .text(record.path), .optional(front.messageId), .text(record.fingerprint),
                 .optional(front.subject), .optional(front.from.first?.name), .optional(front.from.first?.address),
                 .double(front.sortDate.timeIntervalSince1970), .int(front.attachments.contains { !$0.inline } ? 1 : 0),
                 .text(record.snippet), .text(front.emlSha256), id, .int(Int64(seen)), .int(Int64(flagged)), .optional(record.listID),
+                .int(record.isPartial ? 1 : 0),
             ])
         let row = database.lastInsertRowID
         let participants = (front.from + front.to + front.cc).map { [$0.name, $0.address].compactMap { $0 }.joined(separator: " ") }
@@ -320,11 +343,13 @@ final class MailIndex {
         let insertRef = try database.prepare("INSERT INTO message_refs (local_id, account_id, ref_id) VALUES (?, ?, ?)")
         for reference in record.references { try insertRef.run([id, .text(front.account.rawValue), .text(reference)]) }
         let insertBlob = try database.prepare("""
-            INSERT OR IGNORE INTO message_blobs (local_id, blob, media_type, file_name, size, inline, content_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO message_blobs (local_id, blob, media_type, file_name, size, inline, content_id, section)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """)
         for attachment in front.attachments {
             try insertBlob.run([id, .text(attachment.blob), .text(attachment.mediaType.lowercased()), .text(attachment.fileName),
-                                .int(Int64(attachment.size)), .int(attachment.inline ? 1 : 0), .optional(attachment.contentId)])
+                                .int(Int64(attachment.size)), .int(attachment.inline ? 1 : 0), .optional(attachment.contentId),
+                                .optional(attachment.section)])
         }
     }
 
@@ -521,7 +546,10 @@ final class MailIndex {
     func blobs(ofTypes mediaTypes: Set<String>, excluding done: Set<String>, limit: Int) throws -> [(blob: String, mediaType: String)] {
         guard !mediaTypes.isEmpty else { return [] }
         let placeholders = Array(repeating: "?", count: mediaTypes.count).joined(separator: ",")
-        let statement = try database.prepare("SELECT DISTINCT blob, media_type FROM message_blobs WHERE media_type IN (\(placeholders)) ORDER BY blob")
+        // A part still at the provider has no bytes to extract from yet (GKM-036).
+        let statement = try database.prepare("""
+            SELECT DISTINCT blob, media_type FROM message_blobs WHERE media_type IN (\(placeholders)) AND blob NOT LIKE 'part:%' ORDER BY blob
+            """)
             .bind(mediaTypes.sorted().map(SQLiteValue.text))
         var result: [(String, String)] = []
         while try statement.step(), result.count < limit {
@@ -558,8 +586,14 @@ final class MailIndex {
     // MARK: Reading
 
     func path(of id: MailMessageID) throws -> String? {
-        let statement = try database.prepare("SELECT path FROM messages WHERE local_id = ?").bind([.text(id.rawValue)])
-        return try statement.step() ? statement.text(0) : nil
+        try location(of: id)?.path
+    }
+
+    /// Where a message's file is: in the mail folder, or (a partial message) in the device folder.
+    func location(of id: MailMessageID) throws -> (path: String, isPartial: Bool)? {
+        let statement = try database.prepare("SELECT path, partial FROM messages WHERE local_id = ?").bind([.text(id.rawValue)])
+        guard try statement.step(), let path = statement.text(0) else { return nil }
+        return (path, statement.int(1) != 0)
     }
 
     func account(of id: MailMessageID) throws -> MailAccountID? {
@@ -790,7 +824,15 @@ final class MailIndex {
           local_id UNINDEXED, subject, participants, body, attachments, attachment_text,
           tokenize = 'unicode61 remove_diacritics 2'
         );
-        """ + classificationSQL + senderRuleColumnsSQL
+        """ + classificationSQL + senderRuleColumnsSQL + partialColumnsSQL
+
+    /// Schema 6 (GKM-036): `partial` is 1 for a message whose original is not stored yet (its
+    /// `path` is then in the device folder); a part left at the provider has its IMAP `section`.
+    static let partialColumnsSQL = """
+        ALTER TABLE messages ADD COLUMN partial INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE message_blobs ADD COLUMN section TEXT;
+        CREATE INDEX IF NOT EXISTS messages_partial ON messages (account_id) WHERE partial = 1;
+        """
 }
 
 /// A content fingerprint: the same message seen twice (in two mailboxes, after a UIDVALIDITY

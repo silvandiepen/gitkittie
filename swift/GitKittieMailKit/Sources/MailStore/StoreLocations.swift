@@ -7,7 +7,9 @@ import Foundation
 ///   `accounts/<account-id>/messages/<yyyy>/<mm>/<local-id>.eml` and `.md`, `blobs/<sha256>`,
 ///   `accounts/<account-id>/account.json`, and `layout.json`.
 /// - `deviceFolder` (`<Application Support>/Mail/`): device-local and never synced —
-///   `index.sqlite`, `state/<account-id>/sync.sqlite`, `state/journal/`, `cache/`.
+///   `index.sqlite`, `state/<account-id>/sync.sqlite`, `state/journal/`, `cache/` (with
+///   `cache/blobs/`, the parts of partial messages), `partial/<account-id>/` (partial messages,
+///   GKM-036) and `metadata/`.
 public struct StoreLocations: Sendable, Equatable {
     public var mailFolder: URL
     public var deviceFolder: URL
@@ -29,6 +31,10 @@ public struct StoreLocations: Sendable, Equatable {
     var indexURL: URL { deviceFolder.appendingPathComponent("index.sqlite") }
     var journalFolder: URL { deviceFolder.appendingPathComponent("state/journal", isDirectory: true) }
     var cacheFolder: URL { deviceFolder.appendingPathComponent("cache", isDirectory: true) }
+    /// Parts of partial messages, by SHA-256 (GKM-036): re-fetchable, so evictable unless pinned.
+    var cacheBlobsFolder: URL { cacheFolder.appendingPathComponent("blobs", isDirectory: true) }
+    /// Partial messages (GKM-036): device state, never in the mail folder.
+    var partialFolder: URL { deviceFolder.appendingPathComponent("partial", isDirectory: true) }
     var blobsFolder: URL { mailFolder.appendingPathComponent("blobs", isDirectory: true) }
     var accountsFolder: URL { mailFolder.appendingPathComponent("accounts", isDirectory: true) }
     var layoutURL: URL { mailFolder.appendingPathComponent("layout.json") }

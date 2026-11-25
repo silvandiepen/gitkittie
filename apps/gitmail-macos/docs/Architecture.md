@@ -24,15 +24,19 @@ Device-local state lives outside it, in the app's Application Support container,
 
     <Application Support>/Mail/index.sqlite
     <Application Support>/Mail/state/<account-id>/   (sync cursors, UIDVALIDITY, IDLE state)
-    <Application Support>/Mail/cache/                (downloaded bodies and attachments not pinned)
+    <Application Support>/Mail/cache/blobs/          (attachments of partial messages, by SHA-256; evictable unless pinned)
+    <Application Support>/Mail/partial/<account-id>/ (partial messages: manifest, skeleton, Markdown; GKM-036)
+    <Application Support>/Mail/metadata/pins.json    (kept offline: messages, conversations, spaces)
     <Application Support>/Mail/metadata/classification.json   (your corrections and rules, GKM-017; to CloudKit with GKM-026)
     <Application Support>/Mail/preferences/          (remote images, notifications)
 
 Each device has its own position at each provider, so sync cursors are per device; in a shared folder two devices would overwrite each other's. The index is rebuilt from the folder, so losing it costs time, not data. Keeping both out of the folder means pointing GitKittie Folder, iCloud Drive or Git at `Mail/` can never commit an index on every change or mix two devices' cursors.
 
-Preserve original RFC 5322/MIME in EML; derive readable Markdown with YAML (id, messageId, references, sender, recipients, subject, date, attachment refs). Separate mutable metadata. Markdown is not lossless HTML/MIME; retain original signatures, inline images and attachments. Atomic writes, schema migrations, safe paths and integrity hashes. Deduplicate attachment blobs within appropriate access boundaries. Attachments on demand, pin for offline. Index, cache and sync state are outside the mail folder (above), so they cannot reach Git or folder sync. Encrypted message support is separate; preserve originals without modification.
+Preserve original RFC 5322/MIME in EML; derive readable Markdown with YAML (id, messageId, references, sender, recipients, subject, date, attachment refs). Separate mutable metadata. Markdown is not lossless HTML/MIME; retain original signatures, inline images and attachments. Atomic writes, schema migrations, safe paths and integrity hashes. Deduplicate attachment blobs within appropriate access boundaries. Attachments on demand, pin for offline (below). Index, cache and sync state are outside the mail folder (above), so they cannot reach Git or folder sync. Encrypted message support is separate; preserve originals without modification.
 
 Account-scoped local UUID, provider ID where available, IMAP mailbox + UIDVALIDITY + UID as remote mapping; Message-ID/content fingerprint are reconciliation signals, not globally unique. Handle moves, UID resets, missing/duplicate IDs, aliases and Gmail label duplication. Thread graph from References/In-Reply-To with conservative fallback, never subject alone. Each message remains independent. Reply preserves recipients, Reply-To, account identity and standard headers; never expose internal tags.
+
+**Attachments on demand, pin for offline (GKM-036; MAIL-062..064).** A message larger than the on-demand threshold (1 MB of encoded size by default) is synced part by part: its structure (BODYSTRUCTURE), its header, every MIME header and every part at or below the threshold; larger attachments stay at the provider. Such a *partial* message lives in the device folder (`partial/`), not the mail folder: a manifest of what it is made of and what is missing, a skeleton made of the fetched sections (never an original, never exported or hash-checked as one), and its derived Markdown; its parts are in `cache/blobs/`. Search, threads, the reader's text and classification work on it. Opening a missing attachment fetches that part once; its last missing part, a pin, Forward or export *completes* the message: the whole original is downloaded once and stored like any message, byte for byte, under the same local id, and the partial copy goes. Pins (message, conversation, space) mean all of it here; eviction only gives back cached parts of partial messages that are unpinned and can be fetched again. Originals in the mail folder are never evicted.
 
 ## Multi-device sync
 
