@@ -368,9 +368,11 @@ private struct Signals {
         bodyIsEmpty = plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let subject = m.subject.lowercased()
         let body = plain.lowercased()
+        let subjectText = TemplateText(subject)
+        let bodyText = TemplateText(body)
 
-        let claimsTemplate = Templates.firstMatch(Templates.securityAlert, in: subject) != nil
-            || Templates.firstMatch(Templates.transactionAction + Templates.transactionDue, in: subject) != nil
+        let claimsTemplate = Templates.firstMatch(Templates.securityAlert, in: subjectText) != nil
+            || Templates.firstMatch(Templates.transactionAction + Templates.transactionDue, in: subjectText) != nil
         for link in Signals.anchors(in: html) {
             guard let hrefHost = Signals.host(in: link.href) else { continue }
             guard let shownHost = Signals.host(in: Signals.stripTags(link.text)) else { continue }
@@ -398,7 +400,7 @@ private struct Signals {
             dangerousAttachment = true
             trace.add(.dangerousAttachment, "attachment", name)
         }
-        spamPhraseCount = Templates.spamPhrases.filter { subject.contains($0) || body.contains($0) }.count
+        spamPhraseCount = Templates.spamPhrases.filter { subjectText.contains($0) || bodyText.contains($0) }.count
         if spamPhraseCount >= 2 { trace.add(.spamPhrases, "body", "\(spamPhraseCount) junk phrases") }
         structureFlags = m.structureFlags
         for flag in m.structureFlags.sorted(by: { $0.rawValue < $1.rawValue }) {
@@ -408,25 +410,25 @@ private struct Signals {
         // Step 4: templates.
         personalSender = fromAddress != nil && !isRoleAddress && !hasListSignals && !autoSubmitted
         var security: Template?
-        if let term = Templates.firstMatch(Templates.securityCode, in: subject) ?? Templates.firstMatch(Templates.securityCode, in: body),
+        if let term = Templates.firstMatch(Templates.securityCode, in: subjectText) ?? Templates.firstMatch(Templates.securityCode, in: bodyText),
            Signals.containsCode(plain) {
             security = Template(reason: .securityCode, field: "subject+body", term: term)
-        } else if let term = Templates.firstMatch(Templates.securityAlert, in: subject) {
+        } else if let term = Templates.firstMatch(Templates.securityAlert, in: subjectText) {
             security = Template(reason: .securityAlert, field: "subject", term: term)
         }
         securityClaim = security != nil
         // Account mail comes from a function (no-reply, security@), never from a person's own
         // address; a person writing about a password is having a conversation.
         if !personalSender { securityTemplate = security }
-        deliveryTerm = Templates.firstMatch(Templates.delivery, in: subject)
-        if let term = Templates.firstMatch(Templates.transactionAction, in: subject) {
+        deliveryTerm = Templates.firstMatch(Templates.delivery, in: subjectText)
+        if let term = Templates.firstMatch(Templates.transactionAction, in: subjectText) {
             transactionTerm = term
             transactionKind = .action
-        } else if let term = Templates.firstMatch(Templates.transactionDue, in: subject) {
+        } else if let term = Templates.firstMatch(Templates.transactionDue, in: subjectText) {
             transactionTerm = term
             transactionKind = .due
         } else {
-            transactionTerm = Templates.firstMatch(Templates.transaction, in: subject)
+            transactionTerm = Templates.firstMatch(Templates.transaction, in: subjectText)
             transactionKind = .record
         }
         hasOrderReference = Signals.containsOrderReference(plain)
@@ -436,8 +438,8 @@ private struct Signals {
         let reason = m.headers.first { Signals.isReasonHeader($0.name) }?.value.lowercased() ?? ""
         reviewRequested = ["review_requested", "mention", "assign"].contains { reason.contains($0) }
             || subject.contains("review requested") || subject.contains("mentioned you")
-        promotionTerm = Templates.firstMatch(Templates.promotion, in: subject) ?? Signals.percentage(in: subject)
-        newsletterTerm = Templates.firstMatch(Templates.newsletter, in: subject)
+        promotionTerm = Templates.firstMatch(Templates.promotion, in: subjectText) ?? Signals.percentage(in: subject)
+        newsletterTerm = Templates.firstMatch(Templates.newsletter, in: subjectText)
     }
 
     // MARK: Helpers

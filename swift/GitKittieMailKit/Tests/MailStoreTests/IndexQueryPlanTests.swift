@@ -25,4 +25,14 @@ final class IndexQueryPlanTests: XCTestCase {
             }
         }
     }
+
+    /// Every arriving message is numbered after the newest arrival (GKM-040). Without the
+    /// partial index that is a read of every verdict per message, and the first sync of 50,000
+    /// messages fell from 176 to 57 messages a second.
+    func testTheNextArrivalNumberComesFromTheArrivalIndex() throws {
+        let index = try MailIndex(url: root.appendingPathComponent("index.sqlite"))
+        let plan = try index.queryPlan(MailIndex.latestArrivalSQL)
+        XCTAssertFalse(plan.contains { $0.hasPrefix("SCAN") }, "\(plan)")
+        XCTAssertTrue(plan.contains { $0.contains("USING COVERING INDEX message_classes_by_arrival") }, "\(plan)")
+    }
 }
