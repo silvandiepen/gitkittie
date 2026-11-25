@@ -12,6 +12,8 @@ struct AccountScreen: View {
     @State private var passwordError: String?
     @State private var isSaving = false
     @State private var confirmingRemoval = false
+    @State private var senderName = ""
+    @State private var settingsError: String?
 
     private var account: MailAccount? { model.accounts.first { $0.id == accountID } }
 
@@ -27,6 +29,24 @@ struct AccountScreen: View {
                         Button("Try the Changes Again") { Task { await model.actions.retryFailed(account: accountID) } }
                         Button("Drop the Changes", role: .destructive) { Task { await model.actions.discardFailed(account: accountID) } }
                     }
+                }
+                Section {
+                    TextField("Your name", text: $senderName)
+                        .textContentType(.name)
+                        .onSubmit { saveSettings(account, removes: account.removesDeletedMail) }
+                        .accessibilityIdentifier("senderNameField")
+                    Toggle("Remove Mail Deleted Elsewhere", isOn: Binding(
+                        get: { account.removesDeletedMail },
+                        set: { saveSettings(account, removes: $0) }))
+                    if let settingsError {
+                        NoticeLine(systemImage: "exclamationmark.triangle", tint: .orange, text: settingsError)
+                    }
+                } header: {
+                    Text("Sending and Syncing")
+                } footer: {
+                    Text(account.removesDeletedMail
+                         ? "Your name is what people see on mail you send. Mail deleted in another app or on the web is removed from \(DeviceWords.this) on the next sync; pinned mail and mail in a space stay."
+                         : "Your name is what people see on mail you send. Mail deleted in another app or on the web stays on \(DeviceWords.this), marked “Deleted at \(ProviderDeletionText.providerName(of: account))” with the time.")
                 }
                 if account.connection != nil {
                     Section {
@@ -59,6 +79,13 @@ struct AccountScreen: View {
         .scrollContentBackground(.hidden)
         .background(Theme.window.ignoresSafeArea())
         .navigationTitle(account?.displayName ?? "Account")
+        .onAppear { senderName = account?.senderName ?? "" }
+        .onDisappear {
+            // A name typed without pressing Return is kept too.
+            if let account, (account.senderName ?? "") != senderName.trimmingCharacters(in: .whitespacesAndNewlines) {
+                saveSettings(account, removes: account.removesDeletedMail)
+            }
+        }
         .confirmationDialog("Remove this account?", isPresented: $confirmingRemoval, titleVisibility: .visible) {
             Button("Remove, Keep Its Mail Here") { remove(.keepMail) }
             Button("Remove With Its Mail", role: .destructive) { remove(.removeMail) }
@@ -77,6 +104,18 @@ struct AccountScreen: View {
                 password = ""
             } catch {
                 passwordError = error.message
+            }
+        }
+    }
+
+    private func saveSettings(_ account: MailAccount, removes: Bool) {
+        settingsError = nil
+        Task {
+            do {
+                try await model.updateAccountSettings(account.id, displayName: account.displayName, senderName: senderName,
+                                                      removesMailDeletedElsewhere: removes)
+            } catch {
+                settingsError = "The settings couldn’t be saved: \(error.localizedDescription)"
             }
         }
     }

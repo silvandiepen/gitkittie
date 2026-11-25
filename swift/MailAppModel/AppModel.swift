@@ -145,7 +145,7 @@ final class AppModel {
         }
         senders.unsubscribe.accountAddresses = { [weak self] account in
             guard let found = self?.accounts.first(where: { $0.id == account }), !found.address.isEmpty else { return [] }
-            return [MailAddress(name: found.displayName.isEmpty ? nil : found.displayName, address: found.address)]
+            return [found.sendingAddress]
         }
     }
 

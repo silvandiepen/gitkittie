@@ -321,6 +321,55 @@ final class CleanupTests: XCTestCase {
         XCTAssertEqual(names(try XCTUnwrap(model.cleanup.preview).included), ["plain2", "receipt"])
     }
 
+    // MARK: - Answered by Sil (GKM-021)
+
+    /// "Mail that joins a group after you looked at the preview is left out of the run; you
+    /// never saw it" (MAIL-060, MAIL-078): the run goes ahead with what was previewed and the
+    /// newcomer stays where it is.
+    func testMailThatJoinsTheGroupAfterThePreviewIsLeftOut() async throws {
+        let model = try await open()
+        let store = try XCTUnwrap(model.mailStore)
+        await model.cleanup.select(listGroup)
+        await model.cleanup.preview(.archive)
+        XCTAssertEqual(names(try XCTUnwrap(model.cleanup.preview).included), ["plain1", "plain2", "plain3"])
+        model.cleanup.requestRun()
+
+        // The sync brings one more old offer from the same list before you confirm.
+        let late = Mail(name: "late", from: "Shop Deals <deals@shop.example>", subject: "Clearance", daysAgo: 40, list: list)
+        let newcomer = try await store.ingest(Self.eml(late), account: work,
+                                              remote: RemoteLocation(mailbox: "INBOX", uidValidity: 1, uid: 99)).id
+        ids["late"] = newcomer
+        let fresh = try await store.previewCleanup(listGroup, operation: .archive(to: "Archive", createTarget: false))
+        XCTAssertTrue(names(fresh.included).contains("late"), "it does belong to the group now")
+
+        await model.cleanup.confirmRun()
+        let run = try XCTUnwrap(model.cleanup.lastRun?.run, "the run is not refused because of it")
+        XCTAssertEqual(Set(run.messages), [id("plain1"), id("plain2"), id("plain3")])
+        let newcomerFolders = try await store.effectiveMailboxes(of: newcomer)
+        XCTAssertEqual(newcomerFolders, ["INBOX"], "never part of a run you did not preview")
+        XCTAssertTrue(model.cleanup.changedSincePreview.isEmpty)
+    }
+
+    /// "For messages with large attachments, offer Move to Trash? Yes" (MAIL-058, MAIL-078):
+    /// the storage group previews and runs Move to Trash like the other groups.
+    func testLargeMessagesCanBeMovedToTrash() async throws {
+        let model = try await open()
+        let store = try XCTUnwrap(model.mailStore)
+        model.cleanup.options.largeMessageBytes = 2000
+        await model.cleanup.select(CleanupGroupID(account: work, kind: .largeMessages))
+        await model.cleanup.preview(.trash)
+        let preview = try XCTUnwrap(model.cleanup.preview)
+        XCTAssertEqual(names(preview.included), ["plain2"])
+        XCTAssertEqual(preview.protected.first { $0.id == id("receipt") }?.protections, [.transaction])
+        model.cleanup.requestRun()
+        await model.cleanup.confirmRun()
+        XCTAssertEqual(model.cleanup.lastRun?.run.messages, [id("plain2")])
+        let folders = try await store.effectiveMailboxes(of: id("plain2"))
+        XCTAssertEqual(folders, ["Trash"])
+        let receipt = try await store.effectiveMailboxes(of: id("receipt"))
+        XCTAssertEqual(receipt, ["INBOX"])
+    }
+
     // MARK: - Undo
 
     func testUndoRestoresTheWholeBatch() async throws {

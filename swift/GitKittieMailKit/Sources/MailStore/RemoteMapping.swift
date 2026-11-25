@@ -12,8 +12,9 @@ final class RemoteMapping {
     /// (GKM-012). 3: the sync's folder list with a cursor per folder, the rest of the flags
     /// (answered, draft, keywords) and counters (GKM-011; RemoteMapping+Sync.swift). 4: the
     /// offline action journal and a CONDSTORE checkpoint per folder (GKM-015;
-    /// RemoteMapping+Actions.swift).
-    static let schemaVersion = 4
+    /// RemoteMapping+Actions.swift). 5: messages deleted at the provider, noticed and confirmed
+    /// (GKM-042, MAIL-075; RemoteMapping+Deletions.swift).
+    static let schemaVersion = 5
     let database: SQLiteDatabase
 
     init(url: URL) throws {
@@ -48,6 +49,11 @@ final class RemoteMapping {
             if version < 4 {
                 // 3 → 4: the action journal (GKM-015).
                 try migrateToActionJournal()
+            }
+            if version < 5 {
+                // 4 → 5: deletions at the provider (MAIL-075). Nothing to fill in: what left the
+                // provider before this was kept without a mark, as MAIL-029 said.
+                try migrateToProviderDeletions()
             }
             try database.setUserVersion(Self.schemaVersion)
         }
@@ -108,6 +114,8 @@ final class RemoteMapping {
                 .run([.text(location.mailbox), .int(Int64(location.uidValidity))])
             try database.prepare("INSERT OR REPLACE INTO locations (mailbox, uid_validity, uid, local_id) VALUES (?, ?, ?, ?)")
                 .run(Self.key(location) + [.text(id.rawValue)])
+            // At the provider after all: not deleted there (MAIL-075).
+            try clearDeletion(of: id)
         }
     }
 

@@ -21,9 +21,11 @@ extension AppModel {
     var onDemandThreshold: Int { sync.services.syncOptions.onDemandThreshold ?? 0 }
 
     /// The most the offline cache keeps before it gives back the least recently opened parts
-    /// it can fetch again (`defaults write app.hakobs.gitmail offlineCacheBudgetBytes <bytes>`).
+    /// it can fetch again: the iPhone's storage budget (MAIL-079), else 2 GB on the Mac
+    /// (`defaults write app.hakobs.gitmail offlineCacheBudgetBytes <bytes>`).
     var offlineCacheBudget: Int64 {
-        (sync.services.defaults.object(forKey: "offlineCacheBudgetBytes") as? Int).map(Int64.init) ?? 2 * 1024 * 1024 * 1024
+        sync.services.offlineCacheBytes
+            ?? (sync.services.defaults.object(forKey: "offlineCacheBudgetBytes") as? Int).map(Int64.init) ?? 2 * 1024 * 1024 * 1024
     }
 
     /// Fetches an attachment a partial message left at the provider, once; then keeps the
@@ -104,3 +106,27 @@ extension AppModel {
         }
     }
 }
+
+// MARK: History window (GKM-060, MAIL-072)
+
+extension AppModel {
+    /// How far back each folder's history is downloaded, in days; nil downloads all of it.
+    var historyDays: Int? { sync.services.syncOptions.historyDays }
+
+    /// Messages at the providers older than the window and not downloaded, over every account.
+    var olderNotDownloaded: Int { sync.progress.values.reduce(0) { $0 + $1.olderNotDownloaded } }
+
+    /// Saves a new window and restarts the syncs with it: a running sync keeps the options it
+    /// started with. Widening it (or nil) downloads the older mail newest first, without
+    /// duplicates; narrowing it never deletes mail already downloaded.
+    func setHistoryDays(_ days: Int?) async {
+        sync.services.defaults.set(days ?? 0, forKey: AccountServices.historyDaysKey)
+        guard days != historyDays else { return }
+        sync.services.syncOptions.historyDays = days
+        guard let store = mailStore else { return }
+        await sync.stopAll()
+        await sync.start(accounts, store: store)
+        await registerForSending(accounts)
+    }
+}
+

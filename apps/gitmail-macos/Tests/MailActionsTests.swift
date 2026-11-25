@@ -208,6 +208,11 @@ final class MailActionsTests: XCTestCase {
         try await waitUntil("two messages") { model.browser.rows.count == 2 }
         try await waitUntil("the folder list") { model.sync.folders[account.id]?.isEmpty == false }
 
+        // GKM-015, answered by Sil: an account without an Archive folder gets one, made silently
+        // the first time something is archived (MAIL-036, MAIL-077).
+        let foldersBefore = try await serverFolders(server, user)
+        XCTAssertFalse(foldersBefore.contains("Archive"), "a new test account has no Archive folder")
+        XCTAssertEqual(model.actions.archiveFolder(for: account.id)?.create, true)
         await model.actions.perform(.archive, threads: threads(model, "File away"), in: model.browser.scope)
         try await waitUntil("the archive at the provider") { try await self.serverSubjects(server, user, "Archive") == ["File away"] }
         let inbox = try await serverSubjects(server, user, "INBOX")
@@ -222,11 +227,21 @@ final class MailActionsTests: XCTestCase {
         await model.sync.stopAll()
     }
 
-    private func serverSubjects(_ server: LocalMailServer, _ user: LocalMailServer.User, _ folder: String) async throws -> [String] {
-        let settings = MailConnectionSettings(
+    private func serverFolders(_ server: LocalMailServer, _ user: LocalMailServer.User) async throws -> [String] {
+        try await AccountConnections(trust: server.trust).imap(serverSettings(server, user), password: Secret(user.password)).withSession { session in
+            try await session.listFolders().map(\.id)
+        }
+    }
+
+    private func serverSettings(_ server: LocalMailServer, _ user: LocalMailServer.User) -> MailConnectionSettings {
+        MailConnectionSettings(
             kind: .imap,
             imap: MailServerSettings(host: "localhost", port: server.imapsPort, security: .implicitTLS, username: user.address),
             smtp: MailServerSettings(host: "localhost", port: server.smtpsPort, security: .implicitTLS, username: user.address))
+    }
+
+    private func serverSubjects(_ server: LocalMailServer, _ user: LocalMailServer.User, _ folder: String) async throws -> [String] {
+        let settings = serverSettings(server, user)
         return try await AccountConnections(trust: server.trust).imap(settings, password: Secret(user.password)).withSession { session in
             guard try await session.listFolders().contains(where: { $0.id == folder }) else { return [] }
             let listing = try await session.listing(of: folder)

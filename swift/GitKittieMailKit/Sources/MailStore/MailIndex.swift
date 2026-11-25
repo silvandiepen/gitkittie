@@ -16,6 +16,9 @@ public struct MessageSummary: Identifiable, Hashable, Sendable {
     public var threadID: String
     public var isUnread: Bool
     public var isFlagged: Bool
+    /// When the provider deleted it, as near as this device can tell; `nil` while it is still
+    /// at the provider or was never there (MAIL-075). The local copy is kept and shown.
+    public var deletedAtProvider: Date? = nil
 }
 
 /// A conversation as the message list shows it: its newest message in the current view, how
@@ -238,7 +241,7 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
 /// is the smallest local id in the group, so building the threads incrementally and rebuilding
 /// them from scratch give the same ids.
 final class MailIndex {
-    static let schemaVersion = 6
+    static let schemaVersion = 7
 
     let database: SQLiteDatabase
     /// True when the file was new, damaged, or from a version without a migration path; the
@@ -271,13 +274,15 @@ final class MailIndex {
     /// in the background, and count as Focused until then. 4 → 5 adds the winning sender rule and
     /// its disposition to each verdict (GKM-019); until a rule changes they are empty, as they
     /// were. 5 → 6 marks partial messages and the left-out parts of their attachments (GKM-036,
-    /// MAIL-062); every message indexed before is complete, which is what the defaults say.
+    /// MAIL-062); every message indexed before is complete, which is what the defaults say. 6 → 7
+    /// adds the copy of confirmed provider deletions (MAIL-075), filled from the sync state.
     private func migrate(from version: Int) throws -> Bool {
         for step in version..<Self.schemaVersion {
             switch step {
             case 3: try database.execute(Self.classificationSQL)
             case 4: try database.execute(Self.senderRuleColumnsSQL)
             case 5: try addPartialColumns()
+            case 6: try database.execute(Self.providerDeletionsSQL)
             default: return false
             }
         }
@@ -311,6 +316,7 @@ final class MailIndex {
             try database.execute("""
                 DELETE FROM messages; DELETE FROM message_text; DELETE FROM message_refs;
                 DELETE FROM message_mailboxes; DELETE FROM message_blobs; DELETE FROM message_classes;
+                DELETE FROM provider_deletions;
                 """)
             try produce { try insertRow($0) }
             try assignAllThreads()
@@ -339,7 +345,7 @@ final class MailIndex {
             let thread = try database.prepare("SELECT thread_id FROM messages WHERE local_id = ?").bind([.text(id.rawValue)])
             let threadID = try thread.step() ? thread.text(0) : nil
             if let row = try rowID(of: id) { try database.prepare("DELETE FROM message_text WHERE rowid = ?").run([.int(row)]) }
-            for table in ["messages", "message_refs", "message_mailboxes", "message_blobs", "message_classes"] {
+            for table in ["messages", "message_refs", "message_mailboxes", "message_blobs", "message_classes", "provider_deletions"] {
                 try database.prepare("DELETE FROM \(table) WHERE local_id = ?").run([.text(id.rawValue)])
             }
             if let threadID { try assignThreads(seeds: Set(try members(ofThread: threadID))) }
@@ -785,10 +791,15 @@ final class MailIndex {
         return (clauses.joined(separator: " AND "), values)
     }
 
+    /// Every query that reads summaries is over `messages m`. The last column is the provider
+    /// deletion (MAIL-075), a primary-key lookup.
     static let summaryColumns = """
         m.local_id, m.account_id, m.subject, m.from_name, m.from_address, m.sort_date, m.snippet, m.has_attachments, \
-        m.thread_id, m.seen, m.flagged
+        m.thread_id, m.seen, m.flagged, (SELECT d.deleted_at FROM provider_deletions d WHERE d.local_id = m.local_id)
         """
+
+    /// Columns `summaryColumns` takes; a query that selects more reads them from here on.
+    static let summaryColumnCount: Int32 = 12
 
     static func summary(_ statement: SQLiteDatabase.Statement) -> MessageSummary? {
         guard let raw = statement.text(0), let id = MailMessageID(raw), let account = statement.text(1) else { return nil }
@@ -796,7 +807,8 @@ final class MailIndex {
         return MessageSummary(id: id, account: MailAccountID(account), subject: statement.text(2), from: from,
                               date: Date(timeIntervalSince1970: statement.double(5)), snippet: statement.text(6) ?? "",
                               hasAttachments: statement.int(7) != 0, threadID: statement.text(8) ?? raw,
-                              isUnread: statement.int(9) == 0, isFlagged: statement.int(10) != 0)
+                              isUnread: statement.int(9) == 0, isFlagged: statement.int(10) != 0,
+                              deletedAtProvider: statement.isNull(11) ? nil : Date(timeIntervalSince1970: statement.double(11)))
     }
 
     func readSummaries(_ statement: SQLiteDatabase.Statement) throws -> [MessageSummary] {
@@ -815,6 +827,7 @@ final class MailIndex {
         DROP TABLE IF EXISTS message_classes;
         DROP TABLE IF EXISTS correspondents;
         DROP TABLE IF EXISTS authenticated_domains;
+        DROP TABLE IF EXISTS provider_deletions;
         """
 
     private static let createSQL = """
@@ -862,7 +875,33 @@ final class MailIndex {
           local_id UNINDEXED, subject, participants, body, attachments, attachment_text,
           tokenize = 'unicode61 remove_diacritics 2'
         );
-        """ + classificationSQL + senderRuleColumnsSQL + partialColumnsSQL
+        """ + classificationSQL + senderRuleColumnsSQL + partialColumnsSQL + providerDeletionsSQL
+
+    /// Schema 7 (MAIL-075): the copy of the sync state's confirmed provider deletions, for the
+    /// list and the reader. Device state like flags and folders: refilled after a rebuild.
+    static let providerDeletionsSQL = """
+        CREATE TABLE IF NOT EXISTS provider_deletions (local_id TEXT PRIMARY KEY, deleted_at REAL NOT NULL);
+        """
+
+    /// Marks (or clears, with `nil`) a message as deleted at the provider.
+    func setDeletedAtProvider(_ date: Date?, for id: MailMessageID) throws {
+        if let date {
+            try database.prepare("INSERT OR REPLACE INTO provider_deletions (local_id, deleted_at) VALUES (?, ?)")
+                .run([.text(id.rawValue), .double(date.timeIntervalSince1970)])
+        } else {
+            try database.prepare("DELETE FROM provider_deletions WHERE local_id = ?").run([.text(id.rawValue)])
+        }
+    }
+
+    /// The account's messages marked deleted at the provider, for refilling after a rebuild.
+    func providerDeletions(account: MailAccountID) throws -> Set<MailMessageID> {
+        let statement = try database.prepare("""
+            SELECT d.local_id FROM provider_deletions d JOIN messages m ON m.local_id = d.local_id WHERE m.account_id = ?
+            """).bind([.text(account.rawValue)])
+        var result = Set<MailMessageID>()
+        while try statement.step() { if let id = statement.text(0).flatMap(MailMessageID.init) { result.insert(id) } }
+        return result
+    }
 
     /// Schema 6 (GKM-036): `partial` is 1 for a message whose original is not stored yet (its
     /// `path` is then in the device folder); a part left at the provider has its IMAP `section`.

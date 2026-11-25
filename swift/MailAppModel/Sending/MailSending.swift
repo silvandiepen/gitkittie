@@ -103,7 +103,7 @@ final class MailSending {
         let registered = await registry.all()
         for account in accounts {
             let settings = registered.first { $0.accountID == account.id }
-            let addresses = settings?.identities ?? [MailAddress(name: account.displayName.isEmpty ? nil : account.displayName, address: account.address)]
+            let addresses = settings?.identities ?? [account.sendingAddress]
             out += addresses.filter { !$0.address.isEmpty }.map { SendingIdentity(account: account.id, address: $0) }
         }
         return out

@@ -66,8 +66,10 @@ private struct StorageSection: View {
                     Text(choice.map { "Up to " + bytes($0) } ?? "All of it").tag(choice)
                 }
             }
+            Toggle("Download Attachments Only When Opened", isOn: attachmentsWhenOpened)
             Picker("Cache", selection: cache) {
-                ForEach([Int64(200), 500, 1000].map { $0 * 1024 * 1024 }, id: \.self) { value in
+                // A size chosen before these choices (200 MB) stays listed.
+                ForEach(Set(StorageBudget.cacheChoices + [session.budget.cacheBytes]).sorted(), id: \.self) { value in
                     Text(bytes(value)).tag(value)
                 }
             }
@@ -78,8 +80,15 @@ private struct StorageSection: View {
         } header: {
             Text("Storage")
         } footer: {
-            Text("New mail always comes in.\(windowText) Older mail is downloaded newest first, up to the limit, per account. Attachment previews are kept in a cache that is never backed up and is trimmed to its size. Below \(bytes(session.budget.minimumFreeBytes)) free, Mail stops downloading until there is room; it never deletes mail to make room. Your messages are files in Files ▸ On My \(DeviceWords.model) ▸ Mail ▸ Mail.")
+            Text("New mail always comes in.\(windowText) Older mail is downloaded newest first, up to the limit, per account.\(attachmentText) Opened attachments and previews are kept in a cache that is never backed up and is trimmed to its size; pinned attachments stay. Below \(bytes(session.budget.minimumFreeBytes)) free, Mail stops downloading until there is room; it never deletes mail to make room. Your messages are files in Files ▸ On My \(DeviceWords.model) ▸ Mail ▸ Mail.")
         }
+    }
+
+    /// What the attachment choice means, for the footer.
+    private var attachmentText: String {
+        session.budget.attachmentsWhenOpened
+            ? " Attachments stay at the provider until you open them."
+            : " Attachments over 1 MB stay at the provider until you open them."
     }
 
     /// What the window means, in words, for the footer.
@@ -104,6 +113,14 @@ private struct StorageSection: View {
         Binding(get: { session.budget.historyLimit }, set: { value in
             var budget = session.budget
             budget.historyBytes = value ?? 0
+            Task { await session.setBudget(budget) }
+        })
+    }
+
+    private var attachmentsWhenOpened: Binding<Bool> {
+        Binding(get: { session.budget.attachmentsWhenOpened }, set: { value in
+            var budget = session.budget
+            budget.attachmentsWhenOpened = value
             Task { await session.setBudget(budget) }
         })
     }

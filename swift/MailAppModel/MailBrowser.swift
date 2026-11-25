@@ -124,6 +124,20 @@ enum ListRow: Identifiable, Hashable {
         case .message(let message): message.hasAttachments
         }
     }
+
+    /// Takes the read and flag marks of the open conversation, for a row kept in the list after
+    /// a change took it out of the query.
+    mutating func reflect(_ open: OpenThread) {
+        switch self {
+        case .thread(var thread):
+            thread.unreadCount = open.messages.filter(\.summary.isUnread).count
+            thread.isFlagged = open.messages.contains(where: \.summary.isFlagged)
+            if let latest = open.messages.first(where: { $0.id == thread.latest.id }) { thread.latest = latest.summary }
+            self = .thread(thread)
+        case .message(let message):
+            if let shown = open.messages.first(where: { $0.id == message.id }) { self = .message(shown.summary) }
+        }
+    }
 }
 
 /// One message in the open conversation.
@@ -503,7 +517,8 @@ final class MailBrowser {
             }
             if openThread?.id == thread.id { openThread = thread }
         }
-        await refreshAfterFlagChange()
+        // A correction moves the message where you said: its row leaves this view at once.
+        await refreshAfterFlagChange(keepsOpenRow: false)
     }
 
     // MARK: Flags
@@ -551,14 +566,22 @@ final class MailBrowser {
     }
 
     /// Re-reads the loaded rows so unread and flag marks are current, without moving the list.
-    private func refreshAfterFlagChange() async {
+    /// The open row stays where it was even when the change takes it out of the list (an
+    /// unread receipt in Focused, MAIL-076, or the Unread filter): it goes with the next reload.
+    private func refreshAfterFlagChange(keepsOpenRow: Bool = true) async {
         guard let store else { return }
         do {
             let count = max(rows.count, Self.pageSize)
             let query = query
-            let fresh: [ListRow] = isSearching
+            var fresh: [ListRow] = isSearching
                 ? try await store.search(query, limit: count).map(ListRow.message)
                 : try await store.threads(query, limit: count).map(ListRow.thread)
+            if keepsOpenRow, let selected = selectedRowID, !fresh.contains(where: { $0.id == selected }),
+               let index = rows.firstIndex(where: { $0.id == selected }) {
+                var kept = rows[index]
+                if let thread = openThread, thread.id == kept.threadID { kept.reflect(thread) }
+                fresh.insert(kept, at: min(index, fresh.count))
+            }
             rows = fresh
         } catch {
             actionError = String(describing: error)
