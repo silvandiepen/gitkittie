@@ -109,15 +109,21 @@ public struct RemoteMessageSummary: Sendable, Hashable {
     /// not unique, sometimes missing.
     public var messageIDHeader: String?
     public var subject: String?
+    /// The first sender (ENVELOPE From): the display name as the server sent it (it may still be
+    /// an RFC 2047 encoded word) and the address.
+    public var fromName: String?
+    public var fromAddress: String?
 
     public init(id: RemoteMessageID, flags: MessageFlags, size: Int?, internalDate: Date?,
-                messageIDHeader: String?, subject: String?) {
+                messageIDHeader: String?, subject: String?, fromName: String? = nil, fromAddress: String? = nil) {
         self.id = id
         self.flags = flags
         self.size = size
         self.internalDate = internalDate
         self.messageIDHeader = messageIDHeader
         self.subject = subject
+        self.fromName = fromName
+        self.fromAddress = fromAddress
     }
 }
 

@@ -520,27 +520,10 @@ public actor SyncCoordinator {
         for summary in summaries {
             try Task.checkCancellation()
             guard let remote = structures[summary.id] else { continue } // expunged meanwhile
-            let structure = Self.part(remote)
-            guard let sections = PartialPlan.sections(of: structure, threshold: threshold) else {
+            guard let message = try await Self.partialCopy(of: summary, structure: remote, threshold: threshold, session, log: log) else {
                 whole.append(summary)
                 continue
             }
-            let fetched = try await session.fetchSections(sections, of: summary.id)
-            // A server that does not return every section (no MIME headers, say) cannot give a
-            // faithful copy: fetch it whole instead.
-            guard let header = fetched["HEADER"], sections.allSatisfy({ fetched[$0] != nil }),
-                  PartialPlan.isConsistent(structure, sections: fetched) else {
-                log.info("sync", "\(folder): the server left out sections of a large message; fetching it whole")
-                whole.append(summary)
-                continue
-            }
-            var parts = fetched
-            parts["HEADER"] = nil
-            let id = summary.id
-            let message = SyncedPartialMessage(
-                header: header, structure: structure, sections: parts, size: summary.size ?? 0,
-                remote: RemoteLocation(mailbox: id.folder, uidValidity: id.uidValidity, uid: id.uid),
-                receivedAt: summary.internalDate ?? Date(), flags: Self.flags(summary.flags))
             guard try await allows(message.storedSize) else { return true }
             // One at a time: each is weighed against the budget by what is stored before it.
             let outcome = try await store.storeSyncedPartials([message], account: account).first ?? nil
@@ -566,6 +549,29 @@ public actor SyncCoordinator {
         return false
     }
 
+    /// A large message without its large attachments (GKM-036): its header, every MIME header
+    /// and the parts at or below `threshold`. Nil when it must be fetched whole: its structure
+    /// is not one a partial copy can be made of, or the server left out sections (no MIME
+    /// headers, say), so the copy would not be faithful.
+    static func partialCopy(of summary: RemoteMessageSummary, structure remote: RemoteBodyPart, threshold: Int,
+                            _ session: any MailboxSession, log: MailLog) async throws -> SyncedPartialMessage? {
+        let structure = part(remote)
+        guard let sections = PartialPlan.sections(of: structure, threshold: threshold) else { return nil }
+        let fetched = try await session.fetchSections(sections, of: summary.id)
+        guard let header = fetched["HEADER"], sections.allSatisfy({ fetched[$0] != nil }),
+              PartialPlan.isConsistent(structure, sections: fetched) else {
+            log.info("sync", "\(summary.id.folder): the server left out sections of a large message; fetching it whole")
+            return nil
+        }
+        var parts = fetched
+        parts["HEADER"] = nil
+        let id = summary.id
+        return SyncedPartialMessage(
+            header: header, structure: structure, sections: parts, size: summary.size ?? 0,
+            remote: RemoteLocation(mailbox: id.folder, uidValidity: id.uidValidity, uid: id.uid),
+            receivedAt: summary.internalDate ?? Date(), flags: flags(summary.flags))
+    }
+
     /// The provider's part tree as the store keeps it.
     static func part(_ remote: RemoteBodyPart) -> MessagePart {
         MessagePart(section: remote.section, mediaType: remote.mediaType, boundary: remote.boundary, encoding: remote.encoding,
@@ -585,7 +591,7 @@ public actor SyncCoordinator {
     }
 
     /// A fetched message as the store takes it.
-    private static func synced(_ message: FetchedMessage) -> SyncedMessage {
+    static func synced(_ message: FetchedMessage) -> SyncedMessage {
         let id = message.summary.id
         return SyncedMessage(eml: message.rawMessage, remote: RemoteLocation(mailbox: id.folder, uidValidity: id.uidValidity, uid: id.uid),
                              receivedAt: message.summary.internalDate ?? Date(), flags: flags(message.summary.flags))

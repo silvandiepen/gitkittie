@@ -12,6 +12,36 @@ public struct FolderListing: Sendable, Hashable {
     }
 }
 
+/// What a search on the provider looks for (GKM-041): mail that is not downloaded, found
+/// where it is. Every condition must hold; an empty list of terms or people adds nothing.
+public struct RemoteSearchCriteria: Sendable, Hashable {
+    /// Each must appear in the subject, the sender or the text (IMAP: `SUBJECT`, `FROM` or
+    /// `TEXT`, which match substrings, ignoring case).
+    public var terms: [String]
+    /// Each must appear in a sender or recipient (IMAP: `FROM`, `TO` or `CC`).
+    public var participants: [String]
+    /// Received on or after the calendar day of this instant (IMAP `SINCE`, the received date by
+    /// day). Callers that need the exact instant compare the summaries' received dates.
+    public var receivedOnOrAfter: Date?
+    /// Received before the calendar day of this instant (IMAP `BEFORE`).
+    public var receivedBefore: Date?
+    public var unreadOnly: Bool
+    public var flaggedOnly: Bool
+
+    public init(terms: [String] = [], participants: [String] = [], receivedOnOrAfter: Date? = nil,
+                receivedBefore: Date? = nil, unreadOnly: Bool = false, flaggedOnly: Bool = false) {
+        self.terms = terms
+        self.participants = participants
+        self.receivedOnOrAfter = receivedOnOrAfter
+        self.receivedBefore = receivedBefore
+        self.unreadOnly = unreadOnly
+        self.flaggedOnly = flaggedOnly
+    }
+
+    /// True when there is no word to look for: such a search would list whole folders.
+    public var hasNoText: Bool { terms.isEmpty && participants.isEmpty }
+}
+
 extension MailProviderError {
     /// True when the connection failed because the server's certificate was not accepted (or
     /// the TLS handshake failed for another reason): not a network outage, and not something a
