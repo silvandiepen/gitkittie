@@ -20,9 +20,23 @@ struct BoardScreen: View {
 
     private var projects: [BoardProject] { model.workspace?.projects ?? [] }
 
+    @State private var isImageDropTargeted = false
+
     var body: some View {
         @Bindable var model = model
         return boardContent
+        // A screenshot (file, the screenshot thumbnail, or image data from another app)
+        // dropped anywhere on the board starts a task with it. A lane takes the drop
+        // itself; anywhere else it goes to the lane a new task starts in.
+        .onDrop(of: [.image, .fileURL], isTargeted: $isImageDropTargeted) { providers in
+            guard model.board != nil, TaskImage.canLoad(from: providers) else { return false }
+            // Should the lane under the pointer not have taken the drop itself, it still goes there.
+            let laneID = ImageDropHover.shared.laneID
+            ImageDropHover.shared.laneID = nil
+            Task { model.startTask(fromImages: await TaskImage.load(from: providers), onLaneID: laneID) }
+            return true
+        }
+        .overlay { boardImageDropTarget }
         .background(Theme.window)
         .inspector(isPresented: Binding(
             get: { model.selectedCard != nil },
@@ -109,6 +123,26 @@ struct BoardScreen: View {
         } else {
             ContentUnavailableView("No board", systemImage: "square.stack.3d.up",
                                    description: Text("This repo has no project boards."))
+        }
+    }
+
+    /// While an image is dragged over the board but not over a lane: the whole board is
+    /// the target, and says where the task will go.
+    @ViewBuilder private var boardImageDropTarget: some View {
+        if isImageDropTargeted, ImageDropHover.shared.laneID == nil, model.board != nil,
+           let lane = model.laneForDroppedImages(onLaneID: nil) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 2, dash: [10, 7]))
+                    .background(Theme.accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                Label("Drop to make a task in \(lane.name)", systemImage: "photo.badge.plus")
+                    .font(.headline)
+                    .padding(.horizontal, 18).padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+            }
+            .padding(10)
+            .allowsHitTesting(false)
+            .transition(.opacity)
         }
     }
 
@@ -357,6 +391,8 @@ private struct LaneColumn: View {
     let column: Column
     let maxHeight: CGFloat
     @State private var isTargeted = false
+    /// What hangs over the lane is an image, not a task: the drop makes a new task.
+    @State private var isImageDrag = false
     /// Where the dragged task would go: the position among the lane's tasks, counted with
     /// the tasks that are on screen.
     @State private var slot: Int?
@@ -466,12 +502,29 @@ private struct LaneColumn: View {
         // The lane the task hovers over leans in a little.
         .scaleEffect(isTargeted ? 1.015 : 1, anchor: .top)
         .animation(.bouncy(duration: 0.3, extraBounce: 0.3), value: isTargeted)
-        .onDrop(of: [.utf8PlainText, .plainText], delegate: LaneDrop(
+        .overlay(alignment: .top) { if isTargeted && isImageDrag { imageDropTarget } }
+        .onDrop(of: LaneDrop.types, delegate: LaneDrop(
             isLane: isLane,
             entered: {
                 isTargeted = true
                 // A tick in the trackpad when the task crosses into a lane.
                 NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            },
+            imagesEntered: {
+                isTargeted = true
+                isImageDrag = true
+                ImageDropHover.shared.laneID = column.lane.id
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            },
+            imagesExited: {
+                isTargeted = false
+                isImageDrag = false
+                if ImageDropHover.shared.laneID == column.lane.id { ImageDropHover.shared.laneID = nil }
+            },
+            droppedImages: { providers in
+                ImageDropHover.shared.laneID = nil
+                let laneID = column.lane.id
+                Task { model.startTask(fromImages: await TaskImage.load(from: providers), onLaneID: laneID) }
             },
             moved: { point in
                 let position = position(at: point)
@@ -485,6 +538,22 @@ private struct LaneColumn: View {
                 isTargeted = false; slot = nil
                 place(id, at: position)
             }))
+    }
+
+    /// Where a dropped image will become a task: under the lane's header, in its colour.
+    private var imageDropTarget: some View {
+        Label("New task from image", systemImage: "photo.badge.plus")
+            .font(.callout.weight(.medium))
+            .foregroundStyle(color)
+            .frame(maxWidth: .infinity)
+            .frame(height: 64)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(color.opacity(0.8), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
+            .padding(.horizontal, 8)
+            .padding(.top, 54)
+            .allowsHitTesting(false)
+            .transition(.scale(scale: 0.8, anchor: .top).combined(with: .opacity))
     }
 
     private var dropSlot: some View {
@@ -530,10 +599,17 @@ private struct CardFrames: PreferenceKey {
 }
 
 /// A lane as the place to drop a task: reports where the pointer is while a task hangs
-/// over it, and which task was let go.
+/// over it, and which task was let go. Images (a screenshot file, the screenshot thumbnail,
+/// image data from another app) are taken too: they make a new task in the lane.
 private struct LaneDrop: DropDelegate {
+    static let types: [UTType] = [.utf8PlainText, .plainText, .image, .fileURL]
+    static let imageTypes: [UTType] = [.image, .fileURL]
+
     let isLane: Bool
     let entered: () -> Void
+    let imagesEntered: () -> Void
+    let imagesExited: () -> Void
+    let droppedImages: ([NSItemProvider]) -> Void
     let moved: (CGPoint) -> Void
     let exited: () -> Void
     let dropped: (String, CGPoint) -> Void
@@ -542,18 +618,31 @@ private struct LaneDrop: DropDelegate {
     /// A drag is only under way while the button is held. The system still reports a
     /// position after the task was let go, which would open a gap for nothing.
     private var isDragging: Bool { NSEvent.pressedMouseButtons & 1 == 1 }
+    /// A task is dragged as its id in plain text; anything holding an image or a file is not a task.
+    private func isImage(_ info: DropInfo) -> Bool { info.hasItemsConforming(to: Self.imageTypes) }
 
     func dropEntered(info: DropInfo) {
         guard isDragging else { return }
+        if isImage(info) { imagesEntered(); return }
         entered(); moved(info.location)
     }
     func dropUpdated(info: DropInfo) -> DropProposal? {
+        if isImage(info) { return DropProposal(operation: .copy) }
         if isDragging { moved(info.location) }
         return DropProposal(operation: .move)
     }
-    func dropExited(info: DropInfo) { exited() }
+    func dropExited(info: DropInfo) {
+        if isImage(info) { imagesExited() } else { exited() }
+    }
 
     func performDrop(info: DropInfo) -> Bool {
+        if isImage(info) {
+            let providers = info.itemProviders(for: Self.imageTypes)
+            imagesExited()
+            guard TaskImage.canLoad(from: providers) else { return false }
+            droppedImages(providers)
+            return true
+        }
         guard let provider = info.itemProviders(for: [.utf8PlainText, .plainText]).first else { exited(); return false }
         let point = info.location
         // Close the gap now, not when the task's id has been read.
@@ -566,6 +655,15 @@ private struct LaneDrop: DropDelegate {
         }
         return true
     }
+}
+
+/// The lane an image hangs over while it is dragged, so the board does not also claim the
+/// drop as its own ("To do") while a lane shows it will take it.
+@MainActor
+@Observable
+final class ImageDropHover {
+    static let shared = ImageDropHover()
+    var laneID: String?
 }
 
 /// Which task was just dropped, so the card that shows up in its new lane can land with
