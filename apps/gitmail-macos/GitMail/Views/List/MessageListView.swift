@@ -14,7 +14,7 @@ struct MessageListView: View {
     private var browser: MailBrowser { model.browser }
 
     private var searchText: Binding<String> {
-        Binding(get: { browser.searchText }, set: { text in Task { await browser.search(text) } })
+        Binding(get: { browser.searchText }, set: { browser.typeSearch($0) })
     }
 
     var body: some View {

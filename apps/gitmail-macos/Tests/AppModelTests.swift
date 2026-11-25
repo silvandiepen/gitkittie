@@ -84,6 +84,24 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(browser.rows.count, 3)
     }
 
+    func testTypingIntoSearchKeepsEveryKeystroke() async throws {
+        try await seed()
+        let model = AppModel(locations: locations)
+        await model.open()
+        await model.select(.allMail)
+        let browser = model.browser
+
+        // A search field writes each keystroke and reads the text straight back.
+        var last: Task<Void, Never>?
+        for prefix in ["r", "re", "rec", "rece", "recei", "receip", "receipt"] {
+            last = browser.typeSearch(prefix) ?? last
+            XCTAssertEqual(browser.searchText, prefix, "the field must read back what was typed")
+        }
+        await last?.value
+        XCTAssertEqual(subjects(browser), ["Old receipt"])
+        XCTAssertNil(browser.typeSearch("receipt"), "the same text runs nothing")
+    }
+
     func testAThreadOpensWithTheNewestExpandedAndOlderOnesOnClick() async throws {
         try await seed()
         let model = AppModel(locations: locations)
