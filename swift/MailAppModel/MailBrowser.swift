@@ -290,6 +290,10 @@ final class MailBrowser {
                 selectedRowID = nil
                 openThread = nil
             }
+            // A row that left the view (trashed, moved, archived) leaves the marks with it, so
+            // the next action never reaches mail no longer shown (GKM-075).
+            let shown = Set(rows.map(\.id))
+            if !markedRowIDs.isSubset(of: shown) { markedRowIDs.formIntersection(shown) }
             updateServerSearch()
         } catch {
             actionError = String(describing: error)
