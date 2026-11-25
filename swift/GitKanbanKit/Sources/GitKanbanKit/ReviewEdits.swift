@@ -153,6 +153,7 @@ private extension Review {
         case .decision(let id, let status, _, let at):
             guard let item = request.items.first(where: { $0.id == id }) else { return .superseded }
             if item.status == status { return .present }
+            if handled(item.handledAt, after: at) { return .superseded }
             if let server = reviewDate(item.decidedAt), server > at { return .superseded }
             return .apply
         case .comment(let id, let by, let text, let image, let at):
@@ -163,6 +164,7 @@ private extension Review {
             let own = other?.trimmingCharacters(in: .whitespacesAndNewlines)
             let wanted = question.options.map(\.id).filter(choices.contains)
             if question.isAnswered, question.answer == wanted, question.answerOther == (own?.isEmpty == true ? nil : own) { return .present }
+            // Once the agent has acted on an answer it is locked (Review.applyAnswer refuses).
             if question.handledAt != nil { return .superseded }
             if let server = reviewDate(question.answeredAt), server > at { return .superseded }
             return .apply
@@ -170,6 +172,16 @@ private extension Review {
             guard let question = request.questions.first(where: { $0.id == id }) else { return .superseded }
             return question.comments.contains { same($0, by: by, text: text, image: nil, at: at) } ? .present : .apply
         }
+    }
+
+    /// Whether the agent acted on this item after the decision was made. A decision made
+    /// after the agent's last action is the reviewer's newer word and still goes in; an older
+    /// one would land on a state the agent has moved on from (an item it put back to pending
+    /// for another look, say). A time that cannot be read counts as after, the safe side.
+    static func handled(_ handledAt: String?, after at: Date) -> Bool {
+        guard let handledAt, !handledAt.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        guard let handled = reviewDate(handledAt) else { return true }
+        return handled > at
     }
 
     /// Whether a comment in the file is this one: same author, text and image, made at the

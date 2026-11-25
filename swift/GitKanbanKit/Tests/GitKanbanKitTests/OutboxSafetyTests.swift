@@ -262,6 +262,33 @@ final class OutboxSafetyTests: XCTestCase {
         XCTAssertEqual(result.items.first { $0.id == "hero-1" }?.comments.map(\.text), ["Brighter, please"])
     }
 
+    /// A decision queued before the agent acted on the item (and put it back to pending)
+    /// is left out; one made after goes in. An answer the agent has handled is locked.
+    func testADecisionOlderThanTheAgentsHandlingIsLeftOutAndANewerOneGoesIn() throws {
+        var server = try Review.applyAnswer(request, questionID: "q-name", choices: ["lobby"], other: nil, by: "sil", at: olderAt)
+        // The agent handled q-name, and put hero-1 back to pending for a second look, on 22 Nov.
+        server = server.replacingOccurrences(of: "  status: pending\n  comments: []",
+                                             with: "  status: pending\n  comments: []\n  handled_at: 2026-11-22T10:00:00Z")
+        let name = server.range(of: "handled_at: null", options: .backwards)!
+        server.replaceSubrange(name, with: "handled_at: 2026-11-22T10:00:00Z")
+        XCTAssertEqual(Review.parse(server, folder: "").items.first?.handledAt, "2026-11-22T10:00:00Z")
+
+        // Queued on 20 Nov, before the agent acted: left out.
+        let stale = try Review.merge(server, edits: [
+            .decision(item: "hero-1", status: .approved, by: "sil", at: olderAt),
+            .answer(question: "q-name", choices: ["foyer"], other: nil, by: "sil", at: queuedAt),
+        ])
+        XCTAssertEqual(Review.parse(stale.text, folder: "").items.first?.status, .pending)
+        XCTAssertEqual(Review.parse(stale.text, folder: "").questions.first { $0.id == "q-name" }?.answer, ["lobby"],
+                       "a handled answer is locked")
+        XCTAssertEqual(stale.superseded.count, 2)
+
+        // Decided on 24 Nov, after the agent's second look: goes in.
+        let fresh = try Review.merge(server, edits: [.decision(item: "hero-1", status: .rejected, by: "sil", at: queuedAt)])
+        XCTAssertEqual(Review.parse(fresh.text, folder: "").items.first?.status, .rejected)
+        XCTAssertEqual(fresh.applied.count, 1)
+    }
+
     func testSeveralQueuedWritesToOneRequestAreFoldedIntoOne() async throws {
         let outbox = outbox()
         let source = source(outbox)
