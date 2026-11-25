@@ -89,14 +89,8 @@ final class MailFlowUITests: XCTestCase {
         XCTAssertTrue(waitFor { rows.count == 1 })
         XCTAssertTrue(app.descendants(matching: .any)["searchChips"].waitForExistence(timeout: 5))
         snapshot("5-search")
-        // iPhone's search field has Cancel; iPad's has only the clear button.
-        let cancel = app.buttons["Cancel"].firstMatch
-        if cancel.exists {
-            cancel.tap()
-        } else {
-            search.buttons["Clear text"].tap()
-        }
-        XCTAssertTrue(waitFor { rows.count >= 3 }, "clearing the search shows the inbox again")
+        endSearch(search)
+        XCTAssertTrue(waitFor { rows.count >= 3 }, "ending the search shows the inbox again")
 
         // Write to yourself and send.
         let compose = app.buttons["composeButton"]
@@ -143,6 +137,25 @@ final class MailFlowUITests: XCTestCase {
         let current = field.value as? String ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
         field.typeText(text)
+    }
+
+    /// Leaves search the way each system offers it: iOS 26 on iPhone has a round Close button
+    /// beside the field, older iPhone systems have Cancel, iPad has only the field's clear
+    /// button. The keyboard has to go too, or it covers the bottom bar's Compose.
+    private func endSearch(_ search: XCUIElement) {
+        let close = app.buttons["Close"].firstMatch
+        let cancel = app.buttons["Cancel"].firstMatch
+        if close.exists {
+            close.tap()
+        } else if cancel.exists {
+            cancel.tap()
+        } else {
+            search.buttons["Clear text"].tap()
+        }
+        if app.keyboards.firstMatch.exists {
+            app.swipeDown()
+        }
+        XCTAssertTrue(waitFor(timeout: 5) { !self.app.keyboards.firstMatch.exists }, "the keyboard stays up after search")
     }
 
     private func chooseTLS() {

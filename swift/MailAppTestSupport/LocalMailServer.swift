@@ -35,10 +35,20 @@ struct LocalMailServer {
         return server
     }
 
+    /// Asks the admin API a few times before deciding: on a busy CI runner the server's JVM
+    /// can take longer than one short request to answer, and a running server read as missing
+    /// fails the test (GKM_REQUIRE_TEST_MAIL_SERVER=1). Gives up after about 20 seconds.
     private func isRunning() async -> Bool {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(apiPort)/api/configuration")!)
-        request.timeoutInterval = 2
-        return (try? await URLSession.shared.data(for: request)).map { ($0.1 as? HTTPURLResponse)?.statusCode == 200 } ?? false
+        request.timeoutInterval = 5
+        for attempt in 0..<4 {
+            if attempt > 0 { try? await Task.sleep(for: .seconds(1)) }
+            if let (_, response) = try? await URLSession.shared.data(for: request),
+               (response as? HTTPURLResponse)?.statusCode == 200 {
+                return true
+            }
+        }
+        return false
     }
 
     /// A fresh synthetic account on example.com.
