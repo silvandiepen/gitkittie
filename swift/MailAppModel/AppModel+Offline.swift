@@ -104,3 +104,27 @@ extension AppModel {
         }
     }
 }
+
+// MARK: History window (GKM-060, MAIL-072)
+
+extension AppModel {
+    /// How far back each folder's history is downloaded, in days; nil downloads all of it.
+    var historyDays: Int? { sync.services.syncOptions.historyDays }
+
+    /// Messages at the providers older than the window and not downloaded, over every account.
+    var olderNotDownloaded: Int { sync.progress.values.reduce(0) { $0 + $1.olderNotDownloaded } }
+
+    /// Saves a new window and restarts the syncs with it: a running sync keeps the options it
+    /// started with. Widening it (or nil) downloads the older mail newest first, without
+    /// duplicates; narrowing it never deletes mail already downloaded.
+    func setHistoryDays(_ days: Int?) async {
+        sync.services.defaults.set(days ?? 0, forKey: AccountServices.historyDaysKey)
+        guard days != historyDays else { return }
+        sync.services.syncOptions.historyDays = days
+        guard let store = mailStore else { return }
+        await sync.stopAll()
+        await sync.start(accounts, store: store)
+        await registerForSending(accounts)
+    }
+}
+

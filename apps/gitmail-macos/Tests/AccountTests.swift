@@ -153,6 +153,24 @@ final class AccountTests: XCTestCase {
         XCTAssertEqual(model.syncStatus(account.id), "Password needed")
     }
 
+    /// The Mac's history window (GKM-060): saved, applied to the next sync, 0 or unset is all.
+    func testTheHistoryWindowIsSavedAndAppliedToTheSync() async throws {
+        XCTAssertNil(AccountServices.historyDays(in: defaults), "unset downloads all of it")
+        let model = AppModel(locations: locations, services: services(trust: .system))
+        await model.open()
+        XCTAssertNil(model.historyDays)
+
+        await model.setHistoryDays(90)
+        XCTAssertEqual(model.historyDays, 90)
+        XCTAssertEqual(model.sync.services.syncOptions.historyDays, 90)
+        XCTAssertEqual(AccountServices.historyDays(in: defaults), 90)
+
+        await model.setHistoryDays(nil)
+        XCTAssertNil(model.historyDays)
+        XCTAssertNil(AccountServices.historyDays(in: defaults), "0 is stored for all of it")
+        XCTAssertEqual(model.olderNotDownloaded, 0)
+    }
+
     // MARK: - With the local test server
 
     func testAddingAnAccountVerifiesKeepsThePasswordOnlyInTheKeychainAndSyncs() async throws {
