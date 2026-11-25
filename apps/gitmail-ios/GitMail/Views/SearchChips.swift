@@ -12,6 +12,16 @@ struct SearchChips: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                // "See All Mail from…" (GKM-071): exactly this address; tapping it goes back.
+                if let sender = filters.sender {
+                    Button { Task { await model.leaveSenderView() } } label: {
+                        Chip(title: "From \(SenderText.name(sender))", systemImage: "xmark.circle.fill", isOn: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("From \(sender.address)")
+                    .accessibilityHint("Shows all mail again")
+                    .accessibilityIdentifier("senderChip")
+                }
                 toggle("Unread", systemImage: "envelope.badge", isOn: filters.unreadOnly) { $0.unreadOnly.toggle() }
                 toggle("Flagged", systemImage: "flag", isOn: filters.flaggedOnly) { $0.flaggedOnly.toggle() }
                 toggle("Attachments", systemImage: "paperclip", isOn: filters.hasAttachment) { $0.hasAttachment.toggle() }

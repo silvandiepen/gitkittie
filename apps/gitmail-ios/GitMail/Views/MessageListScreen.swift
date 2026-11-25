@@ -6,11 +6,15 @@ import SwiftUI
 /// The conversations of the selected mailbox, newest first; while searching, the matching
 /// messages, narrowed by the chips. Swipe right to mark read or unread; swipe left to archive
 /// (all the way), trash or flag. Every action goes through the account's action journal and
-/// can be undone (GKM-015).
+/// can be undone (GKM-015). Select (Edit mode) picks several, Select All every row of the view,
+/// and the bottom bar acts on all of them at once (GKM-071).
 struct MessageListScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(MobileSession.self) private var session
     @Environment(MailRouter.self) private var router
+    @State private var editMode = EditMode.inactive
+
+    private var isEditing: Bool { editMode.isEditing }
 
     private var browser: MailBrowser { model.browser }
 
@@ -18,8 +22,19 @@ struct MessageListScreen: View {
         Binding(get: { browser.searchText }, set: { browser.typeSearch($0) })
     }
 
-    private var selection: Binding<String?> {
-        Binding(get: { browser.selectedRowID }, set: { id in Task { await browser.select(id) } })
+    /// One row opens it; in Edit mode the rows are ticked, and ticks may include rows not
+    /// loaded yet (Select All takes the whole view by id).
+    private var selection: Binding<Set<String>> {
+        Binding(get: {
+            isEditing ? browser.markedRowIDs : Set([browser.selectedRowID].compactMap { $0 })
+        }, set: { ids in
+            if isEditing {
+                browser.markedRowIDs = ids
+            } else {
+                let id = ids.first { $0 != browser.selectedRowID } ?? ids.first
+                Task { await browser.select(id) }
+            }
+        })
     }
 
     var body: some View {
@@ -37,7 +52,7 @@ struct MessageListScreen: View {
                            isPending: model.sync.replay[row.latest.account]?.status.pendingMessages.contains(row.latest.id) == true,
                            deletedAtProvider: ProviderDeletionText.short(row.latest, account: model.account(of: row.latest)))
                     .tag(row.id)
-                    .listRowBackground(row.id == browser.selectedRowID ? Theme.accent.opacity(0.22) : Theme.window)
+                    .listRowBackground(!isEditing && row.id == browser.selectedRowID ? Theme.accent.opacity(0.22) : Theme.window)
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
                         Button { act(row.isUnread ? .markRead : .markUnread, row) } label: {
                             Label(row.isUnread ? "Read" : "Unread", systemImage: row.isUnread ? "envelope.open" : "envelope.badge")
@@ -48,7 +63,7 @@ struct MessageListScreen: View {
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         if model.actions.isTrash(browser.scope) {
                             Button(role: .destructive) {
-                                Task { await model.actions.requestDeletion(threads: [row.threadID], in: browser.scope) }
+                                Task { await model.actions.requestDeletion(browser.targets(actingOn: row.id), in: browser.scope) }
                             } label: { Label("Delete", systemImage: "trash.slash") }
                         } else {
                             Button { act(.archive, row) } label: { Label("Archive", systemImage: "archivebox") }
@@ -61,7 +76,7 @@ struct MessageListScreen: View {
                         .tint(.orange)
                         .accessibilityIdentifier("swipeFlag")
                     }
-                    .contextMenu { RowMenu(row: row) }
+                    .contextMenu { if !isEditing { RowMenu(row: row) } }
                     .onAppear {
                         if row.id == browser.rows.last?.id { Task { await browser.loadMore() } }
                     }
@@ -77,20 +92,58 @@ struct MessageListScreen: View {
         .navigationBarTitleDisplayMode(.large)
         .searchable(text: searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search mail")
         .refreshable { await session.refreshNow() }
+        .environment(\.editMode, $editMode)
+        .onChange(of: editMode) { _, mode in if !mode.isEditing { browser.clearMarks() } }
+        // A new view, search or chip ends the selection; so does an action that moved it away.
+        .onChange(of: browser.listIdentity) { editMode = .inactive }
         .toolbar {
-            // An empty status would still draw an empty bubble beside Compose, so it only joins
-            // the bar when it has something to say.
-            if !StatusLine.text(model: model, session: session).isEmpty {
-                ToolbarItem(placement: .bottomBar) { StatusLine() }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(isEditing ? "Done" : "Select") {
+                    withAnimation { editMode = isEditing ? .inactive : .active }
+                }
+                .disabled(!isEditing && browser.rows.isEmpty)
+                .accessibilityIdentifier("selectButton")
             }
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    Task { router.compose(await model.composeNew()) }
-                } label: { Image(systemName: "square.and.pencil") }
-                .disabled(model.accounts.allSatisfy { $0.connection == nil })
-                .accessibilityLabel("New Message")
-                .accessibilityIdentifier("composeButton")
+            if isEditing {
+                ToolbarItem(placement: .topBarLeading) {
+                    if browser.markedRowIDs.isEmpty {
+                        Button("Select All") { Task { await browser.selectAll() } }
+                            .accessibilityIdentifier("selectAllButton")
+                    } else {
+                        Button("Deselect All") { browser.clearMarks() }
+                            .accessibilityIdentifier("deselectAllButton")
+                    }
+                }
+                ToolbarItemGroup(placement: .bottomBar) {
+                    SelectionBar { editMode = .inactive }
+                }
+            } else {
+                // An empty status would still draw an empty bubble beside Compose, so it only joins
+                // the bar when it has something to say.
+                if !StatusLine.text(model: model, session: session).isEmpty {
+                    ToolbarItem(placement: .bottomBar) { StatusLine() }
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Button {
+                        Task { router.compose(await model.composeNew()) }
+                    } label: { Image(systemName: "square.and.pencil") }
+                    .disabled(model.accounts.allSatisfy { $0.connection == nil })
+                    .accessibilityLabel("New Message")
+                    .accessibilityIdentifier("composeButton")
+                }
             }
+        }
+        .confirmationDialog(model.actions.trashToConfirm?.question ?? "", isPresented: trashShown, titleVisibility: .visible,
+                            presenting: model.actions.trashToConfirm) { _ in
+            Button("Move to Trash", role: .destructive) {
+                Task {
+                    await model.actions.confirmTrash()
+                    editMode = .inactive
+                }
+            }
+            .accessibilityIdentifier("confirmTrashButton")
+        } message: { _ in
+            Text("Undo puts them all back.")
         }
         .confirmationDialog("Delete permanently?", isPresented: deletionShown, titleVisibility: .visible,
                             presenting: model.actions.deletionToConfirm) { request in
@@ -118,12 +171,23 @@ struct MessageListScreen: View {
         }
     }
 
+    private var trashShown: Binding<Bool> {
+        Binding(get: { model.actions.trashToConfirm != nil }, set: { if !$0 { model.actions.trashToConfirm = nil } })
+    }
+
     private var deletionShown: Binding<Bool> {
         Binding(get: { model.actions.deletionToConfirm != nil }, set: { if !$0 { model.actions.deletionToConfirm = nil } })
     }
 
     private func act(_ action: MessageAction, _ row: ListRow) {
-        Task { await model.actions.perform(action, threads: [row.threadID], in: browser.scope) }
+        let targets = browser.targets(actingOn: row.id)
+        Task {
+            if action == .moveToTrash {
+                await model.actions.trash(targets, in: browser.scope)
+            } else {
+                await model.actions.perform(action, targets: targets, in: browser.scope)
+            }
+        }
     }
 
     private var title: String {
@@ -166,6 +230,12 @@ private struct RowMenu: View {
 
     var body: some View {
         let scope = model.browser.scope
+        if let sender = row.latest.from, !sender.address.isEmpty {
+            Button("See All Mail from \(SenderText.name(sender))", systemImage: "person.crop.circle") {
+                Task { await model.showAllMail(from: sender) }
+            }
+            Divider()
+        }
         Button(row.isUnread ? "Mark as Read" : "Mark as Unread", systemImage: row.isUnread ? "envelope.open" : "envelope.badge") {
             perform(row.isUnread ? .markRead : .markUnread)
         }
@@ -196,15 +266,92 @@ private struct RowMenu: View {
         Divider()
         if model.actions.isTrash(scope) {
             Button("Delete Permanently…", systemImage: "trash.slash", role: .destructive) {
-                Task { await model.actions.requestDeletion(threads: [row.threadID], in: scope) }
+                Task { await model.actions.requestDeletion(model.browser.targets(actingOn: row.id), in: scope) }
             }
         } else {
-            Button("Move to Trash", systemImage: "trash", role: .destructive) { perform(.moveToTrash) }
+            Button("Move to Trash", systemImage: "trash", role: .destructive) {
+                Task { await model.actions.trash(model.browser.targets(actingOn: row.id), in: scope) }
+            }
         }
     }
 
     private func perform(_ action: MessageAction) {
-        Task { await model.actions.perform(action, threads: [row.threadID], in: model.browser.scope) }
+        Task { await model.actions.perform(action, targets: model.browser.targets(actingOn: row.id), in: model.browser.scope) }
+    }
+}
+
+/// The bottom bar in Edit mode: what is selected and what can be done to all of it at once, in
+/// one step and one Undo (GKM-071). `done` leaves Edit mode after the rows moved away.
+private struct SelectionBar: View {
+    @Environment(AppModel.self) private var model
+    let done: () -> Void
+
+    var body: some View {
+        let browser = model.browser
+        let targets = browser.targets(actingOn: nil)
+        let scope = browser.scope
+        let none = targets.isEmpty
+        Menu {
+            Button("Mark as Read", systemImage: "envelope.open") { act(.markRead) }
+            Button("Mark as Unread", systemImage: "envelope.badge") { act(.markUnread) }
+            Button("Flag", systemImage: "flag") { act(.flag) }
+            Button("Unflag", systemImage: "flag.slash") { act(.unflag) }
+        } label: {
+            Label("Mark", systemImage: "envelope.badge")
+        }
+        .disabled(none)
+        .accessibilityIdentifier("selectionMark")
+        Menu {
+            ForEach(moveAccounts(targets), id: \.self) { account in
+                Section(model.accounts.first { $0.id == account }?.displayName ?? account.rawValue) {
+                    ForEach(model.actions.moveTargets(account: account), id: \.self) { folder in
+                        Button(folder.role == "inbox" ? "Inbox" : folder.path.joined(separator: " / ")) {
+                            act(.move(to: folder.name, account: account))
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label("Move", systemImage: "folder")
+        }
+        .disabled(none)
+        Spacer()
+        Text(none ? "Select messages" : browser.selectionTitle)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize()
+            .accessibilityIdentifier("selectionCount")
+        Spacer()
+        Button { act(.archive) } label: { Label("Archive", systemImage: "archivebox") }
+            .disabled(none || model.actions.isTrash(scope))
+            .accessibilityIdentifier("selectionArchive")
+        Button(role: .destructive) {
+            Task {
+                await model.actions.trash(targets, in: scope)
+                if model.actions.trashToConfirm == nil, model.actions.deletionToConfirm == nil { done() }
+            }
+        } label: {
+            Label(model.actions.isTrash(scope) ? "Delete" : "Trash", systemImage: "trash")
+        }
+        .disabled(none)
+        .accessibilityIdentifier("selectionTrash")
+    }
+
+    /// The accounts whose folders a selection can move to: those of the loaded rows, or every
+    /// account while some ticked rows are not loaded.
+    private func moveAccounts(_ targets: ActionTargets) -> [MailAccountID] {
+        let loaded = model.browser.loadedRows(of: targets)
+        let accounts = loaded.count == targets.count ? Set(loaded.map(\.latest.account)) : Set(model.accounts.map(\.id))
+        return accounts.filter { !model.actions.moveTargets(account: $0).isEmpty }.sorted { $0.rawValue < $1.rawValue }
+    }
+
+    private func act(_ action: MessageAction) {
+        let targets = model.browser.targets(actingOn: nil)
+        let scope = model.browser.scope
+        Task {
+            await model.actions.perform(action, targets: targets, in: scope)
+            if action.changesLocation { done() }
+        }
     }
 }
 
