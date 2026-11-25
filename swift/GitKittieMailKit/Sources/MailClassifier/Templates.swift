@@ -101,7 +101,42 @@ enum Templates {
     /// Provider folder and label names for junk (`\\Junk` is the IMAP special-use attribute).
     static let junkLabels: Set<String> = ["junk", "spam", "\\junk", "junk e-mail", "junk email", "bulk mail", "ongewenst", "spam-verdacht"]
 
-    static func firstMatch(_ terms: [String], in text: String) -> String? {
+    static func firstMatch(_ terms: [String], in text: TemplateText) -> String? {
         terms.first { text.contains($0) }
     }
+}
+
+/// A lower-cased subject or body searched for template terms (GKM-040). It answers exactly as
+/// `String.contains` does (Characters, canonical equivalence: that is the rule set's meaning of
+/// "contains"), but says no without walking the text Character by Character, which cost more
+/// than the rest of classification together on a long body.
+///
+/// The quick no: when a term matches, the matched Characters are canonically equivalent to the
+/// term's, so their canonical decomposition (NFD) is the term's NFD, byte for byte. NFD works
+/// one scalar at a time and reorders only runs of combining marks, which never cross a Character
+/// boundary, so the text's NFD contains that region's NFD unchanged. If the text's NFD bytes do
+/// not contain the term's, there is no match. If they do, `String.contains` decides, so a
+/// match is never claimed on bytes alone. ASCII is its own NFD, so mail in plain ASCII is
+/// searched as bytes without normalising anything.
+struct TemplateText {
+    let text: String
+    private let decomposed: [UInt8]
+
+    init(_ text: String) {
+        self.text = text
+        decomposed = Self.isASCII(text) ? Array(text.utf8) : Array(text.decomposedStringWithCanonicalMapping.utf8)
+    }
+
+    func contains(_ term: String) -> Bool {
+        let needle = Self.isASCII(term) ? Array(term.utf8) : Array(term.decomposedStringWithCanonicalMapping.utf8)
+        guard !needle.isEmpty else { return text.contains(term) }
+        let found = decomposed.withUnsafeBytes { haystack in
+            needle.withUnsafeBytes { needle in
+                memmem(haystack.baseAddress, haystack.count, needle.baseAddress, needle.count) != nil
+            }
+        }
+        return found && text.contains(term)
+    }
+
+    private static func isASCII(_ text: String) -> Bool { text.utf8.allSatisfy { $0 < 0x80 } }
 }
