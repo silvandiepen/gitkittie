@@ -28,7 +28,7 @@ final class NewBoardTests: XCTestCase {
         let suite = "gk-newboard-tests-\(UUID().uuidString)"
         defer {
             try? FileManager.default.removeItem(at: root)
-            UserDefaults().removePersistentDomain(forName: suite)
+            AppModel.removeTestStorage(suite)
         }
         func write(_ path: String, _ text: String) throws {
             let url = root.appendingPathComponent(path)
@@ -42,7 +42,7 @@ final class NewBoardTests: XCTestCase {
         let repo = AddedRepo(namespace: "folder", name: "Projects", branch: "", isPrivate: true,
                              boards: [SelectedBoard(folder: "Tasks/Pets", name: "Pets")],
                              kind: .localFolder(path: root.path, bookmark: nil))
-        let model = AppModel(appGroup: suite, keychainService: "gk-newboard-tests", migratesLegacyStorage: false)
+        let model = AppModel.testing(suite: suite, keychainService: "gk-newboard-tests")
         model.addedRepos = [repo]
 
         await model.refreshBoardSuggestions()
@@ -67,7 +67,7 @@ final class NewBoardTests: XCTestCase {
         let suite = "gk-newboard-tests-\(UUID().uuidString)"
         defer {
             try? FileManager.default.removeItem(at: root)
-            UserDefaults().removePersistentDomain(forName: suite)
+            AppModel.removeTestStorage(suite)
         }
         func make(_ board: String) throws {
             let lane = root.appendingPathComponent("\(board)/1. To do")
@@ -79,7 +79,7 @@ final class NewBoardTests: XCTestCase {
         let repo = AddedRepo(namespace: "folder", name: "Projects", branch: "", isPrivate: true,
                              boards: [SelectedBoard(folder: "Pets", name: "Pets")],
                              kind: .localFolder(path: root.path, bookmark: nil))
-        let model = AppModel(appGroup: suite, keychainService: "gk-newboard-tests", migratesLegacyStorage: false)
+        let model = AppModel.testing(suite: suite, keychainService: "gk-newboard-tests")
         model.addedRepos = [repo]
         await model.refreshBoardSuggestions()
         try make("Dogs")

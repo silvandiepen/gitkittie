@@ -51,7 +51,7 @@ final class ImageTaskTests: XCTestCase {
 
     override func tearDown() async throws {
         try? FileManager.default.removeItem(at: root)
-        UserDefaults().removePersistentDomain(forName: suite)
+        AppModel.removeTestStorage(suite)
     }
 
     private func write(_ path: String, _ text: String) throws {
@@ -61,7 +61,7 @@ final class ImageTaskTests: XCTestCase {
     }
 
     private func openBoard() async throws -> AppModel {
-        let app = AppModel(appGroup: suite, keychainService: "gk-image-task-tests", migratesLegacyStorage: false)
+        let app = AppModel.testing(suite: suite, keychainService: "gk-image-task-tests")
         let repo = AddedRepo(namespace: "folder", name: "Projects", branch: "", isPrivate: true,
                              boards: [SelectedBoard(folder: "Tasks/Morrow", name: "Morrow")],
                              kind: .localFolder(path: root.path, bookmark: nil))

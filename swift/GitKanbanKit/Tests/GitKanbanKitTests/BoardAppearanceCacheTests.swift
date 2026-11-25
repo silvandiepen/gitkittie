@@ -20,7 +20,7 @@ final class BoardAppearanceCacheTests: XCTestCase {
 
     override func tearDown() async throws {
         try? FileManager.default.removeItem(at: root)
-        UserDefaults().removePersistentDomain(forName: suite)
+        AppModel.removeTestStorage(suite)
     }
 
     private func write(_ path: String, _ text: String) throws {
@@ -32,7 +32,7 @@ final class BoardAppearanceCacheTests: XCTestCase {
     private func model(board: SelectedBoard) -> (AppModel, AddedRepo) {
         let repo = AddedRepo(namespace: "folder", name: "Projects", branch: "", isPrivate: true,
                              boards: [board], kind: .localFolder(path: root.path, bookmark: nil))
-        let model = AppModel(appGroup: suite, keychainService: "gk-look-tests", migratesLegacyStorage: false)
+        let model = AppModel.testing(suite: suite, keychainService: "gk-look-tests")
         model.addedRepos = [repo]
         return (model, repo)
     }
