@@ -26,12 +26,25 @@ struct AccountServices {
         if let threshold = UserDefaults.standard.object(forKey: "onDemandThresholdBytes") as? Int {
             options.onDemandThreshold = threshold > 0 ? threshold : nil
         }
+        // How far back a folder's history goes (MAIL-072): the Mac's Offline Storage window
+        // sets it; absent or 0 is all of it. The iPhone app sets its own from its budget.
+        options.historyDays = AccountServices.historyDays(in: .standard)
         return AccountServices(
             credentials: KeychainCredentialStore(),
             connections: AccountConnections(),
             verifier: AccountVerifier(),
             syncOptions: options,
             defaults: .standard)
+    }
+}
+
+extension AccountServices {
+    static let historyDaysKey = "historyDays"
+
+    /// The history window saved in `defaults`; nil (no window) when unset or 0.
+    static func historyDays(in defaults: UserDefaults) -> Int? {
+        let days = defaults.integer(forKey: historyDaysKey)
+        return days > 0 ? days : nil
     }
 }
 
