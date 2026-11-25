@@ -21,6 +21,12 @@ the index level (`SearchBenchmarkTests`); this is the sync end to end: IMAP → 
   50,000 in about 9 minutes on loopback; classification costs about 10 ms of CPU per message and
   dominates. History slices cut IMAP commands at 50,000 from 9,909 to 3,710 and disk writes from
   26 to 15 GB. See [GKM-036 and GKM-038](#gkm-036-and-gkm-038-re-measured-with-classification-2026-11-25).
+- **GKM-040: flat again, and classification about eight times cheaper.** One query per arriving
+  message read every stored verdict (the next arrival number), so the store slowed with every
+  message; classification walked each body Character by Character for some 40 template terms.
+  Storing 50,000 messages (classification included) now takes 2.1–2.5 ms of CPU per message in
+  every tenth, against 6.2 rising to 13.5 ms: **143 s instead of 648 s**. See
+  [GKM-040](#gkm-040-a-flat-rate-and-cheaper-classification-2026-11-25).
 - **50,000:** see [50,000 messages](#50000-messages).
 
 ## How it was measured
@@ -237,7 +243,7 @@ What this says:
   sync of 10,000 messages takes about 2 minutes, 50,000 about 9 minutes**, before network time.
 - **It still slows as the mailbox grows**: at 50,000 the rate falls from 176 to 57 messages/s in
   both modes, while storing alone was flat (above). Something per message grows with the
-  number already stored; the CPU is in the client, not the server. Not found yet: GKM-040.
+  number already stored; the CPU is in the client, not the server. Found and fixed in GKM-040 (below).
 - **Partial messages** (1–3 MB attachments, 0.1 % of the mix) kept 91 MB of attachments out of
   the mail folder at 10,000; the first sync's numbers are otherwise unaffected, as intended.
 
@@ -248,14 +254,76 @@ Run it yourself (each again with `GKM_SYNC_BENCHMARK_LEGACY=1`, and with `GKM_SY
     GKM_SYNC_BENCHMARK=1 GKM_SYNC_BENCHMARK_MESSAGES=50000 GKM_SYNC_BENCHMARK_BODY_SCALE=0.4 \
       GKM_SYNC_BENCHMARK_ATTACHMENTS=0.25 swift test -c release -Xswiftc -enable-testing --filter SyncBenchmarkTests
 
+## GKM-040: a flat rate and cheaper classification (2026-11-25)
+
+**The falling rate.** Profiled with `sample` while storing 50,000 messages: early in the run
+`MailIndex.saveVerdict` had 1,836 samples, late in the run 5,901, nearly all in SQLite's
+`sqlite3BtreeNext` and page reads. Every arriving message is numbered after the newest arrival
+(`SELECT COALESCE(MAX(arrival), 0) + 1 FROM message_classes`). The arrival index is partial
+(`WHERE arrival IS NOT NULL`), and SQLite uses a partial index only when the query says the same,
+so this read every verdict, JSON included, for every message: quadratic in the mailbox, and the
+reason the rate fell from 176 to 57 messages/s in both sync modes. It now says
+`WHERE arrival IS NOT NULL` (`MailIndex.latestArrivalSQL`, same result: `MAX` ignores NULLs) and
+reads one index entry; `IndexQueryPlanTests` pins the plan, as GKM-035 did for the other
+per-message lookups. Nothing else in the profile grew with the mailbox.
+
+**The cost of classification.** In the same profile classification was about 75 % of the store's
+time, and 89 % of the classifier was two things: `Templates.firstMatch` and the spam phrases,
+`String.contains` for each of some 40 terms over the lower-cased body, walking it Character by
+Character. `TemplateText` (MAIL-071) searches the canonically decomposed UTF-8 bytes once per
+term with `memmem` and asks `String.contains` only when the bytes are there, so a term is "in" the
+text exactly when it was before; `TemplateTextTests` compares both on every term against text in
+the other normal form, with combining marks after a term, in Japanese and Greek. Classification
+went from about 75 % to about 24 % of the store's time; the classifier itself from about 3.5 ms
+to about 0.45 ms a message (its share of the samples times the CPU per message). The classifier tests, the fixture corpus
+and the store's classification tests pass unchanged.
+
+**The snippet.** The list's 200-character snippet collapsed the whitespace of the whole body
+first (7 % of storing after the two fixes above); `IndexRecord.snippet(of:)` stops after 200
+Characters with the same result (`SnippetTests` compares it with the old expression).
+
+### Measured: the store alone
+
+`StoreBenchmarkTests` (GitKittieMailProviders, MailIntegrationTests) stores the sync benchmark's
+synthetic mailbox straight into a fresh store with `storeSynced`, in batches of 100 as the sync
+does, classification included, and no server: what the client does per message, without
+GreenMail's cost or noise. 50,000 messages, the reduced mix (`BODY_SCALE=0.4`,
+`ATTACHMENTS=0.25`, 578 MB), same build settings, same Mac on the same morning:
+
+| 50,000 messages, store only | `main` (cfb5429) | GKM-040 |
+| --- | ---: | ---: |
+| Stored in | 647.7 s (77/s) | **142.5 s (351/s)** |
+| CPU | 513.5 s | **114.4 s** |
+| CPU ms per message, by tenth | 6.20 6.72 7.40 9.53 9.54 10.66 12.31 12.55 14.30 13.46 | **2.13 2.14 2.23 2.45 2.35 2.36 2.24 2.37 2.46 2.15** |
+| Messages/s by tenth | 72 129 115 74 96 83 65 68 55 67 | 432 377 393 301 365 339 338 315 307 385 |
+
+CPU per message is the number to read: the Mac was shared with simulators and other builds (load
+averages of 10 to 20), which moves the wall-clock rates by a quarter either way. Without the
+snippet change (arrival index and `TemplateText` only) the same run took 130.6 s of CPU.
+
+    GKM_STORE_BENCHMARK=1 GKM_STORE_BENCHMARK_MESSAGES=50000 GKM_SYNC_BENCHMARK_BODY_SCALE=0.4 \
+      GKM_SYNC_BENCHMARK_ATTACHMENTS=0.25 swift test -c release -Xswiftc -enable-testing --filter StoreBenchmarkTests
+
+### The sync benchmark
+
+The end-to-end run (50,000, reduced mix, current mode) passed: every message stored once,
+3,894 IMAP commands, 14.9 GB written, 35 partial messages, the same as before. Its times say
+nothing: it ran while the Mac's load average was 100 to 200 (simulator UI tests and photo analysis
+filled the disk queue), so it took 6,020 s and even the pass with nothing changed took 7.4 s
+against 4.4 s. The client's CPU, less disturbed by waiting, fell from 467.5 s to 312.6 s; part of
+what remains is TLS and IMAP, part is CPU time inflated by the contention (the store alone needs
+114 s). A run on a quiet machine is in "What is left".
+
 ## What is left
 
-- **Classification cost and the falling rate (GKM-040).** About 10 ms of client CPU per message,
-  and at 50,000 the rate falls from 176 to 57 messages/s: something per message grows with the
-  mailbox. Profile the store with classification on (sender/correspondent statistics and the
-  per-batch classification transaction are the first suspects) and make it flat again.
-- **Overlap on loopback.** Fetch and store overlap (MAIL-066), but while classification makes the
-  store the bottleneck it gains only on a slow link (12 % at 50 ms).
+- **The sync benchmark on a quiet machine (GKM-040).** The GKM-040 fixes were measured with the
+  store benchmark; the end-to-end run of 50,000 could only be made while the Mac was overloaded
+  (see GKM-040). Run it again, legacy and current, on a quiet machine.
+- **Overlap on loopback.** Fetch and store overlap (MAIL-066). Now that classification no longer
+  makes the store the bottleneck, measure again how much it gains on loopback.
+- **Classification's regular expressions.** What is left of classification is mostly
+  `NSRegularExpression` over the body (links, hosts, money, order numbers): about 0.25 ms a
+  message. Cheaper only with care, since the patterns are case-insensitive and part of the rule set.
 - **CONDSTORE in the benchmark.** GreenMail has none; run the benchmark against a server with it
   (or iCloud, GKM-004) to measure the flag passes as they will be.
 - **Write amplification.** 15 GB is written for about 1.4 GB stored at 50,000: every file is
