@@ -188,6 +188,17 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
         return query
     }
 
+    /// The words and "quoted phrases" of `text` as a provider search takes them (GKM-041): each
+    /// word as local search splits it (letters and digits), each phrase as its words with
+    /// single spaces. Local search matches word prefixes; a provider matches substrings.
+    public static func searchTerms(_ text: String) -> [String] {
+        tokens(text).flatMap { token -> [String] in
+            let words = token.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+            guard !words.isEmpty else { return [] }
+            return token.hasPrefix("\"") ? [words.joined(separator: " ")] : words
+        }
+    }
+
     /// Whitespace-separated tokens; a "quoted phrase" (also after `key:`) stays one token.
     static func tokens(_ input: String) -> [String] {
         var tokens: [String] = []

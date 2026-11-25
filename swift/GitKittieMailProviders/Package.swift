@@ -100,6 +100,7 @@ let package = Package(
             dependencies: [
                 "MailProvider",
                 .product(name: "MailCore", package: "GitKittieMailKit"),
+                .product(name: "MailMIME", package: "GitKittieMailKit"),
                 .product(name: "MailStore", package: "GitKittieMailKit"),
             ],
             swiftSettings: protocolSettings
@@ -128,6 +129,7 @@ let package = Package(
             name: "MailIMAPTests",
             dependencies: [
                 "MailIMAP", "MailProvider", .product(name: "NIOIMAP", package: "swift-nio-imap"),
+                .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOEmbedded", package: "swift-nio"),
             ],
             swiftSettings: protocolSettings

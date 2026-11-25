@@ -1,5 +1,6 @@
 import Foundation
 import MailProvider
+import NIOCore
 import NIOIMAP
 import XCTest
 @testable import MailIMAP
@@ -36,6 +37,26 @@ final class IMAPMappingTests: XCTestCase {
         XCTAssertEqual(folder.id, "Projects/Caf&AOk-")
         XCTAssertEqual(folder.path, ["Projects", "Café"])
         XCTAssertTrue(folder.isSelectable)
+    }
+
+    func testServerSearchKeyNeedsEveryWordAndPersonAndNeverListsEverything() {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let day = utc.date(from: DateComponents(year: 2026, month: 3, day: 4, hour: 23))!
+        let key = IMAPSession.searchKey(RemoteSearchCriteria(terms: ["invoice", "march"], participants: ["grace"],
+                                                             receivedOnOrAfter: day, unreadOnly: true))
+        guard case .and(let keys) = key else { return XCTFail("\(key)") }
+        XCTAssertEqual(keys.count, 5)
+        let text = ByteBuffer(string: "invoice")
+        XCTAssertEqual(keys[0], .or(.subject(text), .or(.from(text), .text(text))))
+        let person = ByteBuffer(string: "grace")
+        XCTAssertEqual(keys[2], .or(.or(.from(person), .header("From", person)),
+                                    .or(.or(.to(person), .header("To", person)), .or(.cc(person), .header("Cc", person)))))
+        XCTAssertEqual(keys[3], .since(IMAPCalendarDay(year: 2026, month: 3, day: 4)!), "the UTC day")
+        XCTAssertEqual(keys[4], .unseen)
+        XCTAssertEqual(IMAPSession.searchKey(RemoteSearchCriteria(terms: ["one"])),
+                       .or(.subject(ByteBuffer(string: "one")), .or(.from(ByteBuffer(string: "one")), .text(ByteBuffer(string: "one")))))
+        XCTAssertTrue(RemoteSearchCriteria(unreadOnly: true).hasNoText, "a search without words is not sent")
     }
 
     func testIMAPRefusesSTARTTLSAndRemotePlaintext() async {
