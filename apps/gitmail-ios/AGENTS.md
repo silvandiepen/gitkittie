@@ -14,7 +14,7 @@ MAIL-050..053, MAIL-067..070 and MAIL-072, ThreatModel.md) first. Follow the roo
   `StorageBudget` / `DeviceCache` (MAIL-068; the 30-day history window, MAIL-072), `MailFolderCheck` (Files changed the folder).
 - `GitMail/Views` — SwiftUI: `RootView` (three-column split view), `MailboxesView`,
   `MessageListScreen` + `SearchChips`, `Reader/` (the safe reader: `MailReaderWeb`, link sheet),
-  `Compose/` (compose, drafts, outbox), `Accounts/`, `Settings/`.
+  `Compose/` (compose, drafts, outbox), `Accounts/`, `Settings/` (with `NotificationsScreen`: account, space and list levels, MAIL-085). Tapping a notification opens its conversation (`AppModel.openFromNotification`, MAIL-086; `RootView` pushes the reader).
 - `Tests` — hosted in the app (the Keychain test needs its entitlement); `UITests` — the flow
   against the local test server, with screenshots.
 
