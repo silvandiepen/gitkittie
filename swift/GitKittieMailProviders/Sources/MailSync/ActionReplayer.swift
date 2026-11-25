@@ -34,6 +34,10 @@ public struct ReplayReport: Sendable, Equatable {
     public var refused = 0
     /// Rows left for later (waiting for the sync to map a message).
     public var waiting = 0
+    /// Commands that changed something at the provider (STORE, MOVE, COPY, EXPUNGE, APPEND):
+    /// a batch of hundreds goes as a few commands of up to ``ActionReplayer/batchSize`` UIDs
+    /// each, never one per message (GKM-071).
+    public var commands = 0
 
     public init() {}
 }
@@ -54,6 +58,10 @@ public struct ReplayReport: Sendable, Equatable {
 /// - **Cheap.** Rows that cancel out (Undo before reconnecting, read then unread) send nothing;
 ///   flag rows go as one STORE per folder and value, moves as one MOVE per folder pair.
 public actor ActionReplayer {
+    /// The most UIDs one command carries. Consecutive UIDs go as ranges (`1:300`), so a command
+    /// stays short; a cap still keeps each well inside what providers accept in one line.
+    public static let batchSize = 500
+
     public nonisolated let account: MailAccountID
     public nonisolated let updates: AsyncStream<ReplayProgress>
 
@@ -209,7 +217,7 @@ public actor ActionReplayer {
             if report == before || report.waiting > before.waiting || report.refused > before.refused { break }
         }
         progress.status = try await store.actionStatus(account: account)
-        log.info("actions", "\(account): sent \(report.sent), settled \(report.settled), superseded \(report.superseded), refused \(report.refused), waiting \(report.waiting)")
+        log.info("actions", "\(account): sent \(report.sent) in \(report.commands) commands, settled \(report.settled), superseded \(report.superseded), refused \(report.refused), waiting \(report.waiting)")
         return report
     }
 
@@ -278,7 +286,7 @@ public actor ActionReplayer {
         // Per folder: read the current flags, drop what the provider changed since, STORE the rest.
         var outcome: [String: FlagOutcome] = [:]   // per intent key
         for (folder, entries) in byFolder.sorted(by: { $0.key.folder < $1.key.folder }) {
-            for chunk in SyncPlanner.chunks(entries, of: 500) {
+            for chunk in SyncPlanner.chunks(entries, of: Self.batchSize) {
                 let current: [RemoteMessageID: MailProvider.MessageFlags]
                 do {
                     current = try await session.flags(of: chunk.map(\.id))
@@ -309,6 +317,7 @@ public actor ActionReplayer {
                     let flags = group.kind == .seen ? MailProvider.MessageFlags(seen: true) : MailProvider.MessageFlags(flagged: true)
                     do {
                         try await session.setFlags(flags, group.value ? .add : .remove, on: group.ids)
+                        report.commands += 1
                         for key in group.keys { outcome[key, default: .init()].stored += 1 }
                     } catch let error as MailProviderError where !error.isConnectionProblem && error.authenticationFailedReason == nil {
                         for key in group.keys { outcome[key, default: .init()].problem = error }
@@ -418,11 +427,12 @@ public actor ActionReplayer {
             // Never expunge from a folder that holds every message (Gmail's All Mail): there an
             // expunge can delete the message for good. Out of it, a move is a copy (MAIL-036).
             let copyOnly = context.role(of: pair.from) == FolderRole.all.rawValue
-            for chunk in SyncPlanner.chunks(entries, of: 500) {
+            for chunk in SyncPlanner.chunks(entries, of: Self.batchSize) {
                 let ids = chunk.map(\.id)
                 let mapping: [RemoteMessageID: RemoteMessageID]
                 do {
                     mapping = copyOnly ? try await session.copy(ids, to: pair.to) : try await session.move(ids, to: pair.to)
+                    report.commands += 1
                 } catch let error as MailProviderError where !error.isConnectionProblem && error.authenticationFailedReason == nil {
                     for entry in chunk { try await refuse(entry.intent, error, &report) }
                     continue
@@ -501,6 +511,7 @@ public actor ActionReplayer {
         }
         do {
             try await session.expunge([id])
+            report.commands += 1
         } catch let error as MailProviderError where !error.isConnectionProblem && error.authenticationFailedReason == nil {
             try await refuse(intent, error, &report)
             return
@@ -526,6 +537,7 @@ public actor ActionReplayer {
             let original = try await store.originalData(of: intent.message)
             let flags = try await store.flags(of: intent.message)
             let id = try await session.append(original, to: folder, flags: MailProvider.MessageFlags(seen: flags.seen, flagged: flags.flagged))
+            report.commands += 1
             try await store.completeLocationActions(
                 intent.rows, from: [], to: id.map { [RemoteLocation(mailbox: $0.folder, uidValidity: $0.uidValidity, uid: $0.uid)] } ?? [],
                 awaitingLocation: true, account: account)

@@ -156,6 +156,10 @@ public actor ServerSearcher {
             for summary in try await session.summaries(of: ids) {
                 if let after = criteria.receivedOnOrAfter, let date = summary.internalDate, date < after { total -= 1; continue }
                 if let before = criteria.receivedBefore, let date = summary.internalDate, date >= before { total -= 1; continue }
+                // IMAP FROM is a substring; a sender filter is the exact address (GKM-071).
+                if !criteria.senders.isEmpty, !criteria.senders.contains(where: {
+                    $0.caseInsensitiveCompare(summary.fromAddress ?? "") == .orderedSame
+                }) { total -= 1; continue }
                 hits.append(Self.hit(summary, account: account, folderName: folder.displayName))
             }
         }

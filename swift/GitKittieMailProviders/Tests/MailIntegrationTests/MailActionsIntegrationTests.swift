@@ -176,6 +176,50 @@ final class MailActionsIntegrationTests: XCTestCase {
         XCTAssertEqual(archiveServer.count, 1)
     }
 
+    // MARK: - Many at once (GKM-071)
+
+    /// A selection of hundreds (every message from one sender) goes to the provider as a few
+    /// commands of up to ``ActionReplayer/batchSize`` UIDs, never one per message; read marks
+    /// likewise, and the Undo of the whole batch comes back the same way.
+    func testHundredsOfMessagesReachTheServerInBatchesAndComeBackInBatches() async throws {
+        let count = ActionReplayer.batchSize + 120
+        try await append((0..<count).map { "bulk \($0)" })
+        try await sync()
+        let messages = try await store.summaries(account: account, limit: count + 10)
+        XCTAssertEqual(messages.count, count)
+
+        // Read, all at once: one STORE per batch.
+        let read = try await store.perform(messages.map { MailChange($0.id, .setSeen(true)) })
+        XCTAssertEqual(read?.count, count)
+        let marked = try await online().replayOnce()
+        XCTAssertEqual(marked.sent, count)
+        XCTAssertEqual(marked.commands, 2, "\(count) read marks in two STOREs")
+
+        // Trash, all at once: one MOVE per batch, into a Trash made on first use.
+        let trash = try await store.perform(messages.map { MailChange($0.id, .move(from: "INBOX", to: "Trash", createTarget: true)) })
+        let trashed = try await online().replayOnce()
+        XCTAssertEqual(trashed.sent, count)
+        XCTAssertEqual(trashed.commands, 2, "\(count) moves in two MOVEs")
+        let inTrash = try await serverState("Trash")
+        XCTAssertEqual(inTrash.count, count)
+        XCTAssertTrue(inTrash.values.allSatisfy(\.seen))
+        let leftInInbox = try await serverState("INBOX")
+        XCTAssertEqual(leftInInbox.count, 0)
+
+        // One Undo for the whole batch.
+        try await sync()
+        _ = try await store.undo(try XCTUnwrap(trash))
+        let restored = try await online().replayOnce()
+        XCTAssertEqual(restored.sent, count)
+        XCTAssertEqual(restored.commands, 2)
+        let backInInbox = try await serverState("INBOX")
+        XCTAssertEqual(backInInbox.count, count)
+        let emptied = try await serverState("Trash")
+        XCTAssertEqual(emptied.count, 0)
+        let status = try await store.actionStatus(account: account)
+        XCTAssertEqual(status.pending, 0)
+    }
+
     func testAReplayStoppedAfterTheServerMovedTheMessageDoesNotMoveItTwice() async throws {
         try await append(["one"])
         try await imap().withSession { try await $0.createFolder("Archive") }

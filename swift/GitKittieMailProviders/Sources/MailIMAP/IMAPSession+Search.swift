@@ -12,7 +12,7 @@ extension IMAPSession {
         let key = Self.searchKey(criteria)
         // US-ASCII needs no CHARSET; anything else is sent as UTF-8, which servers must accept
         // with CHARSET (RFC 9051) and nearly all IMAP4rev1 servers do.
-        let words = criteria.terms + criteria.participants
+        let words = criteria.terms + criteria.participants + criteria.senders
         let utf8: CharacterSetName = "UTF-8"
         let charset = words.allSatisfy { $0.utf8.allSatisfy { $0 < 0x80 } } ? nil : utf8
         let result = try await wire.run(.uidSearch(key: key, charset: charset),
@@ -27,7 +27,8 @@ extension IMAPSession {
     }
 
     /// Every condition of `criteria`, ANDed: a word in the subject, the sender or the text; a
-    /// person in From, To or Cc (envelope or header text); the received day; unread; flagged. Never empty (`ALL`).
+    /// person in From, To or Cc (envelope or header text); a sender in From; the received day;
+    /// unread; flagged. Never empty (`ALL`).
     static func searchKey(_ criteria: RemoteSearchCriteria) -> SearchKey {
         var keys: [SearchKey] = []
         for term in criteria.terms {
@@ -41,6 +42,10 @@ extension IMAPSession {
             // the header's text is searched too (HEADER, a substring by every server's reading).
             func field(_ key: SearchKey, _ name: String) -> SearchKey { .or(key, .header(name, value)) }
             keys.append(.or(field(.from(value), "From"), .or(field(.to(value), "To"), field(.cc(value), "Cc"))))
+        }
+        for sender in criteria.senders {
+            let value = ByteBuffer(string: sender)
+            keys.append(.or(.from(value), .header("From", value)))
         }
         if let since = criteria.receivedOnOrAfter { keys.append(.since(calendarDay(since))) }
         if let before = criteria.receivedBefore { keys.append(.before(calendarDay(before))) }

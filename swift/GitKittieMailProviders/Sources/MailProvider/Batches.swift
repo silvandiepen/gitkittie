@@ -20,6 +20,9 @@ public struct RemoteSearchCriteria: Sendable, Hashable {
     public var terms: [String]
     /// Each must appear in a sender or recipient (IMAP: `FROM`, `TO` or `CC`).
     public var participants: [String]
+    /// Each must be the sender (IMAP: `FROM`, or the From header's text). "See All Mail from…"
+    /// (GKM-071): a recipient never matches.
+    public var senders: [String]
     /// Received on or after the calendar day of this instant (IMAP `SINCE`, the received date by
     /// day). Callers that need the exact instant compare the summaries' received dates.
     public var receivedOnOrAfter: Date?
@@ -29,9 +32,10 @@ public struct RemoteSearchCriteria: Sendable, Hashable {
     public var flaggedOnly: Bool
 
     public init(terms: [String] = [], participants: [String] = [], receivedOnOrAfter: Date? = nil,
-                receivedBefore: Date? = nil, unreadOnly: Bool = false, flaggedOnly: Bool = false) {
+                receivedBefore: Date? = nil, unreadOnly: Bool = false, flaggedOnly: Bool = false, senders: [String] = []) {
         self.terms = terms
         self.participants = participants
+        self.senders = senders
         self.receivedOnOrAfter = receivedOnOrAfter
         self.receivedBefore = receivedBefore
         self.unreadOnly = unreadOnly
@@ -39,7 +43,7 @@ public struct RemoteSearchCriteria: Sendable, Hashable {
     }
 
     /// True when there is no word to look for: such a search would list whole folders.
-    public var hasNoText: Bool { terms.isEmpty && participants.isEmpty }
+    public var hasNoText: Bool { terms.isEmpty && participants.isEmpty && senders.isEmpty }
 }
 
 extension MailProviderError {
