@@ -15,7 +15,7 @@ struct MessageListScreen: View {
     private var browser: MailBrowser { model.browser }
 
     private var searchText: Binding<String> {
-        Binding(get: { browser.searchText }, set: { text in Task { await browser.search(text) } })
+        Binding(get: { browser.searchText }, set: { browser.typeSearch($0) })
     }
 
     private var selection: Binding<String?> {
@@ -42,6 +42,7 @@ struct MessageListScreen: View {
                             Label(row.isUnread ? "Read" : "Unread", systemImage: row.isUnread ? "envelope.open" : "envelope.badge")
                         }
                         .tint(Theme.accent)
+                        .accessibilityIdentifier("swipeReadUnread")
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         if model.actions.isTrash(browser.scope) {
@@ -57,6 +58,7 @@ struct MessageListScreen: View {
                             Label(row.isFlagged ? "Unflag" : "Flag", systemImage: row.isFlagged ? "flag.slash" : "flag")
                         }
                         .tint(.orange)
+                        .accessibilityIdentifier("swipeFlag")
                     }
                     .contextMenu { RowMenu(row: row) }
                     .onAppear {

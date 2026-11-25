@@ -207,6 +207,17 @@ final class MailBrowser {
         await reload()
     }
 
+    /// For a search field's binding: keeps the text at once and runs the query after. A text
+    /// field reads its text back on the next render; if the text only changed inside a later
+    /// task, the field would get the old text back and lose what was just typed. Quick typing
+    /// starts overlapping reloads; the generation check keeps only the newest result.
+    @discardableResult
+    func typeSearch(_ text: String) -> Task<Void, Never>? {
+        guard text != searchText else { return nil }
+        searchText = text
+        return Task { await reload() }
+    }
+
     func setFilters(_ filters: SearchFilters) async {
         guard filters != self.filters else { return }
         self.filters = filters
