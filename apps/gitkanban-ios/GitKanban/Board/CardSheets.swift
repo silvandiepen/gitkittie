@@ -761,30 +761,20 @@ struct NewTaskSheet: View {
                     Button("Create") {
                         // Close at once: the task is saved locally and sent in the
                         // background (see the indicator in the corner).
-                        let model = model, lane = targetLane, images = images
-                        let marks = ImageTaskDrafter.annotationNotes(images)
-                        let title = title.trimmingCharacters(in: .whitespaces).isEmpty
-                            ? (ImageTaskDrafter.firstComment(images) ?? "New task") : title
-                        let body = [body_.trimmingCharacters(in: .whitespacesAndNewlines), marks]
-                            .filter { !$0.isEmpty }.joined(separator: "\n\n")
-                        let (priority, type, assignee, epic) = (priority, type, assignee, epic)
+                        // The card, then each image in its attachments folder (the
+                        // marks listed in the description), as the share sheet and the Mac do.
+                        let model = model, lane = targetLane, images = images.taskImages
+                        let (title, notes, priority, type, assignee, epic) = (title, body_, priority, type, assignee, epic)
                         dismiss()
                         Task {
-                            let id = await model.createTask(
-                                title: title, lane: lane,
+                            await model.createTask(
+                                fromImages: images, title: title, lane: lane,
                                 priority: priority.isEmpty ? nil : priority,
                                 type: type.isEmpty ? nil : type,
                                 assignee: assignee.isEmpty ? nil : assignee,
                                 epic: epic.isEmpty ? nil : epic,
-                                body: body
+                                notes: notes
                             )
-                            guard let id else { return }
-                            for (index, image) in images.enumerated() {
-                                let file = image.attachment()
-                                await model.attachFile(toCardID: id, data: file.data,
-                                                       filename: "image-\(index + 1).\(file.fileExtension)")
-                            }
-                            if !images.isEmpty { await model.loadAttachmentIndex() }
                         }
                     }
                     // With an image a title is written if none is given. While it is being
@@ -811,7 +801,7 @@ struct NewTaskSheet: View {
         isDrafting = true
         draftProblem = nil
         var known = recognizedText
-        let ticket = await ImageTaskDrafter.draft(app: model, images: images, pointers: pointers, recognizedText: &known)
+        let ticket = await ImageTaskDrafter.draft(app: model, images: images.taskImages, pointers: pointers, recognizedText: &known)
         recognizedText = known
         isDrafting = false
         guard let ticket else {
@@ -837,7 +827,7 @@ struct NewTaskSheet: View {
         let own = [(title, draftedTitle), (body_, draftedBody)].filter { !open($0.0, $0.1) }.map(\.0).joined(separator: "\n")
         isDrafting = true
         var known = recognizedText
-        let ticket = await ImageTaskDrafter.draft(app: model, images: images, pointers: own, recognizedText: &known)
+        let ticket = await ImageTaskDrafter.draft(app: model, images: images.taskImages, pointers: own, recognizedText: &known)
         recognizedText = known
         isDrafting = false
         if let ticket {
@@ -848,7 +838,7 @@ struct NewTaskSheet: View {
             if type.isEmpty, let suggested = ticket.type, types.contains(suggested) { type = suggested }
         } else {
             if let error = model.aiError { draftProblem = "The task was not written: \(error)" }
-            if open(title, draftedTitle), let comment = ImageTaskDrafter.firstComment(images) {
+            if open(title, draftedTitle), let comment = ImageTaskDrafter.firstComment(images.taskImages) {
                 title = comment
                 draftedTitle = comment
             }

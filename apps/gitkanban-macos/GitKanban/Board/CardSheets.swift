@@ -607,7 +607,9 @@ struct CardDetailInspector: View {
     }
 }
 
-/// Create a task in a lane.
+/// Create a task in a lane — typed, or from images (dropped on the board, dropped on this
+/// sheet or added with Add Images…). Images can be marked up, and an empty title and
+/// description are written from them, the way the iPhone's share sheet does.
 struct NewTaskSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -621,6 +623,19 @@ struct NewTaskSheet: View {
     @State private var epic = ""
     @State private var product = ""
     @State private var body_ = ""
+    @State private var images: [TaskImage] = []
+    /// The image open in the markup editor.
+    @State private var annotating: TaskImage.ID?
+    @State private var isImporting = false
+    @State private var isDropTargeted = false
+    @State private var isDrafting = false
+    @State private var isCreating = false
+    /// Why the last draft gave nothing, or why an image could not be added.
+    @State private var draftProblem: String?
+    /// What was last written for the user, so a new draft may replace it but never their own text.
+    @State private var draftedTitle = ""
+    @State private var draftedBody = ""
+    @State private var recognizedText: [TaskImage.ID: String] = [:]
 
     private var config: EffectiveConfig? { model.board?.config }
     private var lanes: [Lane] { config?.lanes.filter { !$0.folder.isEmpty } ?? [] }
@@ -629,14 +644,22 @@ struct NewTaskSheet: View {
     private var types: [String] { config?.types ?? [] }
     private var epics: [Epic] { config?.epics ?? [] }
     private var targetLane: Lane { lanes.first { $0.id == laneID } ?? lane }
+    private var canDraft: Bool { ImageTaskDrafter.provider(model) != nil }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("New Task") {
-                    TextField("Title", text: $title)
+                if !images.isEmpty, !canDraft { noDraftingNotice }
+                Section {
+                    TextField("Title", text: $title, prompt: Text(images.isEmpty ? "Title" : "Written from the image if empty"))
                     Picker("Lane", selection: $laneID) {
                         ForEach(lanes) { Text($0.name).tag($0.id) }
+                    }
+                } header: {
+                    Text("New Task")
+                } footer: {
+                    if let draftProblem {
+                        Text(draftProblem).foregroundStyle(.red)
                     }
                 }
                 Section {
@@ -678,36 +701,270 @@ struct NewTaskSheet: View {
                     }
                 }
                 Section("Description") { TextEditor(text: $body_).frame(minHeight: 140) }
+                imagesSection
             }
             .formStyle(.grouped)
             .navigationTitle("New Task")
+            // Drop more images anywhere on the sheet.
+            .onDrop(of: [.image, .fileURL], isTargeted: $isDropTargeted) { providers in
+                guard TaskImage.canLoad(from: providers) else { return false }
+                Task { await add(await TaskImage.load(from: providers)) }
+                return true
+            }
+            .overlay {
+                if isDropTargeted {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                        .background(Theme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                        .padding(8)
+                        .allowsHitTesting(false)
+                }
+            }
             .onAppear {
                 if laneID.isEmpty { laneID = lane.id }
                 // A board filtered on a product starts new tasks in that product.
                 if product.isEmpty, let filtered = model.filterProduct { product = filtered }
+                let dropped = model.takeNewTaskImages()
+                if !dropped.isEmpty { Task { await add(dropped) } }
+            }
+            .fileImporter(isPresented: $isImporting, allowedContentTypes: [.image], allowsMultipleSelection: true) { result in
+                guard case .success(let urls) = result else { return }
+                Task { await add(urls.compactMap { TaskImage.from(fileURL: $0) }) }
+            }
+            .sheet(item: annotatingBinding, onDismiss: { Task { await draftFromImages() } }) { $image in
+                ImageMarkupEditor(image: $image)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        Task {
-                            await model.createTask(
-                                title: title, lane: targetLane,
-                                priority: priority.isEmpty ? nil : priority,
-                                type: type.isEmpty ? nil : type,
-                                assignee: assignee.isEmpty ? nil : assignee,
-                                epic: epic.isEmpty ? nil : epic,
-                                product: product.isEmpty ? nil : product,
-                                body: body_
-                            )
-                            dismiss()
+                if canDraft {
+                    ToolbarItem {
+                        Button { Task { await enhance() } } label: {
+                            Label("Enhance", systemImage: "wand.and.stars")
                         }
+                        .help("Write the title and description from what is typed and the images")
+                        .disabled(isDrafting || (title.trimmingCharacters(in: .whitespaces).isEmpty
+                                                 && body_.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty))
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") { Task { await create() } }
+                        // With an image a title is written if none is given. While it is being
+                        // written, creating would save the task without it.
+                        .disabled(isCreating || isDrafting || (title.trimmingCharacters(in: .whitespaces).isEmpty && images.isEmpty))
                 }
             }
         }
-        .frame(minWidth: 520, minHeight: 520)
+        .frame(minWidth: 560, minHeight: images.isEmpty ? 520 : 640)
+    }
+
+    // MARK: Images
+
+    @ViewBuilder private var imagesSection: some View {
+        Section {
+            if !images.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(images) { image in
+                            TaskImageThumbnail(image: image, mark: { annotating = image.id },
+                                               remove: { images.removeAll { $0.id == image.id } })
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            HStack {
+                Button(images.isEmpty ? "Add Images…" : "Add More…", systemImage: "photo.on.rectangle") { isImporting = true }
+                Spacer()
+                if isDrafting {
+                    ProgressView().controlSize(.small)
+                    Text("Writing a title and description").foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("Images")
+        } footer: {
+            Text(images.isEmpty
+                 ? "Drop a screenshot here or on the board to make a task from it."
+                 : "Click an image to mark what is wrong. An empty title and description are written from the images and your marks.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Said when no model can write the task: otherwise the title is silently the first
+    /// comment and nothing tells why.
+    private var noDraftingNotice: some View {
+        Section {
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("The task will not be written for you").font(.subheadline.weight(.semibold))
+                    Text(OnDeviceAI.unavailableReason ?? "No AI is available.")
+                    Text("Turn on Apple Intelligence in System Settings, or add an AI key in AI Settings (the gear in Quick Create). Until then the title is your first comment and the description is what you type.")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.footnote)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            }
+        }
+    }
+
+    /// The binding to the image being marked up, for the editor sheet.
+    private var annotatingBinding: Binding<Binding<TaskImage>?> {
+        Binding(
+            get: { $images.first { $0.wrappedValue.id == annotating } },
+            set: { if $0 == nil { annotating = nil } })
+    }
+
+    private func add(_ added: [TaskImage]) async {
+        guard !added.isEmpty else {
+            draftProblem = "That is not an image Tasks can read."
+            return
+        }
+        draftProblem = nil
+        images += added
+        await draftFromImages()
+    }
+
+    // MARK: Drafting
+
+    /// "Enhance": what is typed (and the images, if any) are pointers, and the draft
+    /// replaces the title and description. Why nothing came back is said in `draftProblem`.
+    private func enhance() async {
+        guard !isDrafting else { return }
+        let pointers = [title, body_].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: "\n")
+        guard !pointers.isEmpty || !images.isEmpty else { return }
+        isDrafting = true
+        draftProblem = nil
+        var known = recognizedText
+        let ticket = await ImageTaskDrafter.draft(app: model, images: images, pointers: pointers, recognizedText: &known)
+        recognizedText = known
+        isDrafting = false
+        guard let ticket else {
+            draftProblem = "The task was not written: \(model.aiError ?? OnDeviceAI.unavailableReason ?? "the model gave nothing back.")"
+            return
+        }
+        title = ticket.title; draftedTitle = ticket.title
+        body_ = ticket.description; draftedBody = ticket.description
+        if priority.isEmpty, let suggested = ticket.priority, priorities.contains(where: { $0.id == suggested }) { priority = suggested }
+        if type.isEmpty, let suggested = ticket.type, types.contains(suggested) { type = suggested }
+    }
+
+    /// Write the title and description from the images and marks, where the user has not
+    /// written their own: a field is only filled when it is empty or still an earlier draft.
+    private func draftFromImages() async {
+        guard !images.isEmpty, !isDrafting else { return }
+        func open(_ text: String, _ draft: String) -> Bool {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty || trimmed == draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard open(title, draftedTitle) || open(body_, draftedBody) else { return }
+        guard canDraft else {
+            // Nobody writes the task: the first comment on a mark is the title.
+            if open(title, draftedTitle), let comment = ImageTaskDrafter.firstComment(images) {
+                title = comment
+                draftedTitle = comment
+            }
+            return
+        }
+        let titleAtStart = title, bodyAtStart = body_
+        let own = [(title, draftedTitle), (body_, draftedBody)].filter { !open($0.0, $0.1) }.map(\.0).joined(separator: "\n")
+        isDrafting = true
+        var known = recognizedText
+        let ticket = await ImageTaskDrafter.draft(app: model, images: images, pointers: own, recognizedText: &known)
+        recognizedText = known
+        isDrafting = false
+        if let ticket {
+            // Only where nothing was typed while the draft was being written.
+            if open(title, draftedTitle), title == titleAtStart { title = ticket.title; draftedTitle = ticket.title }
+            if open(body_, draftedBody), body_ == bodyAtStart { body_ = ticket.description; draftedBody = ticket.description }
+            if priority.isEmpty, let suggested = ticket.priority, priorities.contains(where: { $0.id == suggested }) { priority = suggested }
+            if type.isEmpty, let suggested = ticket.type, types.contains(suggested) { type = suggested }
+        } else {
+            if let error = model.aiError { draftProblem = "The task was not written: \(error)" }
+            if open(title, draftedTitle), let comment = ImageTaskDrafter.firstComment(images) {
+                title = comment
+                draftedTitle = comment
+            }
+        }
+    }
+
+    // MARK: Create
+
+    private func create() async {
+        isCreating = true
+        defer { isCreating = false }
+        let priority = priority.isEmpty ? nil : priority
+        let type = type.isEmpty ? nil : type
+        let assignee = assignee.isEmpty ? nil : assignee
+        let epic = epic.isEmpty ? nil : epic
+        let product = product.isEmpty ? nil : product
+        if images.isEmpty {
+            await model.createTask(title: title, lane: targetLane, priority: priority, type: type,
+                                   assignee: assignee, epic: epic, product: product, body: body_)
+            dismiss()
+            return
+        }
+        // The card, then each image in its attachments folder, the marks listed in the
+        // description: the same files the iPhone writes.
+        guard let result = await model.createTask(
+            fromImages: images, title: title, lane: targetLane, priority: priority, type: type,
+            assignee: assignee, epic: epic, product: product, notes: body_
+        ) else {
+            draftProblem = model.errorMessage ?? "The task could not be saved."
+            return
+        }
+        if result.failed > 0 {
+            // The task is written: say what is missing rather than offer Create again.
+            model.errorMessage = "\(result.cardID) is saved, but \(result.failed) of \(images.count) image(s) could not be attached. Add them from the task."
+        }
+        dismiss()
+    }
+}
+
+/// An image waiting to go on a new task: click to mark it up; the cross takes it off.
+private struct TaskImageThumbnail: View {
+    let image: TaskImage
+    let mark: () -> Void
+    let remove: () -> Void
+    @State private var thumbnail: CGImage?
+
+    var body: some View {
+        Button(action: mark) {
+            Group {
+                if let thumbnail {
+                    Image(decorative: thumbnail, scale: 1).resizable().scaledToFit()
+                } else {
+                    RoundedRectangle(cornerRadius: 8).fill(.quaternary).frame(width: 160)
+                }
+            }
+            .frame(height: 120)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.stroke))
+            .overlay(alignment: .bottomTrailing) {
+                Label(image.annotations.isEmpty ? "Mark up" : "\(image.annotations.count)",
+                      systemImage: "pencil.tip.crop.circle")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(4)
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Mark up this image")
+        .accessibilityLabel("Mark up image")
+        .overlay(alignment: .topTrailing) {
+            Button(action: remove) {
+                Image(systemName: "xmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.6))
+                    .font(.title3)
+            }
+            .buttonStyle(.plain)
+            .padding(4)
+            .help("Remove this image")
+            .accessibilityLabel("Remove image")
+        }
+        .task(id: image.id) { thumbnail = TaskImage.downsampled(image.data, maxPixel: 480) }
     }
 }
 
