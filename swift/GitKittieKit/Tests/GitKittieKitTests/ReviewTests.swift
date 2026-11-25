@@ -46,6 +46,23 @@ Made with Tripo.
 """
 
 @Suite struct ReviewTests {
+    @Test func onlyWaitingHidesDecidedItemsButKeepsAnOpenGroupTogether() {
+        var r = Review.parse(reviewText, folder: "Morrow/review/MORROW-182-pet-models")
+        // dog-v2 is decided but dog-v1, in the same group, still waits: both stay.
+        #expect(r.isStillOpen(r.items[1]))
+        #expect(!r.isStillOpen(r.items[2]))
+        #expect(r.settledIDs.items == ["bark"])
+        #expect(r.settledIDs.questions.isEmpty)
+
+        // Once the group is decided its options are settled too.
+        r.items[0].status = .rejected
+        #expect(r.settledIDs.items == ["dog-v1", "dog-v2", "bark"])
+
+        // Nothing waiting: a finished request shows everything it decided.
+        r.items[3].status = .approved
+        #expect(r.settledIDs.items.isEmpty)
+    }
+
     @Test func parsesRequestAndItems() {
         let r = Review.parse(reviewText, folder: "Morrow/review/MORROW-182-pet-models")
         #expect(r.id == "MORROW-182-pet-models")

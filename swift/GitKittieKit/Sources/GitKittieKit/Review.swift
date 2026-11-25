@@ -201,6 +201,24 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
     /// Source-relative path of an item's file (or preview), `nil` if it escapes the root.
     public func assetPath(_ file: String) -> String? { Review.joinRelative(folder, file) }
 
+    /// Whether an item still belongs on an "only what's waiting" view: it waits for a decision,
+    /// or it is another option of a group in which something still waits (a pick-one choice is
+    /// made between all its options, so they stay together).
+    public func isStillOpen(_ item: ReviewItem) -> Bool {
+        if item.status == .pending { return true }
+        guard let group = item.group else { return false }
+        return items.contains { $0.group == group && $0.status == .pending }
+    }
+
+    /// The items and questions an "only what's waiting" view hides: decided items outside an
+    /// open group, and answered questions. Empty when nothing waits, so a finished request
+    /// still shows what was decided.
+    public var settledIDs: (items: Set<String>, questions: Set<String>) {
+        guard summary.pending > 0 else { return ([], []) }
+        return (Set(items.filter { !isStillOpen($0) }.map(\.id)),
+                Set(questions.filter(\.isAnswered).map(\.id)))
+    }
+
     /// Items grouped for side-by-side display, in file order. Ungrouped items stand alone.
     public var groups: [ReviewGroup] {
         var result: [ReviewGroup] = []

@@ -235,14 +235,24 @@ private struct ReviewDetailView: View {
     let ref: ReviewRef
     /// Goes to the next request with something waiting; `nil` when there is none.
     let next: (() -> Void)?
+    /// Show only what still waits for you. Remembered between requests and launches.
+    @AppStorage("reviewsOnlyWaiting") private var onlyWaiting = true
+    /// What "only waiting" hides, fixed when the request opens (or the switch changes), so a
+    /// file you just decided stays where it is instead of vanishing under the pointer.
+    @State private var hidden: (items: Set<String>, questions: Set<String>) = ([], [])
 
     var body: some View {
         if let request = model.reviewRequest(ref) {
+            let groups = request.groups.compactMap { group -> ReviewGroup? in
+                var shown = group
+                shown.items = group.items.filter { !hidden.items.contains($0.id) }
+                return shown.items.isEmpty ? nil : shown
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
                     header(request)
-                    if !request.questions.isEmpty { questions(request) }
-                    ForEach(request.groups) { group in
+                    if request.questions.contains(where: { !hidden.questions.contains($0.id) }) { questions(request) }
+                    ForEach(groups) { group in
                         VStack(alignment: .leading, spacing: 10) {
                             if let name = group.name {
                                 HStack(spacing: 8) {
@@ -272,13 +282,26 @@ private struct ReviewDetailView: View {
                         .padding()
                 }
             }
+            .toolbar {
+                ToolbarItem {
+                    Toggle(isOn: $onlyWaiting) { Label("Only Waiting", systemImage: "line.3.horizontal.decrease.circle") }
+                        .help(onlyWaiting ? "Showing only what still waits for you" : "Showing everything in this request")
+                        .accessibilityIdentifier("reviewOnlyWaiting")
+                }
+            }
+            .onAppear { hide(request) }
+            .onChange(of: onlyWaiting) { _, _ in hide(request) }
         }
+    }
+
+    private func hide(_ request: ReviewRequest) {
+        hidden = onlyWaiting ? request.settledIDs : ([], [])
     }
 
     /// The request's questions as a form: one after another, each answered on its own.
     private func questions(_ request: ReviewRequest) -> some View {
         VStack(alignment: .leading, spacing: 36) {
-            ForEach(request.questions) { question in
+            ForEach(request.questions.filter { !hidden.questions.contains($0.id) }) { question in
                 ReviewQuestionView(question: question, isSaving: model.isSaving) { choices, other, comment in
                     await model.answer(request, question: question, choices: choices, other: other, comment: comment)
                 }
