@@ -142,6 +142,38 @@ struct GitPontFileSource: BoardFileSource, BulkTextSource {
 
 }
 
+extension GitPontFileSource: VersionedBoardSource {
+    /// The text and the version the provider names for it (a blob sha on GitHub, a commit
+    /// on GitLab), written down as JSON so it can travel as a string.
+    func readVersioned(_ path: String) async throws -> (text: String, version: String?) {
+        let reference = GitFileReference(repository: repository, path: full(path), ref: ref)
+        let file = try await described(path, "read") { try await provider.readFile(reference, context: context) }
+        guard let text = String(data: file.content, encoding: .utf8) else { throw BoardSourceError(message: "\(path) is not a text file.") }
+        let version = try file.version.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
+        return (text, version)
+    }
+
+    func write(path: String, text: String, ifVersion version: String?) async throws {
+        try await write(path: path, text: text, ifVersion: version, message: "Update \(path)")
+    }
+
+    /// Write only over the version read: the provider refuses it when the file changed in
+    /// between, and that comes back as `SourceConflictError`.
+    func write(path: String, text: String, ifVersion version: String?, message: String) async throws {
+        let reference = GitFileReference(repository: repository, path: full(path), ref: ref)
+        let expected = try version.map { try JSONDecoder().decode(GitRemoteVersion.self, from: Data($0.utf8)) }
+        let change = GitFileChange(reference: reference, content: Data(text.utf8), message: message, targetBranch: ref,
+                                   expectedVersion: expected, allowBlindOverwrite: false)
+        do {
+            _ = try await provider.commitFile(change, context: context)
+        } catch GitPontError.conflict {
+            throw SourceConflictError(path: path)
+        } catch {
+            throw Self.readable(error, path: path, action: "save")
+        }
+    }
+}
+
 extension GitPontFileSource: WebLinkingSource {
     func webURL(forPath path: String) -> URL? {
         provider.webURL(for: GitFileReference(repository: repository, path: full(path), ref: ref))
@@ -209,6 +241,7 @@ extension GitPontFileSource {
         default:
             why = "\(error)"
         }
+        if case .conflict = error { return BoardSourceError(message: "\(what): \(why)", isConflict: true) }
         return BoardSourceError(message: "\(what): \(why)")
     }
 }
@@ -216,5 +249,7 @@ extension GitPontFileSource {
 /// A board-source failure with text a person can act on.
 struct BoardSourceError: LocalizedError {
     let message: String
+    /// The file changed on the server between reading it and writing it.
+    var isConflict = false
     var errorDescription: String? { message }
 }

@@ -129,8 +129,8 @@ final class OutboxTests: XCTestCase {
         XCTAssertEqual(untouched, 0, "a refused write is not retried by itself")
 
         let failed = await outbox.operations()
-        await outbox.retry(failed[0].id)
-        await outbox.discard(failed[2].id)
+        try await outbox.retry(failed[0].id)
+        try await outbox.discard(failed[2].id)
         let sent = await flush(outbox)
         XCTAssertEqual(sent, 2)
         states = await outbox.operations().map(\.state)

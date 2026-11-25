@@ -58,8 +58,11 @@ returns at once; reads are overlaid with what is still unsent, and fall back to 
 when there is no connection. `AppModel.flushOutbox()` sends in order, one flush at a time across the
 app and its extensions. It runs after every write, on launch, on foreground, when the network returns
 and from the `app.hakobs.gitkanban.sync` background refresh. A connection failure leaves writes
-waiting; a refusal marks that write failed until it is retried or discarded in the activity list
-(`SyncViews.swift`). Folder sources and the demo are not wrapped. Consequences to keep in mind:
+waiting; a refusal marks that write failed until it is retried or discarded (`SyncFailures.swift` in
+`swift/TasksUI`: Retry, Discard, Show What It Was, in the activity list and on the review screens).
+`enqueue` throws when it cannot store the content, and nothing is queued then. Review requests are
+not sent as whole files: the write carries the reviewer's `ReviewEdit`s, which are merged onto the
+server's copy when sent, and writes to one request fold into one (`ReviewEdits.swift`, Decision 8). Folder sources and the demo are not wrapped. Consequences to keep in mind:
 `errorMessage` after a write no longer means the provider accepted it, and GitHub must be read through
 `UncachedHTTPClient` (a cached read hands back a stale version and the next write conflicts).
 

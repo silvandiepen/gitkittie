@@ -24,6 +24,15 @@ protocol VersionedBoardSource: BoardWritable {
     func readVersioned(_ path: String) async throws -> (text: String, version: String?)
     /// Write only if the file is still at `version` (`nil` = must not exist).
     func write(path: String, text: String, ifVersion version: String?) async throws
+    /// The same, with the commit message for sources that make a commit.
+    func write(path: String, text: String, ifVersion version: String?, message: String) async throws
+}
+
+extension VersionedBoardSource {
+    /// Folders keep no messages: the folder's own sync tool commits.
+    func write(path: String, text: String, ifVersion version: String?, message: String) async throws {
+        try await write(path: path, text: text, ifVersion: version)
+    }
 }
 
 /// A source whose files can be addressed by URL (for AVPlayer/Quick Look streaming).
