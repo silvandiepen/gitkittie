@@ -31,6 +31,9 @@ struct SettingsScreen: View {
                         router.showsAddAccount = true
                     }
                 }
+                Section {
+                    NavigationLink("Notifications") { NotificationsScreen() }
+                }
                 StorageSection()
                 BackgroundSection()
             }
