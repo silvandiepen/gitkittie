@@ -178,8 +178,8 @@ schemes:
     build:
       targets:
         GitMail: all
-        GitMailTests: test
-        GitMailUITests: test
+        GitMailTests: [test]
+        GitMailUITests: [test]
     test:
       targets:
         - GitMailTests
