@@ -90,6 +90,19 @@ public actor MailStore {
     private func finishOpening() throws {
         let journalWasReadable = try recoverInterruptedWrites()
         if index.needsRebuild || !journalWasReadable { try rebuildIndex() } else { try refreshSpaceIndex() }
+        try refreshTrashAndJunkOfEveryAccount()
+    }
+
+    /// Each account's Trash and Junk into the index (MAIL-102): after a migration or a rebuild
+    /// the index has none yet; otherwise this writes nothing.
+    private func refreshTrashAndJunkOfEveryAccount() throws {
+        let stateRoot = locations.deviceFolder.appendingPathComponent("state", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: stateRoot.path) else { return }
+        for folder in try sortedContents(of: stateRoot) {
+            guard let name = try? SafePath.component(folder.lastPathComponent), name != "journal",
+                  FileManager.default.fileExists(atPath: folder.appendingPathComponent("sync.sqlite").path) else { continue }
+            try refreshTrashAndJunk(account: MailAccountID(name))
+        }
     }
 
     // MARK: - Writing
@@ -241,7 +254,8 @@ public actor MailStore {
 
     public func messageCount() throws -> Int { try index.count() }
 
-    /// Newest first.
+    /// Every stored message, newest first, Trash and Junk included. A view uses ``threads(_:limit:offset:)``
+    /// or ``search(_:limit:offset:)``, which leave mail only in Trash or Junk out (MAIL-102).
     public func summaries(account: MailAccountID? = nil, limit: Int = 200, offset: Int = 0) throws -> [MessageSummary] {
         try index.summaries(account: account, limit: limit, offset: offset)
     }

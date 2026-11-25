@@ -135,10 +135,15 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
     /// A category view (GKM-018): Focused, Transactions, … Messages not classified yet count
     /// as Focused, so nothing is hidden while the classifier catches up.
     public var category: MailCategory?
+    /// Also matches mail that is only in its account's Trash or Junk (MAIL-102). Off for every
+    /// view: such mail shows only in those folders, and a query with a ``mailbox`` gets
+    /// whatever that folder holds either way. On for walks over everything an account stores.
+    public var includesTrashAndJunk: Bool
 
     public init(text: String = "", participant: String? = nil, account: MailAccountID? = nil, mailbox: String? = nil,
                 after: Date? = nil, before: Date? = nil, hasAttachment: Bool = false, unreadOnly: Bool = false,
-                flaggedOnly: Bool = false, space: MailSpaceID? = nil, category: MailCategory? = nil) {
+                flaggedOnly: Bool = false, space: MailSpaceID? = nil, category: MailCategory? = nil,
+                includesTrashAndJunk: Bool = false) {
         self.text = text
         self.participant = participant
         self.account = account
@@ -150,6 +155,7 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
         self.flaggedOnly = flaggedOnly
         self.space = space
         self.category = category
+        self.includesTrashAndJunk = includesTrashAndJunk
     }
 
     /// True when there is something to match in the full-text index.
@@ -241,7 +247,7 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
 /// is the smallest local id in the group, so building the threads incrementally and rebuilding
 /// them from scratch give the same ids.
 final class MailIndex {
-    static let schemaVersion = 7
+    static let schemaVersion = 8
 
     let database: SQLiteDatabase
     /// True when the file was new, damaged, or from a version without a migration path; the
@@ -275,7 +281,9 @@ final class MailIndex {
     /// its disposition to each verdict (GKM-019); until a rule changes they are empty, as they
     /// were. 5 → 6 marks partial messages and the left-out parts of their attachments (GKM-036,
     /// MAIL-062); every message indexed before is complete, which is what the defaults say. 6 → 7
-    /// adds the copy of confirmed provider deletions (MAIL-075), filled from the sync state.
+    /// adds the copy of confirmed provider deletions (MAIL-075), filled from the sync state. 7 → 8
+    /// marks mail that is only in Trash or Junk (MAIL-102); the store fills each account's Trash
+    /// and Junk folders from the sync state when it opens, and the triggers mark the mail in them.
     private func migrate(from version: Int) throws -> Bool {
         for step in version..<Self.schemaVersion {
             switch step {
@@ -283,6 +291,7 @@ final class MailIndex {
             case 4: try database.execute(Self.senderRuleColumnsSQL)
             case 5: try addPartialColumns()
             case 6: try database.execute(Self.providerDeletionsSQL)
+            case 7: try addTrashAndJunk()
             default: return false
             }
         }
@@ -662,8 +671,10 @@ final class MailIndex {
         return try statement.step() ? statement.int(0) : 0
     }
 
+    /// Every stored message of an account (all when nil), Trash and Junk included: for walks
+    /// over everything stored (integrity, export, removing an account), not for a view.
     func summaries(account: MailAccountID?, limit: Int, offset: Int) throws -> [MessageSummary] {
-        try summaries(matching: SearchQuery(account: account), limit: limit, offset: offset)
+        try summaries(matching: SearchQuery(account: account, includesTrashAndJunk: true), limit: limit, offset: offset)
     }
 
     /// Messages matching the filters (and text, if any): best text matches first, then newest.
@@ -779,6 +790,9 @@ final class MailIndex {
         if query.hasAttachment { clauses.append("m.has_attachments = 1") }
         if query.unreadOnly { clauses.append("m.seen = 0") }
         if query.flaggedOnly { clauses.append("m.flagged = 1") }
+        // Mail only in Trash or Junk shows in those folders alone (MAIL-102). A folder view
+        // already narrows to its folder, so it needs no second condition.
+        if query.mailbox == nil, !query.includesTrashAndJunk { clauses.append(Self.notTrashOrJunk) }
         if let space = query.space {
             clauses.append("EXISTS (SELECT 1 FROM space_members s WHERE s.local_id = m.local_id AND s.space_id = ?)")
             values.append(.text(space.rawValue))
@@ -828,6 +842,7 @@ final class MailIndex {
         DROP TABLE IF EXISTS correspondents;
         DROP TABLE IF EXISTS authenticated_domains;
         DROP TABLE IF EXISTS provider_deletions;
+        DROP TABLE IF EXISTS trash_and_junk_mailboxes;
         """
 
     private static let createSQL = """
@@ -875,7 +890,7 @@ final class MailIndex {
           local_id UNINDEXED, subject, participants, body, attachments, attachment_text,
           tokenize = 'unicode61 remove_diacritics 2'
         );
-        """ + classificationSQL + senderRuleColumnsSQL + partialColumnsSQL + providerDeletionsSQL
+        """ + classificationSQL + senderRuleColumnsSQL + partialColumnsSQL + providerDeletionsSQL + trashAndJunkSQL
 
     /// Schema 7 (MAIL-075): the copy of the sync state's confirmed provider deletions, for the
     /// list and the reader. Device state like flags and folders: refilled after a rebuild.

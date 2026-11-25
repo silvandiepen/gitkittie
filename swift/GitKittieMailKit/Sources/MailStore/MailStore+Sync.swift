@@ -26,7 +26,39 @@ extension MailStore {
             try index.setMembers([], ofMailbox: name, account: account)
             try reapplyOverlay(account: account, mapping: mapping, touching: name)
         }
+        try refreshTrashAndJunk(account: account)
         return removed
+    }
+
+    // MARK: Trash and Junk (MAIL-102)
+
+    /// An account's Trash and Junk, by folder name, from its folders' roles: the folders whose
+    /// mail shows only there. Without a `trash` folder, the `Trash` folder an action creates on
+    /// first use counts (MAIL-036), so mail moved there leaves the other views before the next
+    /// folder list names it.
+    public static func trashAndJunkFolders(_ folders: [SyncedFolder]) -> [String: String] {
+        var result: [String: String] = [:]
+        for folder in folders {
+            if let role = folder.role, role == "trash" || role == "junk" { result[folder.name] = role }
+        }
+        if !folders.isEmpty, !result.values.contains("trash"), folders.first(where: { $0.name == "Trash" })?.role == nil {
+            result["Trash"] = "trash"
+        }
+        return result
+    }
+
+    /// Copies the account's Trash and Junk (from the roles on record in its sync state) into
+    /// the index, which then leaves the mail only there out of every other view. Runs when the
+    /// sync records the provider's folders and when the store opens; call it after anything
+    /// else that changes a folder's role.
+    public func refreshTrashAndJunk(account: MailAccountID) throws {
+        let folders = try mapping(for: SafePath.component(account.rawValue)).folders()
+        try index.setTrashAndJunkMailboxes(Self.trashAndJunkFolders(folders), account: account)
+    }
+
+    /// True when every folder the message is in is its account's Trash or Junk.
+    public func isOnlyInTrashOrJunk(_ id: MailMessageID) throws -> Bool {
+        try index.isTrashOrJunk(id)
     }
 
     /// Checkpoints a folder's cursor. Call it only after the messages it covers are stored:
@@ -92,8 +124,9 @@ extension MailIndex {
     func removeAccount(_ account: MailAccountID) throws {
         while true {
             let page = try summaries(account: account, limit: 500, offset: 0)
-            if page.isEmpty { return }
+            if page.isEmpty { break }
             for summary in page { try remove(summary.id) }
         }
+        try setTrashAndJunkMailboxes([:], account: account)
     }
 }

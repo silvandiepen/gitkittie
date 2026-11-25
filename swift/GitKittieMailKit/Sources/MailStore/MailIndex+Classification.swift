@@ -283,14 +283,15 @@ extension MailIndex {
         return result
     }
 
-    /// Messages and unread messages per category view, for one account or all.
+    /// Messages and unread messages per category view, for one account or all. Mail only in
+    /// Trash or Junk is in no category view (MAIL-102), so it is not counted.
     func categoryCounts(account: MailAccountID?) throws -> [MailCategory: CategoryCount] {
         var sql = """
             SELECT COALESCE(c.home, 'focused'), c.purpose, c.disposition, count(*), sum(1 - m.seen) FROM messages m
-            LEFT JOIN message_classes c ON c.local_id = m.local_id
+            LEFT JOIN message_classes c ON c.local_id = m.local_id WHERE \(Self.notTrashOrJunk)
             """
         var values: [SQLiteValue] = []
-        if let account { sql += " WHERE m.account_id = ?"; values.append(.text(account.rawValue)) }
+        if let account { sql += " AND m.account_id = ?"; values.append(.text(account.rawValue)) }
         let statement = try database.prepare(sql + " GROUP BY 1, 2, 3").bind(values)
         var counts: [MailCategory: CategoryCount] = [:]
         while try statement.step() {
@@ -345,7 +346,7 @@ extension MailIndex {
                c.sender_rule, c.disposition,
                (SELECT group_concat(s.space_id) FROM space_members s WHERE s.local_id = c.local_id)
         FROM message_classes c JOIN messages m ON m.local_id = c.local_id
-        WHERE c.arrival > ? ORDER BY c.arrival LIMIT ?
+        WHERE c.arrival > ? AND m.trash_or_junk = 0 ORDER BY c.arrival LIMIT ?
         """
 
     func arrivals(after sequence: Int64, limit: Int) throws -> [MailArrival] {

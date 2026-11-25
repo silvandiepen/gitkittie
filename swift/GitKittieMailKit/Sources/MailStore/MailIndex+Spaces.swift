@@ -42,10 +42,12 @@ extension MailIndex {
         return result
     }
 
-    /// How many stored messages each space holds (members whose message is gone are not counted).
+    /// How many stored messages each space holds (members whose message is gone are not counted,
+    /// nor those only in Trash or Junk, which the space's view leaves out; MAIL-102).
     func spaceCounts() throws -> [MailSpaceID: (messages: Int, unread: Int)] {
         let statement = try database.prepare("""
-            SELECT s.space_id, count(*), sum(1 - m.seen) FROM space_members s JOIN messages m ON m.local_id = s.local_id GROUP BY s.space_id
+            SELECT s.space_id, count(*), sum(1 - m.seen) FROM space_members s JOIN messages m ON m.local_id = s.local_id
+            WHERE \(Self.notTrashOrJunk) GROUP BY s.space_id
             """)
         var result: [MailSpaceID: (Int, Int)] = [:]
         while try statement.step() {

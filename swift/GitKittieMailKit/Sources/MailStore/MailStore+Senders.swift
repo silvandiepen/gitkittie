@@ -114,7 +114,7 @@ extension MailStore {
 
     /// A sender's or list's messages, newest first.
     public func messages(of scope: SenderScope, account: MailAccountID, limit: Int = 200) throws -> [MessageSummary] {
-        let ids = try index.members(of: scope, account: account).prefix(limit).map(\.id)
+        let ids = try index.members(of: scope, account: account, includesTrashAndJunk: false).prefix(limit).map(\.id)
         return try ids.compactMap { try index.summary(of: $0) }
     }
 
