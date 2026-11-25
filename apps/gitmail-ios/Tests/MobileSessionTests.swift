@@ -99,12 +99,25 @@ final class MobileSessionTests: XCTestCase {
         let budget = StorageBudget.load(from: defaults)
         XCTAssertEqual(budget, .standard)
         XCTAssertEqual(budget.syncOptions.historyBudgetBytes, 500 * 1024 * 1024)
+        XCTAssertEqual(budget.syncOptions.historyDays, 30, "the first sync takes the newest 30 days (MAIL-072)")
         XCTAssertEqual(budget.minimumFreeBytes, 1024 * 1024 * 1024)
         var unlimited = budget
         unlimited.historyBytes = 0
         unlimited.save(to: defaults)
         XCTAssertEqual(StorageBudget.load(from: defaults), unlimited)
         XCTAssertNil(unlimited.syncOptions.historyBudgetBytes)
+    }
+
+    func testABudgetSavedBeforeTheWindowKeepsItsChoicesAndGetsTheWindow() throws {
+        let saved = #"{"historyBytes":104857600,"recentPerFolder":200,"cacheBytes":209715200,"minimumFreeBytes":1073741824}"#
+        defaults.set(Data(saved.utf8), forKey: StorageBudget.defaultsKey)
+        let budget = StorageBudget.load(from: defaults)
+        XCTAssertEqual(budget.historyBytes, 100 * 1024 * 1024)
+        XCTAssertEqual(budget.cacheBytes, 200 * 1024 * 1024)
+        XCTAssertEqual(budget.historyWindow, 30)
+        var all = budget
+        all.historyDays = 0
+        XCTAssertNil(all.syncOptions.historyDays, "0 is all of it")
     }
 
     func testChangedBudgetReachesTheNextSync() async {
@@ -197,6 +210,51 @@ final class MobileSessionTests: XCTestCase {
         XCTAssertFalse(session.model.sync.isRunning, "the sync stops when the background task is done")
         XCTAssertEqual(session.model.totalCount, 2)
         try? KeychainCredentialStore(service: "app.hakobs.gitmail.tests").delete(for: account.id)
+    }
+
+    func testTheFirstSyncTakesTheLast30DaysAndDownloadOlderMailBringsTheRest() async throws {
+        let server = try await LocalMailServer.require()
+        let user = try await server.makeUser()
+        try await server.append(["Last spring", "Last week", "Two months ago", "Today"], for: user, receivedDaysAgo: [300, 7, 60, 0])
+        let session = makeSession(services: Self.testServices(defaults: defaults, trust: server.trust))
+        await session.becameActive()
+        let account = try await session.model.addAccount(Self.draft(for: user))
+        defer { try? KeychainCredentialStore(service: "app.hakobs.gitmail.tests").delete(for: account.id) }
+
+        // The list refreshes shortly after the sync settles (coalesced), so wait for both.
+        try await waitUntil("the first sync") {
+            session.model.syncStatus(account.id)?.hasPrefix("Up to date") == true && session.model.totalCount == 2
+        }
+        let firstStore = try XCTUnwrap(session.model.mailStore)
+        let afterFirst = try await firstStore.messageCount()
+        XCTAssertEqual(afterFirst, 2, "only what arrived in the last 30 days")
+        XCTAssertEqual(session.olderNotDownloaded, 2)
+        XCTAssertEqual(session.model.syncStatus(account.id), "Up to date · older than 30 days not downloaded")
+
+        try await server.append(["Just now"], for: user)
+        await session.model.sync.syncNow()
+        try await waitUntil("new mail") { session.model.totalCount == 3 }
+
+        await session.downloadOlderMail()
+        XCTAssertNil(session.budget.historyWindow)
+        XCTAssertNil(StorageBudget.load(from: defaults).historyWindow, "the choice is kept")
+        try await waitUntil("the older mail") { session.model.totalCount == 5 && session.model.syncStatus(account.id) == "Up to date" }
+        XCTAssertEqual(session.olderNotDownloaded, 0)
+        let store = try XCTUnwrap(session.model.mailStore)
+        let stored = try await store.messageCount()
+        XCTAssertEqual(stored, 5, "each message once")
+        await session.model.sync.stopAll()
+    }
+
+    /// Waits for the real sync to reach a state, polling; fails after `timeout`.
+    private func waitUntil(_ what: String, timeout: Duration = .seconds(30), _ condition: () async -> Bool) async throws {
+        let clock = ContinuousClock()
+        let end = clock.now + timeout
+        while clock.now < end {
+            if await condition() { return }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTFail("timed out waiting for \(what)")
     }
 
     func testBackgroundRefreshNeverRunsOverTheOpenApp() async {

@@ -28,6 +28,39 @@ final class SyncPlannerTests: XCTestCase {
         XCTAssertEqual(plan.history, [5, 4])
     }
 
+    func testAWindowLeavesOlderMailOutOfAFirstSyncRecentAndHistoryAlike() {
+        // 1–4 were received before the window, 5–8 within it.
+        let plan = SyncPlanner.plan(serverUIDs: [1, 2, 3, 4, 5, 6, 7, 8], known: [], cursor: nil, recentLimit: 2,
+                                    olderThanWindow: [1, 2, 3, 4])
+        XCTAssertEqual(plan.recent, [8, 7])
+        XCTAssertEqual(plan.history, [6, 5])
+        XCTAssertEqual(plan.older, [4, 3, 2, 1], "newest first, for when they are wanted")
+        XCTAssertEqual(plan.highestUID, 8, "the cursor covers the older mail, so it never counts as new")
+    }
+
+    func testAWindowNeverHoldsBackNewMailWhateverItsDate() {
+        // 9 arrived after the cursor although the provider dates it before the window (a move
+        // from another folder keeps its received date): new mail all the same.
+        let plan = SyncPlanner.plan(serverUIDs: [1, 2, 5, 9], known: [5], cursor: 8, recentLimit: 1, olderThanWindow: [1, 2, 9])
+        XCTAssertEqual(plan.recent, [9])
+        XCTAssertEqual(plan.history, [])
+        XCTAssertEqual(plan.older, [2, 1])
+    }
+
+    func testWithoutAWindowTheOlderMailIsHistoryAgain() {
+        let plan = SyncPlanner.plan(serverUIDs: [1, 2, 5], known: [5], cursor: 5, recentLimit: 1)
+        XCTAssertEqual(plan.history, [2, 1])
+        XCTAssertEqual(plan.older, [])
+        XCTAssertEqual(SyncPlanner.historyCandidates(serverUIDs: [1, 2, 5, 9], known: [5], cursor: 5), [2, 1],
+                       "new mail above the cursor is never a window candidate")
+    }
+
+    func testTheWindowStartsAtMidnightUTCTheGivenDaysBack() {
+        let now = ISO8601DateFormatter().date(from: "2026-11-25T23:30:00Z")!
+        XCTAssertEqual(SyncPlanner.windowStart(days: 30, now: now), ISO8601DateFormatter().date(from: "2026-10-26T00:00:00Z")!)
+        XCTAssertEqual(SyncPlanner.windowStart(days: 0, now: now), ISO8601DateFormatter().date(from: "2026-11-25T00:00:00Z")!)
+    }
+
     func testAnEmptyFolderKeepsItsCursor() {
         let plan = SyncPlanner.plan(serverUIDs: [], known: [3], cursor: 3, recentLimit: 10)
         XCTAssertEqual(plan.gone, [3])
