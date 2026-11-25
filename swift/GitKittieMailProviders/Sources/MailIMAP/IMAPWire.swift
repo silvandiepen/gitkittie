@@ -254,7 +254,7 @@ final class IMAPWire {
 
     /// APPEND one message (RFC 3501 6.3.11). The codec waits for the server's continuation
     /// before sending the literal, unless the server has LITERAL+.
-    func append(_ message: Data, to mailbox: MailboxName, flags: [Flag]) async throws -> IMAPCommandResult {
+    func append(_ message: Data, to mailbox: MailboxName, flags: [Flag], internalDate: ServerMessageDate? = nil) async throws -> IMAPCommandResult {
         let tag = makeTag()
         log.debug("imap", "→ \(String(tag)) APPEND (\(message.count) bytes)")
         let deadline = armTimeout(commandTimeout, "APPEND")
@@ -265,7 +265,7 @@ final class IMAPWire {
             try await outbound.write(contentsOf: [
                 .part(.append(.start(tag: tag, appendingTo: mailbox))),
                 .part(.append(.beginMessage(message: AppendMessage(
-                    options: AppendOptions(flagList: flags, internalDate: nil, extensions: [:]),
+                    options: AppendOptions(flagList: flags, internalDate: internalDate, extensions: [:]),
                     data: AppendData(byteCount: message.count)
                 )))),
                 .part(.append(.messageBytes(bytes))),

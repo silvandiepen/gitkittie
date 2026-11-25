@@ -343,8 +343,9 @@ public final class IMAPSession: MailboxSession {
         return mapping
     }
 
-    public func append(_ rawMessage: Data, to folder: String, flags: MessageFlags) async throws -> RemoteMessageID? {
-        let result = try await wire.append(rawMessage, to: Self.mailbox(folder), flags: Self.imapFlags(flags))
+    public func append(_ rawMessage: Data, to folder: String, flags: MessageFlags, receivedAt: Date?) async throws -> RemoteMessageID? {
+        let result = try await wire.append(rawMessage, to: Self.mailbox(folder), flags: Self.imapFlags(flags),
+                                           internalDate: receivedAt.flatMap(Self.serverDate))
         guard result.isOK else {
             if case .tryCreate = result.responseText.code { throw MailProviderError.folderNotFound(folder) }
             throw MailProviderError.commandFailed("APPEND to \(folder): \(result.responseText.text)")
@@ -507,6 +508,18 @@ public final class IMAPSession: MailboxSession {
             }
         }
         return summary
+    }
+
+    /// `date` as an IMAP date-time in UTC, for APPEND; nil outside the years IMAP can write.
+    static func serverDate(_ date: Date) -> ServerMessageDate? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let c = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        guard let year = c.year, let month = c.month, let day = c.day, let hour = c.hour, let minute = c.minute,
+              let second = c.second,
+              let components = ServerMessageDate.Components(year: year, month: month, day: day, hour: hour, minute: minute,
+                                                            second: second, timeZoneMinutes: 0) else { return nil }
+        return ServerMessageDate(components)
     }
 
     static func date(_ date: ServerMessageDate) -> Date? {

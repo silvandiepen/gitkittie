@@ -228,6 +228,9 @@ enum SyncStatusText {
         case .watching:
             if progress.historyPausedForBudget { return "Up to date · older mail paused at the storage limit" }
             if progress.remaining > 0 { return "\(progress.remaining.formatted()) older messages to go" }
+            if progress.olderNotDownloaded > 0, let days = progress.historyDays {
+                return "Up to date · older than \(days) days not downloaded"
+            }
             return "Up to date"
         case .waitingToRetry(_, let retryAt):
             let seconds = max(0, Int(retryAt.timeIntervalSince(now).rounded()))

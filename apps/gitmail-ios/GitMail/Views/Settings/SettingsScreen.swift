@@ -52,6 +52,15 @@ private struct StorageSection: View {
 
     var body: some View {
         Section {
+            Picker("Download mail from", selection: window) {
+                ForEach(StorageBudget.historyDayChoices, id: \.self) { choice in
+                    Text(choice.map(Self.period) ?? "All time").tag(choice)
+                }
+            }
+            if session.budget.historyWindow != nil, session.olderNotDownloaded > 0 {
+                LabeledContent("Not downloaded", value: "\(session.olderNotDownloaded.formatted()) older messages")
+                Button("Download Older Mail") { Task { await session.downloadOlderMail() } }
+            }
             Picker("Older mail", selection: history) {
                 ForEach(StorageBudget.historyChoices, id: \.self) { choice in
                     Text(choice.map { "Up to " + bytes($0) } ?? "All of it").tag(choice)
@@ -69,8 +78,26 @@ private struct StorageSection: View {
         } header: {
             Text("Storage")
         } footer: {
-            Text("New mail always comes in. Older mail is downloaded newest first, up to the limit, per account. Attachment previews are kept in a cache that is never backed up and is trimmed to its size. Below \(bytes(session.budget.minimumFreeBytes)) free, Mail stops downloading until there is room; it never deletes mail to make room. Your messages are files in Files ▸ On My \(DeviceWords.model) ▸ Mail ▸ Mail.")
+            Text("New mail always comes in.\(windowText) Older mail is downloaded newest first, up to the limit, per account. Attachment previews are kept in a cache that is never backed up and is trimmed to its size. Below \(bytes(session.budget.minimumFreeBytes)) free, Mail stops downloading until there is room; it never deletes mail to make room. Your messages are files in Files ▸ On My \(DeviceWords.model) ▸ Mail ▸ Mail.")
         }
+    }
+
+    /// What the window means, in words, for the footer.
+    private var windowText: String {
+        guard let days = session.budget.historyWindow else { return "" }
+        return " Mail received more than \(days == 365 ? "a year" : "\(days) days") ago stays at the provider until you download it."
+    }
+
+    private static func period(_ days: Int) -> String {
+        days == 365 ? "Last year" : "Last \(days) days"
+    }
+
+    private var window: Binding<Int?> {
+        Binding(get: { session.budget.historyWindow }, set: { value in
+            var budget = session.budget
+            budget.historyDays = value ?? 0
+            Task { await session.setBudget(budget) }
+        })
     }
 
     private var history: Binding<Int64?> {

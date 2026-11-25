@@ -217,6 +217,98 @@ final class MailSyncIntegrationTests: XCTestCase {
         XCTAssertEqual(withNew, 7, "new mail is imported even over the budget")
     }
 
+    // MARK: - The history window (GKM-039, MAIL-072)
+
+    /// Appends one message per entry, received the given number of days ago (IMAP APPEND
+    /// date-time), and returns the bytes in UID order.
+    @discardableResult
+    private func append(receivedDaysAgo days: [Int], to folder: String = "INBOX", prefix: String) async throws -> [Data] {
+        var sent: [Data] = []
+        try await imap().withSession { session in
+            if folder != "INBOX", !(try await session.listFolders().contains { $0.id == folder }) {
+                try await session.createFolder(folder)
+            }
+            for (index, age) in days.enumerated() {
+                let raw = message("\(prefix) \(index + 1) (\(age) days old)")
+                _ = try await session.append(raw, to: folder, flags: MailProvider.MessageFlags(),
+                                             receivedAt: Date().addingTimeInterval(-Double(age) * 86_400))
+                sent.append(raw)
+            }
+        }
+        return sent
+    }
+
+    private func storedSubjects() async throws -> Set<String> {
+        Set(try await store.summaries(account: account, limit: 1_000).compactMap(\.subject))
+    }
+
+    func testAWindowedFirstSyncTakesOnlyRecentMailNewMailStillComesAndTheRestFollowsWithoutDuplicates() async throws {
+        // Older and newer mail interleaved, so the window goes by received date, not by UID. No
+        // message is within a day of the window's edge: the server compares days in its own zone.
+        let inbox = try await append(receivedDaysAgo: [90, 2, 60, 1, 45, 0, 32], prefix: "inbox")
+        let projects = try await append(receivedDaysAgo: [400, 10, 35], to: "Projects", prefix: "project")
+        let windowed = SyncOptions(recentPerFolder: 1, historyDays: 30, bodyBatchMessages: 1, reconnect: Self.fast)
+
+        let sync = coordinator(windowed)
+        try await sync.syncOnce()
+        let recent: Set = ["inbox 2 (2 days old)", "inbox 4 (1 days old)", "inbox 6 (0 days old)", "project 2 (10 days old)"]
+        let afterFirst = try await storedSubjects()
+        XCTAssertEqual(afterFirst, recent, "only mail received within the last 30 days")
+        let progress = await sync.progress
+        XCTAssertEqual(progress.olderNotDownloaded, 6)
+        XCTAssertEqual(progress.remaining, 0, "the older mail is not counted as still to come")
+        XCTAssertEqual(progress.historyDays, 30)
+        let folders = try await store.syncedFolders(account: account)
+        XCTAssertFalse(folders.contains(where: \.historyComplete), "a folder with mail left out is not complete: \(folders)")
+        XCTAssertEqual(folders.first { $0.name == "INBOX" }?.highestUID, 7)
+
+        // A second pass sorted every candidate already: it imports nothing and asks no more.
+        let searches = captured.lines.filter { $0.contains("→") && $0.contains("UID SEARCH SINCE") }.count
+        XCTAssertEqual(searches, 2, "one search per folder")
+        try await sync.syncOnce()
+        XCTAssertEqual(captured.lines.filter { $0.contains("→") && $0.contains("UID SEARCH SINCE") }.count, searches)
+        let unchanged = try await storedCount()
+        XCTAssertEqual(unchanged, 4)
+
+        // New mail always comes in, even when the provider dates it before the window (a message
+        // moved in from another folder keeps its received date).
+        try await append(receivedDaysAgo: [0, 200], prefix: "new")
+        try await sync.syncOnce()
+        let withNew = try await storedSubjects()
+        XCTAssertEqual(withNew, recent.union(["new 1 (0 days old)", "new 2 (200 days old)"]))
+
+        // Fetching older mail (the window off) stays within the history budget: room for the
+        // two newest older inbox messages (UIDs 7 and 5) and no more.
+        let imported = try await store.importedBytes(account: account)
+        let budget = imported + Int64(inbox[6].count + inbox[4].count)
+        let budgeted = coordinator(SyncOptions(recentPerFolder: 1, historyBudgetBytes: budget, bodyBatchMessages: 1,
+                                               reconnect: Self.fast))
+        try await budgeted.syncOnce()
+        let withinBudget = try await storedSubjects()
+        XCTAssertEqual(withinBudget.subtracting(withNew), ["inbox 7 (32 days old)", "inbox 5 (45 days old)"])
+        let paused = await budgeted.progress
+        XCTAssertTrue(paused.historyPausedForBudget)
+        XCTAssertEqual(paused.olderNotDownloaded, 0, "without a window nothing is left out by date")
+        XCTAssertEqual(paused.remaining, 4)
+
+        // With no limit the rest follows, each message once, byte for byte.
+        let everything = coordinator(SyncOptions(reconnect: Self.fast))
+        try await everything.syncOnce()
+        let count = try await storedCount()
+        XCTAssertEqual(count, inbox.count + projects.count + 2)
+        let complete = try await store.syncedFolders(account: account)
+        XCTAssertTrue(complete.allSatisfy(\.historyComplete), "\(complete)")
+        for (folder, sent) in [("INBOX", inbox), ("Projects", projects)] {
+            let validity = try XCTUnwrap(complete.first { $0.name == folder }?.uidValidity)
+            for (uid, raw) in zip(1..., sent) {
+                let id = try await XCTUnwrapAsync(await store.localID(at: RemoteLocation(mailbox: folder, uidValidity: validity, uid: UInt32(uid)),
+                                                                      account: account))
+                let original = try await store.originalData(of: id)
+                XCTAssertEqual(original, raw, "\(folder) \(uid)")
+            }
+        }
+    }
+
     func testAUIDValidityResetReMapsStoredMessagesWithoutDuplicates() async throws {
         let original = try await append(2, to: "Projects", prefix: "kept")
         // GreenMail 2.1.3 cannot delete a mailbox that a logged-out session still had selected

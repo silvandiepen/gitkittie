@@ -10,6 +10,13 @@ public struct SyncOptions: Sendable {
     /// The most history (bytes of mail) to download for the account; `nil` for no limit. New
     /// mail is always imported.
     public var historyBudgetBytes: Int64?
+    /// History received more than this many days ago is not downloaded (GKM-039, MAIL-072): a
+    /// folder's first sync imports only the mail the provider received within the window (IMAP
+    /// `UID SEARCH SINCE`, by calendar day in UTC), and later passes import history only from
+    /// within it. New mail always comes in, whatever its date. `nil` (the Mac) downloads all
+    /// history, within ``historyBudgetBytes``; the window applies within that budget too.
+    /// Turning the window off later imports the older mail, without duplicates.
+    public var historyDays: Int?
     /// Most history messages imported per pass before new mail is checked again.
     public var historyPerPass: Int
     /// Longest a pass imports history before it lists the folders and checks for new mail
@@ -45,7 +52,7 @@ public struct SyncOptions: Sendable {
     /// longest delay until it is stopped.
     public var reconnect: ReconnectPolicy
 
-    public init(recentPerFolder: Int = 200, historyBudgetBytes: Int64? = nil, historyPerPass: Int = 10_000,
+    public init(recentPerFolder: Int = 200, historyBudgetBytes: Int64? = nil, historyDays: Int? = nil, historyPerPass: Int = 10_000,
                 historySlice: Duration = .seconds(20), onDemandThreshold: Int? = 1_000_000, pinnedPerPass: Int = 50,
                 pipelineStores: Bool = true,
                 summaryBatch: Int = 500, bodyBatchMessages: Int = 100, bodyBatchBytes: Int = 8 * 1024 * 1024,
@@ -53,6 +60,7 @@ public struct SyncOptions: Sendable {
                 reconnect: ReconnectPolicy = ReconnectPolicy()) {
         self.recentPerFolder = recentPerFolder
         self.historyBudgetBytes = historyBudgetBytes
+        self.historyDays = historyDays
         self.historyPerPass = historyPerPass
         self.historySlice = historySlice
         self.onDemandThreshold = onDemandThreshold
@@ -94,6 +102,11 @@ public struct SyncProgress: Sendable, Equatable {
     public var remaining = 0
     /// True when history stopped at the storage budget.
     public var historyPausedForBudget = false
+    /// The history window in days (``SyncOptions/historyDays``); nil without one.
+    public var historyDays: Int?
+    /// Messages at the provider received before the history window that are not stored: left
+    /// out by ``SyncOptions/historyDays`` (as of each folder's last listing).
+    public var olderNotDownloaded = 0
     /// Messages too large to download; they stay at the provider.
     public var skippedTooLarge = 0
     /// When the last complete pass over every folder finished.
