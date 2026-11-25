@@ -99,24 +99,11 @@ struct ActivitySheet: View {
                 }
                 if !model.failedSyncItems.isEmpty {
                     Section {
-                        ForEach(model.failedSyncItems) { item in
-                            VStack(alignment: .leading, spacing: 6) {
-                                row(item, systemImage: "exclamationmark.triangle.fill", tint: .orange)
-                                if let note = item.note {
-                                    Text(note).font(.caption).foregroundStyle(.secondary)
-                                }
-                                HStack(spacing: 16) {
-                                    Button("Try Again") { Task { await model.retrySync(item) } }
-                                    Button("Discard", role: .destructive) { Task { await model.discardSync(item) } }
-                                }
-                                .font(.callout)
-                                .buttonStyle(.borderless)
-                            }
-                        }
+                        ForEach(model.failedSyncItems) { item in SyncFailureRow(item: item) }
                     } header: {
                         Text("Not sent")
                     } footer: {
-                        Text("Discarding drops that change. It stays on this device until you do.")
+                        Text("Discarding drops that change. It stays on this device until you do; Show What It Was lets you copy it first.")
                     }
                 }
                 if !waiting.isEmpty {
@@ -140,6 +127,9 @@ struct ActivitySheet: View {
                                     Text(receipt.message)
                                     Text(receipt.sentAt.formatted(.relative(presentation: .named)))
                                         .font(.caption).foregroundStyle(.secondary)
+                                    if let note = receipt.note {
+                                        Text(note).font(.caption).foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }

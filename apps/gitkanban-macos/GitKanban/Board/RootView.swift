@@ -371,6 +371,30 @@ private struct WorkspaceSplit: View {
         .padding(.horizontal, 16).padding(.vertical, 10)
     }
 
+    /// The screen beside the sidebar.
+    @ViewBuilder private var detail: some View {
+        if model.isShowingAllTasks {
+            AllTasksScreen()
+        } else if model.isShowingReviews {
+            ReviewsScreen()
+        } else if model.isShowingDocs, model.activeRepo != nil {
+            NavigationStack { DocsScreen() }
+        } else if model.activeRepo != nil {
+            BoardScreen()
+        } else {
+            VStack(spacing: 14) {
+                Image("GitKanbanLines")
+                    .resizable().scaledToFit().frame(width: 104)
+                    .foregroundStyle(.tertiary)
+                Text("Select a board").font(.title2.bold())
+                Text("Choose a board from the sidebar, or add a repository.")
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.window)
+        }
+    }
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: selection) {
@@ -506,26 +530,9 @@ private struct WorkspaceSplit: View {
                 }
             }
         } detail: {
-            if model.isShowingAllTasks {
-                AllTasksScreen()
-            } else if model.isShowingReviews {
-                ReviewsScreen()
-            } else if model.isShowingDocs, model.activeRepo != nil {
-                NavigationStack { DocsScreen() }
-            } else if model.activeRepo != nil {
-                BoardScreen()
-            } else {
-                VStack(spacing: 14) {
-                    Image("GitKanbanLines")
-                        .resizable().scaledToFit().frame(width: 104)
-                        .foregroundStyle(.tertiary)
-                    Text("Select a board").font(.title2.bold())
-                    Text("Choose a board from the sidebar, or add a repository.")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Theme.window)
-            }
+            detail
+                // A change that could not be sent shows under every screen, with what can be done about it.
+                .safeAreaInset(edge: .bottom, spacing: 0) { SyncFailuresBanner() }
         }
         .navigationSplitViewStyle(.balanced)
         .toolbarBackground(Theme.window, for: .windowToolbar)
