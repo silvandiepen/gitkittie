@@ -219,11 +219,11 @@ final class MailFlowUITests: XCTestCase {
     }
 
     /// iOS may offer to save the test password in Passwords; the test never does.
-    private func declineSavePassword() {
+    private func declineSavePassword(wait: TimeInterval = 3) {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         for owner in [app!, springboard] {
             let notNow = owner.buttons["Not Now"]
-            if notNow.waitForExistence(timeout: 3) { notNow.tap(); return }
+            if notNow.waitForExistence(timeout: wait) { notNow.tap(); return }
         }
     }
 
@@ -233,16 +233,15 @@ final class MailFlowUITests: XCTestCase {
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
         picker.buttons["Other IMAP"].tap()
         type(user.address, into: app.textFields["addressField"])
-        replace(app.textFields["imapHostField"], with: "localhost")
-        replace(app.textFields["imapPortField"], with: "3993")
-        replace(app.textFields["smtpHostField"], with: "localhost")
-        replace(app.textFields["smtpPortField"], with: "3465")
+        type(user.password, into: app.secureTextFields["passwordField"])
+        // When the password field scrolls away (the large sizes), iOS may offer to save it.
+        for (field, value) in [("imapHostField", "localhost"), ("imapPortField", "3993"),
+                               ("smtpHostField", "localhost"), ("smtpPortField", "3465")] {
+            declineSavePassword(wait: 1)
+            replace(app.textFields[field], with: value)
+        }
+        declineSavePassword(wait: 1)
         chooseTLS()
-        // The password last: when its field scrolls away (the large sizes), iOS takes the form
-        // as sent and offers to save the password over the sheet.
-        let password = app.secureTextFields["passwordField"]
-        for _ in 0..<6 where !password.isHittable { app.swipeDown() }
-        type(user.password, into: password)
     }
 
     private func type(_ text: String, into field: XCUIElement) {
@@ -252,14 +251,20 @@ final class MailFlowUITests: XCTestCase {
     }
 
     private func replace(_ field: XCUIElement, with text: String) {
-        // At the largest text sizes the field may be further down than one swipe.
-        for _ in 0..<6 where !(field.exists && field.isHittable) { app.swipeUp() }
+        // At the largest text sizes the field may be further down than one swipe, or under the
+        // keyboard.
+        for _ in 0..<6 {
+            let keyboard = app.keyboards.firstMatch
+            let covered = keyboard.exists && field.exists && field.frame.midY > keyboard.frame.minY - 20
+            if field.exists && field.isHittable && !covered { break }
+            app.swipeUp()
+        }
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         // The fields are trailing-aligned: tap the right end so the cursor lands after the old
         // text (a plain tap can put it at the start on iPad, and the deletes then remove nothing).
-        // At the largest text sizes the field wraps: focus it, then tap the end of its last line.
-        field.tap()
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.9)).tap()
+        // At the largest text sizes the field wraps and its text sits at the bottom.
+        let tall = field.frame.height > 60
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: tall ? 0.85 : 0.5)).tap()
         let current = field.value as? String ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
         field.typeText(text)
