@@ -1,12 +1,12 @@
 {
   "meta": {
     "title": "GitKittie — Small apps built on your own git",
-    "description": "GitKittie makes GitKittie Folder, GitKittie Tasks and GitKittie Bud: small, local-first apps for Mac, iPhone and iPad that use your own git — GitHub, GitLab, or wherever your repositories already live. No accounts, no servers."
+    "description": "GitKittie makes GitKittie Folder, GitKittie Tasks, GitKittie Bud and GitKittie Mail: small, local-first apps for Mac, iPhone and iPad that work on what you already have — your own git repositories, and your own mail account. No GitKittie accounts, no GitKittie servers."
   },
   "hero": {
     "eyebrow": "The GitKittie family",
     "title": "Small apps, built on *your own git.*",
-    "subtitle": "Three focused, local-first apps that use the git setup you already have — GitHub, GitLab, or wherever your repositories live. No accounts, no servers, no lock-in.",
+    "subtitle": "Focused, local-first apps on the setup you already have — git repositories on GitHub, GitLab or anywhere else, and the mail account you already use. No accounts, no servers, no lock-in.",
     "ctaFolder": "Explore GitKittie Folder",
     "ctaTasks": "Explore GitKittie Tasks",
     "ctaBud": "Explore GitKittie Bud",
@@ -23,8 +23,8 @@
   },
   "apps": {
     "eyebrow": "The apps",
-    "title": "Three apps, *one idea.*",
-    "subtitle": "Keep your work in plain files under git — and get a native app that makes it effortless. Pick the one you need; they share the same principles and the same engine.",
+    "title": "Four apps, *one idea.*",
+    "subtitle": "Keep your work in plain files you own — and get a native app that makes it effortless. Pick the one you need; they share the same principles.",
     "items": [
       {
         "app": "folder",
@@ -64,28 +64,41 @@
         "to": "/bud",
         "cta": "Explore GitKittie Bud",
         "badge": "In development"
+      },
+      {
+        "app": "mail",
+        "name": "GitKittie Mail",
+        "tagline": "A calmer inbox on the address you already have, with every message kept as a file you own.",
+        "points": [
+          "A Focused inbox, sorted on your device",
+          "Sender rules, safe unsubscribe and cleanup you can undo",
+          "Works with iCloud Mail and standard IMAP accounts"
+        ],
+        "to": "/mail",
+        "cta": "Explore GitKittie Mail",
+        "badge": "In development"
       }
     ]
   },
   "principles": {
     "eyebrow": "Shared across the family",
     "title": "The same promises, *in every app.*",
-    "subtitle": "They hold across the family because the data is always the same thing — your files, in your git.",
+    "subtitle": "They hold across the family because the data is always the same thing — your files, on your devices and in accounts you already own.",
     "features": [
       {
         "icon": "lock",
         "title": "Local-first & private",
-        "desc": "No GitKittie account, no cloud service. Your files move directly between your device and the git host you already use."
+        "desc": "No GitKittie account, no cloud service. Your files move directly between your device and the git host or mail provider you already use."
       },
       {
         "icon": "git-branch",
-        "title": "Your own git",
-        "desc": "The apps read and write plain git repositories you own. Nothing is locked into a proprietary format or backend."
+        "title": "Your own files",
+        "desc": "Folder, Tasks and Bud read and write plain git repositories you own; Mail keeps every message as a plain .eml file. Nothing is locked into a proprietary format or backend."
       },
       {
         "icon": "github",
-        "title": "Built on your git host",
-        "desc": "They lean on the git configuration you already trust — the same repositories, keys and permissions, on GitHub, GitLab or anywhere else."
+        "title": "Built on what you already use",
+        "desc": "They lean on accounts you already trust — the same repositories, keys and permissions on GitHub, GitLab or anywhere else, and the same mail address at your provider."
       },
       {
         "icon": "menu",
@@ -97,7 +110,7 @@
   "cta": {
     "eyebrow": "No accounts. No servers.",
     "title": "Own your data. *Keep owning it.*",
-    "subtitle": "GitKittie Folder and GitKittie Tasks are on the Mac App Store and the App Store. GitKittie Bud is in development.",
+    "subtitle": "GitKittie Folder and GitKittie Tasks are on the Mac App Store and the App Store. GitKittie Bud and GitKittie Mail are in development.",
     "primary": "Explore GitKittie Folder",
     "secondary": "See GitKittie Tasks"
   }

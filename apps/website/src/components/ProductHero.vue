@@ -13,6 +13,7 @@ import { Markdown } from '@sil/ui'
 import FolderMark from './FolderMark.vue'
 import TasksMark from './TasksMark.vue'
 import BudMark from './BudMark.vue'
+import MailMark from './MailMark.vue'
 import AppShot from './AppShot.vue'
 import type { AppSlug, Shot } from '@/lib/content'
 
@@ -36,7 +37,8 @@ defineProps<{
         <span v-if="shot" class="product-hero__icon" aria-hidden="true">
           <FolderMark v-if="app === 'folder'" :size="56" :title="markTitle" />
           <TasksMark v-else-if="app === 'tasks'" :size="56" :title="markTitle" />
-          <BudMark v-else :size="56" :title="markTitle" />
+          <BudMark v-else-if="app === 'bud'" :size="56" :title="markTitle" />
+          <MailMark v-else :size="56" :title="markTitle" />
         </span>
         <span v-if="eyebrow" class="mkt__eyebrow">{{ eyebrow }}</span>
         <span v-if="badge" class="mkt__badge">{{ badge }}</span>
@@ -50,7 +52,8 @@ defineProps<{
       <div v-if="!shot" class="product-hero__art" aria-hidden="true">
         <FolderMark v-if="app === 'folder'" :size="200" :title="markTitle" />
         <TasksMark v-else-if="app === 'tasks'" :size="200" :title="markTitle" />
-        <BudMark v-else :size="200" :title="markTitle" />
+        <BudMark v-else-if="app === 'bud'" :size="200" :title="markTitle" />
+        <MailMark v-else :size="200" :title="markTitle" />
       </div>
     </div>
 

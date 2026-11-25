@@ -32,6 +32,7 @@ export const staticPages: StaticPage[] = [
   { path: '/folder', content: 'folder', app: 'folder', shot: '/screenshots/folder/iphone-repos-dark.webp', shotAlt: 'GitKittie Folder listing repositories on iPhone', changefreq: 'monthly', priority: 0.9 },
   { path: '/tasks', content: 'tasks', app: 'tasks', shot: '/screenshots/tasks/mac-board-dark.webp', shotAlt: 'A GitKittie Tasks board on the Mac', changefreq: 'monthly', priority: 0.9 },
   { path: '/bud', content: 'bud', app: 'bud', shot: '/screenshots/bud/mac-history.webp', shotAlt: 'A branch history in GitKittie Bud on the Mac', changefreq: 'monthly', priority: 0.9 },
+  { path: '/mail', content: 'mail', app: 'mail', changefreq: 'monthly', priority: 0.9 },
   { path: '/blog', content: 'blog', shot: '/screenshots/tasks/mac-task-dark.webp', shotAlt: 'A task open in its own window in GitKittie Tasks', changefreq: 'weekly', priority: 0.8 },
   { path: '/docs', content: 'docs', shot: '/screenshots/tasks/mac-list-dark.webp', shotAlt: 'The List view of a GitKittie Tasks board', changefreq: 'monthly', priority: 0.7 },
   { path: '/support', content: 'support', changefreq: 'monthly', priority: 0.6 },

@@ -21,6 +21,11 @@
           "label": "GitKittie Bud",
           "to": "/bud",
           "description": "Rewrite git history, visually and safely"
+        },
+        {
+          "label": "GitKittie Mail",
+          "to": "/mail",
+          "description": "A calmer inbox, with your mail kept as files"
         }
       ]
     },
@@ -58,6 +63,10 @@
           {
             "label": "GitKittie Bud",
             "to": "/bud"
+          },
+          {
+            "label": "GitKittie Mail",
+            "to": "/mail"
           }
         ]
       },
