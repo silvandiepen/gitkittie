@@ -65,10 +65,37 @@ struct IndexRecord {
         self.fingerprint = ContentFingerprint.of(message)
         let body = message.textBody ?? message.htmlBody.map(HTMLText.plainText(fromHTML:)) ?? ""
         self.bodyText = body
-        let collapsed = body.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        self.snippet = String(collapsed.prefix(200))
+        self.snippet = Self.snippet(of: body)
         self.attachmentText = String(attachmentText.prefix(Self.maximumAttachmentText))
         self.listID = message.listID
+    }
+
+    /// The first 200 Characters of the body with every run of whitespace as one space: the
+    /// same as collapsing the whole body and keeping 200, but it stops reading once it has them
+    /// (GKM-040; collapsing a long body cost more than storing it in the index). It reads one
+    /// Character past the 200, since the last Character of a prefix can still grow with what follows.
+    static func snippet(of body: String, length: Int = 200) -> String {
+        var collapsed = ""
+        var wordStart: String.Index?
+        func append(_ word: Substring) -> Bool {
+            if !collapsed.isEmpty { collapsed += " " }
+            collapsed += word
+            return collapsed.count > length
+        }
+        var index = body.startIndex
+        while index < body.endIndex {
+            if body[index].isWhitespace {
+                if let start = wordStart {
+                    wordStart = nil
+                    if append(body[start..<index]) { return String(collapsed.prefix(length)) }
+                }
+            } else if wordStart == nil {
+                wordStart = index
+            }
+            index = body.index(after: index)
+        }
+        if let start = wordStart { _ = append(body[start...]) }
+        return String(collapsed.prefix(length))
     }
 
     /// In-Reply-To first, then References, without repeats, capped.
