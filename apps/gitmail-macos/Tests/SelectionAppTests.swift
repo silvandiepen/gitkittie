@@ -176,7 +176,7 @@ final class SelectionAppTests: XCTestCase {
         inbox = try await store.search(SearchQuery(mailbox: "INBOX"), limit: 1000).compactMap(\.subject)
         XCTAssertEqual(inbox.count, count + 1)
         let unsent = try await store.actionStatus(account: work).pending
-        XCTAssertEqual(unsent, 0, "moves not sent yet cancel out (MAIL-037)")
+        XCTAssertEqual(unsent, 2 * (count - 1), "each move and its Undo, both unsent: the replay settles them without sending (MAIL-037)")
     }
 
     func testTheSelectionBelongsToItsViewAndRowsThatLeaveGoWithoutMovingTheList() async throws {
