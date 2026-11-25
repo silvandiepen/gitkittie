@@ -127,7 +127,10 @@ private struct AccountHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
+            // An address would wrap mid-domain ("example.-com"): one line, shortened in the middle.
             Text(account.displayName)
+                .lineLimit(1)
+                .truncationMode(.middle)
             if let status = model.syncStatus(account.id) {
                 Text(status)
                     .font(.caption2)

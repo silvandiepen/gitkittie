@@ -20,7 +20,7 @@ struct SettingsScreen: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(account.displayName)
-                                if !account.address.isEmpty {
+                                if !account.address.isEmpty, account.address != account.displayName {
                                     Text(account.address).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
@@ -89,7 +89,9 @@ private struct StorageSection: View {
         })
     }
 
-    private func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .file) }
+    /// The limits are whole binary units (500 × 1024 × 1024), so they are shown in the same
+    /// units: "500 MB", not the file style's "524.3 MB".
+    private func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .memory) }
 }
 
 /// What happens when Mail is not on screen: honest, because iOS decides (MAIL-053).

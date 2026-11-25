@@ -59,6 +59,13 @@ struct ComposeScreen: View {
                     }
                 }
         }
+        // In the bar, not above the keyboard: on iPad a keyboard toolbar floats outside the
+        // sheet, and with a hardware keyboard it isn't shown at all.
+        ToolbarItem(placement: .primaryAction) {
+            Button { importing = true } label: { Image(systemName: "paperclip") }
+                .accessibilityLabel("Attach a File")
+                .accessibilityIdentifier("attachButton")
+        }
         ToolbarItem(placement: .confirmationAction) {
             Button {
                 Task {
@@ -112,13 +119,6 @@ struct ComposeScreen: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Button { importing = true } label: { Image(systemName: "paperclip") }
-                    .accessibilityLabel("Attach a File")
-                Spacer()
-            }
-        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
             Task { await attach(urls, to: compose) }

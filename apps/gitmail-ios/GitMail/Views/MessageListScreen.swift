@@ -283,6 +283,7 @@ private struct StatusLine: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
+            .fixedSize() // the bar gives it too little room otherwise ("Up t…")
             .accessibilityIdentifier("statusLine")
     }
 

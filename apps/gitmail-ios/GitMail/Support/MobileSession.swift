@@ -250,7 +250,7 @@ final class MobileSession {
     private func hasRoom(_ store: MailStore) -> Bool {
         guard let free = freeSpace(store.locations.mailFolder) else { storageNotice = nil; return true }
         if free < budget.minimumFreeBytes {
-            let limit = ByteCountFormatter.string(fromByteCount: budget.minimumFreeBytes, countStyle: .file)
+            let limit = ByteCountFormatter.string(fromByteCount: budget.minimumFreeBytes, countStyle: .memory)
             storageNotice = "Mail stopped downloading: less than \(limit) is free on \(DeviceWords.this). It carries on when there is room."
             return false
         }
