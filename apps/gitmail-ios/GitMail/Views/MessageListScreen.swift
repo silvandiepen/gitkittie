@@ -72,7 +72,11 @@ struct MessageListScreen: View {
         .searchable(text: searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search mail")
         .refreshable { await session.refreshNow() }
         .toolbar {
-            ToolbarItem(placement: .bottomBar) { StatusLine() }
+            // An empty status would still draw an empty bubble beside Compose, so it only joins
+            // the bar when it has something to say.
+            if !StatusLine.text(model: model, session: session).isEmpty {
+                ToolbarItem(placement: .bottomBar) { StatusLine() }
+            }
             ToolbarItem(placement: .bottomBar) {
                 Button {
                     Task { router.compose(await model.composeNew()) }
@@ -101,6 +105,7 @@ struct MessageListScreen: View {
             } actions: {
                 Button("Add Account") { router.showsAddAccount = true }
                     .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("addAccountButton")
             }
         } else if browser.rows.isEmpty {
             QuietNote(browser.isSearching ? "No messages match." : browser.scope.category?.emptyNote ?? "No messages here.")
@@ -272,14 +277,14 @@ private struct StatusLine: View {
     @Environment(MobileSession.self) private var session
 
     var body: some View {
-        Text(text)
+        Text(Self.text(model: model, session: session))
             .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .accessibilityIdentifier("statusLine")
     }
 
-    private var text: String {
+    static func text(model: AppModel, session: MobileSession) -> String {
         if session.storageNotice != nil { return "Paused: low storage" }
         let accounts = model.accounts.filter { $0.connection != nil }
         guard !accounts.isEmpty else { return model.totalCount > 0 ? "\(model.totalCount.formatted()) messages" : "" }
