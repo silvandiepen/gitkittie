@@ -6,12 +6,16 @@ on:
     paths:
       - apps/gitkanban-macos/**
       - swift/GitKittieKit/**
+      - swift/GitKanbanKit/**
+      - swift/TasksUI/**
       - .github/workflows/gitkanban-macos.yml
   push:
     branches: [main, development]
     paths:
       - apps/gitkanban-macos/**
       - swift/GitKittieKit/**
+      - swift/GitKanbanKit/**
+      - swift/TasksUI/**
       - .github/workflows/gitkanban-macos.yml
   workflow_dispatch:
 
