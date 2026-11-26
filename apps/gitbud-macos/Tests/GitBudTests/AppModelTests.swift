@@ -41,6 +41,53 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.hasConflicts)
     }
 
+    /// GITKITTIE-099: the menu's shortcut commands are always enabled and ask the model when
+    /// they run, so the model has to refuse with a reason until a repository is open.
+    func testMenuCommandsExplainWhyTheyCantRunWithoutARepository() throws {
+        let suiteName = "app.hakobs.gitbud.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = AppModel(settingsStore: GitBudSettingsStore(defaults: defaults))
+        let commands: [GitBudMenuCommand] = [.refresh] + GitBudWorkspaceMode.allCases.map { .showWorkspace($0) }
+
+        for command in commands {
+            model.errorMessage = nil
+            XCTAssertEqual(model.unavailableReason(command), AppModel.noRepositoryReason, "\(command)")
+            XCTAssertFalse(model.canRun(command), "\(command)")
+            XCTAssertEqual(model.errorMessage, AppModel.noRepositoryReason, "\(command)")
+        }
+        XCTAssertEqual(model.workspaceMode, .history)
+    }
+
+    func testMenuCommandsRunOnceARepositoryIsOpenAndRefreshWaitsForALoad() async throws {
+        let repo = try makeRepo()
+        try write("one\n", to: repo, "App.swift")
+        try commit("feat: seed", repo: repo)
+
+        let suiteName = "app.hakobs.gitbud.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = AppModel(settingsStore: GitBudSettingsStore(defaults: defaults))
+        await model.openRepository(repo)
+        XCTAssertNil(model.errorMessage)
+
+        let commands: [GitBudMenuCommand] = [.refresh] + GitBudWorkspaceMode.allCases.map { .showWorkspace($0) }
+        for command in commands {
+            XCTAssertNil(model.unavailableReason(command), "\(command)")
+            XCTAssertTrue(model.canRun(command), "\(command)")
+        }
+        XCTAssertNil(model.errorMessage)
+
+        // While a load is running, Refresh says so instead of starting a second one; the
+        // views still switch.
+        model.isLoading = true
+        XCTAssertFalse(model.canRun(.refresh))
+        XCTAssertEqual(model.errorMessage, "The repository is still loading. Try again in a moment.")
+        model.errorMessage = nil
+        XCTAssertTrue(model.canRun(.showWorkspace(.changes)))
+        XCTAssertNil(model.errorMessage)
+    }
+
     func testAppModelSearchHistorySelectsRealGitMatches() async throws {
         let repo = try makeRepo()
         try write("base\n", to: repo, "story.txt")

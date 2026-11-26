@@ -23,30 +23,7 @@ struct GitBudApp: App {
         // Room for the sidebar, the graph and a readable diff side by side.
         .defaultSize(width: 1440, height: 900)
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("Open Repository…") {
-                    model.openRepositoryPanel()
-                }
-                .keyboardShortcut("o", modifiers: [.command])
-            }
-
-            CommandGroup(after: .toolbar) {
-                Button("Refresh") {
-                    Task { await model.reload() }
-                }
-                .keyboardShortcut("r", modifiers: [.command])
-                .disabled(model.repositoryURL == nil)
-
-                Divider()
-
-                ForEach(GitBudWorkspaceMode.allCases) { mode in
-                    Button(mode.title) {
-                        model.workspaceMode = mode
-                    }
-                    .keyboardShortcut(shortcut(for: mode), modifiers: [.command])
-                    .disabled(model.repositoryURL == nil)
-                }
-            }
+            GitBudCommands(model: model)
         }
 
         // A commit in a window of its own: double-click it in History.
@@ -65,6 +42,49 @@ struct GitBudApp: App {
             SettingsScene()
                 .environment(model)
         }
+    }
+}
+
+/// The menu bar's own commands. Items with a shortcut have no `.disabled` and capture no model
+/// state: SwiftUI syncs a menu item only at launch and when its menu is opened, so a shortcut
+/// that was disabled at launch stayed dead after a repository was opened (GITKITTIE-099). Each
+/// one asks the model when it runs and, when it can't act, says why in the main window's alert.
+private struct GitBudCommands: Commands {
+    let model: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("Open Repository…") {
+                model.openRepositoryPanel()
+            }
+            .keyboardShortcut("o", modifiers: [.command])
+        }
+
+        CommandGroup(after: .toolbar) {
+            Button("Refresh") {
+                guard model.canRun(.refresh) else { return showMainWindow() }
+                Task { await model.reload() }
+            }
+            .keyboardShortcut("r", modifiers: [.command])
+
+            Divider()
+
+            ForEach(GitBudWorkspaceMode.allCases) { mode in
+                Button(mode.title) {
+                    guard model.canRun(.showWorkspace(mode)) else { return showMainWindow() }
+                    model.workspaceMode = mode
+                    showMainWindow()
+                }
+                .keyboardShortcut(shortcut(for: mode), modifiers: [.command])
+            }
+        }
+    }
+
+    /// The views and the alert live in the main window, which may be closed or behind a commit
+    /// window; `openWindow(id:)` brings the one main window forward.
+    private func showMainWindow() {
+        openWindow(id: GitBudApp.mainWindowID)
     }
 
     private func shortcut(for mode: GitBudWorkspaceMode) -> KeyEquivalent {
