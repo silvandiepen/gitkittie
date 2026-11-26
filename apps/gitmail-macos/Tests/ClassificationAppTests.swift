@@ -456,7 +456,8 @@ final class ClassificationAppTests: XCTestCase {
                                             date: Date().addingTimeInterval(-Double(index) * 60)), account: account)
         }
         await model.refreshAfterSync()
-        let thread = try await XCTUnwrap(store.summary(of: old)).threadID
+        let oldSummary = try await store.summary(of: old)
+        let thread = try XCTUnwrap(oldSummary).threadID
         await model.select(.category(.focused))
         XCTAssertFalse(model.browser.rows.contains { $0.threadID == thread }, "the first page leaves it out")
 

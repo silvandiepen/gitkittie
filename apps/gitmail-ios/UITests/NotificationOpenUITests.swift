@@ -53,7 +53,11 @@ final class NotificationOpenUITests: XCTestCase {
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                              CFNotificationName("app.hakobs.gitmail.uitest.notificationTapped" as CFString),
                                              nil, nil, true)
-        let opened = waitFor(timeout: 15) { subject.exists && subject.label == "The garden plan" }
+        // Queried by its label: a subject read while the reader is replaced can vanish between
+        // `exists` and `label`.
+        let garden = app.staticTexts.matching(identifier: "threadSubject")
+            .matching(NSPredicate(format: "label == %@", "The garden plan")).firstMatch
+        let opened = garden.waitForExistence(timeout: 15)
         snapshot("notification-2-opened")
         XCTAssertTrue(opened, "the tapped notification did not open its conversation")
 
@@ -82,14 +86,5 @@ final class NotificationOpenUITests: XCTestCase {
         shot.name = "\(UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone")-\(name)"
         shot.lifetime = .keepAlways
         add(shot)
-    }
-
-    private func waitFor(timeout: TimeInterval = 30, _ condition: @escaping () -> Bool) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if condition() { return true }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
-        }
-        return condition()
     }
 }
