@@ -34,7 +34,37 @@ enum UITestLaunch {
         }
         services.syncOptions = StorageBudget.standard.syncOptions
         let model = AppModel(locations: locations, extractor: InProcessTextExtractor(), services: services, notifications: nil)
+        if let subject = environment["GKM_UITEST_NOTIFICATION_SUBJECT"] { openNotifications(about: subject, in: model) }
         return MobileSession(model: model, defaults: defaults, freeSpace: { _ in nil })
+    }
+
+    /// The Darwin notification a UI test posts for "the notification was tapped" (GKM-085).
+    static let notificationTapped = "app.hakobs.gitmail.uitest.notificationTapped"
+    @MainActor private static var notificationModel: AppModel?
+    @MainActor private static var notificationSubject = ""
+
+    /// A tapped notification, for the UI tests: a test can't tap a mail notification the app
+    /// posts (a UI test launch posts none, and Springboard delivers the tap). On
+    /// `notificationTapped` the message with the subject in `GKM_UITEST_NOTIFICATION_SUBJECT` is
+    /// opened through `AppModel.openFromNotification`, the call `MailNotificationResponder` makes
+    /// for a real tap.
+    @MainActor private static func openNotifications(about subject: String, in model: AppModel) {
+        notificationModel = model
+        notificationSubject = subject
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), nil, { _, _, _, _, _ in
+            Task { @MainActor in await UITestLaunch.openTappedNotification() }
+        }, notificationTapped as CFString, nil, .deliverImmediately)
+    }
+
+    @MainActor private static func openTappedNotification() async {
+        guard let model = notificationModel, let store = model.mailStore else { return }
+        let subject = notificationSubject
+        // The text index, not a page of the newest: the message may be older than any list shows.
+        guard let message = try? await store.search(subject).first(where: { $0.subject == subject }) else {
+            model.actionError = "UI test: no message \"\(subject)\" to open from a notification."
+            return
+        }
+        await model.openFromNotification(message.id)
     }
 }
 #else
