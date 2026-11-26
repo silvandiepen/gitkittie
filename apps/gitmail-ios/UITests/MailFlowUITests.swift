@@ -131,18 +131,35 @@ final class MailFlowUITests: XCTestCase {
         let user = try await server.makeUser()
         try await server.append(["A subject long enough to need more than one line at this size"], for: user)
 
-        launch(server, arguments: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+        // One store for the three launches below.
+        let store = ["-uiTestStoreName", "large-\(UUID().uuidString)"]
+        let largest = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+
+        // First run and the account form at the largest size.
+        launch(server, arguments: store + largest)
         let add = app.buttons.matching(identifier: "addAccountButton").firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 20))
         snapshot("large-1-first-run")
         audit("large: first run")
         add.tap()
-        fillInAccount(user)
-        hideKeyboard()
+        XCTAssertTrue(app.textFields["addressField"].waitForExistence(timeout: 5))
         snapshot("large-2-add-account")
         audit("large: add account")
+        app.terminate()
+
+        // The account is added at the default size: at this one iOS's Save Password offer is
+        // taller than the screen and its Not Now can't be reached, so it would hold the sheet.
+        launch(server, arguments: store)
+        let addAgain = app.buttons.matching(identifier: "addAccountButton").firstMatch
+        XCTAssertTrue(addAgain.waitForExistence(timeout: 20))
+        addAgain.tap()
+        fillInAccount(user)
         app.buttons["addAccountConfirm"].tap()
         waitForAccountAdded()
+        app.terminate()
+
+        // Everything else at the largest size, with the account.
+        launch(server, arguments: store + largest)
 
         openMailbox("Inbox")
         let rows = app.descendants(matching: .any).matching(identifier: "messageRow")
