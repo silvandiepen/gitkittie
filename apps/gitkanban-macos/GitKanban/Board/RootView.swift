@@ -1165,6 +1165,11 @@ struct NewTaskBoardPicker: View {
             Text("Which board is it for?")
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 20).padding(.top, 2).padding(.bottom, 10)
+            if model.addedRepos.allSatisfy({ $0.boards.isEmpty }) {
+                ContentUnavailableView("No Boards", systemImage: "square.stack.3d.up",
+                                       description: Text("Add a board to the sidebar first."))
+                    .frame(maxHeight: .infinity)
+            }
             List {
                 ForEach(model.addedRepos.filter { !$0.boards.isEmpty }) { repo in
                     Section(repo.displayName) {

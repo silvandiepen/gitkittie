@@ -57,12 +57,15 @@ struct GitKanbanApp: App {
                     }
                 }
         }
+        // No `.disabled(…)` on these items: a command reads the model once, when the menu is
+        // built at launch — before `restore()` has loaded the sidebar and the board — and does
+        // not follow the model after that. Disabled then, ⌘N, ⌘R and ⌘F stayed disabled for
+        // good (GITKITTIE-097). Each action checks the model itself when it runs.
         .commands {
             // ⌘N is a new task — on the open board, or on the board you pick — not a window.
             CommandGroup(replacing: .newItem) {
                 Button("New Task…") { model.requestNewTask() }
                     .keyboardShortcut("n")
-                    .disabled(model.addedRepos.isEmpty && model.board == nil)
             }
             CommandGroup(after: .toolbar) {
                 Button("Refresh Board") {
@@ -73,11 +76,9 @@ struct GitKanbanApp: App {
                     }
                 }
                 .keyboardShortcut("r")
-                .disabled(model.activeRepo == nil)
 
-                Button("Find…") { model.isShowingSearch = true }
+                Button("Find…") { if model.board != nil { model.isShowingSearch = true } }
                     .keyboardShortcut("f")
-                    .disabled(model.board == nil)
             }
         }
 
