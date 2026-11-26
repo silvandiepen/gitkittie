@@ -300,18 +300,23 @@ final class MailBrowser {
 
     /// Reloads the first page. Keeps the selection when it is still in the list. With
     /// `keepingPlace` (after an action took rows out), as many rows as were loaded, so the list
-    /// stays where it was instead of going back to its first page (GKM-071).
+    /// stays where it was instead of going back to its first page (GKM-071). The same when the
+    /// selected row is below the first page (GKM-085): a refresh (the open conversation marked
+    /// read, a sync) dropped it, and with it the selection and the open conversation.
     func reload(keepingPlace: Bool = false) async {
         guard let store else { return }
         generation += 1
         let mine = generation
         let identity = listIdentity
-        if loadedList != identity {
+        let sameList = loadedList == identity
+        if !sameList {
             loadedList = identity
             clearMarks()
         }
+        let selectedIndex = selectedRowID.flatMap { id in rows.firstIndex { $0.id == id } }
+        let keepsSelection = sameList && (selectedIndex ?? 0) >= Self.pageSize
         do {
-            let count = keepingPlace ? max(rows.count, Self.pageSize) : Self.pageSize
+            let count = keepingPlace || keepsSelection ? max(rows.count, Self.pageSize) : Self.pageSize
             let found = try await page(from: store, offset: 0, limit: count)
             guard mine == generation else { return } // a newer query landed meanwhile
             rows = found

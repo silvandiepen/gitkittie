@@ -466,6 +466,12 @@ final class ClassificationAppTests: XCTestCase {
         XCTAssertEqual(model.browser.openThread?.id, thread)
         XCTAssertNotNil(model.browser.selectedRowID)
         XCTAssertEqual(model.browser.selectedRowID, model.browser.rows.first { $0.threadID == thread }?.id)
+
+        // A refresh of the list (a sync, a change) keeps the row, the selection and the conversation.
+        let selected = model.browser.selectedRowID
+        await model.browser.reload()
+        XCTAssertEqual(model.browser.selectedRowID, selected)
+        XCTAssertEqual(model.browser.openThread?.id, thread)
     }
 
     func testANotificationThatLaunchedTheAppOpensOnceTheStoreIsOpen() async throws {
