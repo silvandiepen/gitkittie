@@ -281,6 +281,7 @@ private struct RowMenu: View {
                 }
             }
         }
+        TaskMenuItems(messageID: row.latest.id)
         Divider()
         if model.actions.isTrash(scope) {
             Button("Delete Permanently…", systemImage: "trash.slash", role: .destructive) {

@@ -98,6 +98,7 @@ struct ThreadScreen: View {
                             Button(purpose.destinationTitle) { Task { await model.move(message.front.id, to: purpose) } }
                         }
                     }
+                    TaskMenuItems(messageID: message.front.id)
                     Button("Report Phishing", systemImage: "exclamationmark.shield", role: .destructive) {
                         Task { await model.markPhishing(message.front.id) }
                     }

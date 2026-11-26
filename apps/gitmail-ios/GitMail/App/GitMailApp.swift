@@ -24,6 +24,9 @@ struct GitMailApp: App {
                 .tint(Theme.accentText)
                 // The GitKittie apps are navy: dark, like Tasks.
                 .preferredColorScheme(.dark)
+                // `gitkittie-mail://message/…` (GKM-033): before the store is open the model
+                // keeps the link until it is.
+                .onOpenURL { url in Task { await session.model.openLink(url) } }
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {

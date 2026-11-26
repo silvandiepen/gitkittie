@@ -159,6 +159,9 @@ extension View {
                     }
                 }
             }
+            .accessibilityAction(named: "Make Task") {
+                Task { await Platform.makeTask(from: row.latest.id, model: model) }
+            }
     }
 
     /// ⌫ in the list moves the marked or selected conversations to Trash (in Trash: asks to
@@ -240,5 +243,17 @@ private struct MailActionChrome: ViewModifier {
     private var deletionTitle: String {
         let count = model.actions.deletionToConfirm?.count ?? 0
         return count == 1 ? "Delete this message permanently?" : "Delete \(count) messages permanently?"
+    }
+}
+
+/// The row menu's GitKittie Tasks items (GKM-033): a task about the row's newest message, and
+/// its stable link.
+struct TaskRowMenu: View {
+    @Environment(AppModel.self) private var model
+    let row: ListRow
+
+    var body: some View {
+        Button("Make Task…") { Task { await Platform.makeTask(from: row.latest.id, model: model) } }
+        Button("Copy Link to Message") { Task { await Platform.copyLink(to: row.latest.id, model: model) } }
     }
 }

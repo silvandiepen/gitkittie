@@ -1,4 +1,5 @@
 import AppKit
+import MailCore
 import MailExtraction
 import MailCompose
 import SwiftUI
@@ -8,6 +9,8 @@ struct GitMailApp: App {
     @State private var model: AppModel
     /// Which tab Settings opens on (GKM-066).
     @State private var settings = SettingsNavigation()
+    /// Receives `gitkittie-mail://message/…` links (GKM-033).
+    @NSApplicationDelegateAdaptor(MailAppDelegate.self) private var appDelegate
 
     init() {
         // Thin overlay scrollbars that only show while scrolling, whatever System Settings says
@@ -25,7 +28,7 @@ struct GitMailApp: App {
     @State private var requests = MailWindowRequests()
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: MailAppDelegate.mainWindowID) {
             RootView()
                 .environment(model)
                 .environment(settings)
@@ -35,6 +38,7 @@ struct GitMailApp: App {
                 .tint(Theme.accent)
                 // The GitKittie apps are navy: dark, like Tasks.
                 .preferredColorScheme(.dark)
+                .modifier(ReceivesMessageLinks(delegate: appDelegate, model: model))
                 .task { await model.open() }
         }
         .commands {
@@ -78,6 +82,15 @@ struct GitMailApp: App {
                 .disabled(model.browser.threadIDs(actingOn: nil).isEmpty)
                 Button("Export Message…") {
                     if let selected { Task { await Platform.export(.messages([selected.id]), what: "Message", model: model) } }
+                }
+                .disabled(selected == nil)
+                // GitKittie Tasks and stable links (GKM-033).
+                Button("Make Task…") {
+                    if let selected { Task { await Platform.makeTask(from: selected.id, model: model) } }
+                }
+                .disabled(selected == nil)
+                Button("Copy Link to Message") {
+                    if let selected { Task { await Platform.copyLink(to: selected.id, model: model) } }
                 }
                 .disabled(selected == nil)
                 Divider()
@@ -151,11 +164,88 @@ struct SolidWindow: NSViewRepresentable {
     func updateNSView(_ nsView: Probe, context: Context) {}
 }
 
+/// The app's AppKit side for links: a `gitkittie-mail://message/…` link opened anywhere (a
+/// Tasks card, a note) reaches `application(_:open:)`, also when it launched the app, before
+/// any window exists (GKM-033). SwiftUI's `onOpenURL` is not used: a `WindowGroup` app may open
+/// a new window for each link. Links that come before the model is attached wait for it.
+@MainActor
+final class MailAppDelegate: NSObject, NSApplicationDelegate {
+    static let mainWindowID = "main"
+
+    private var model: AppModel?
+    private var waiting: [URL] = []
+    /// Opens a main window; set by the first one that appears, for when all are closed.
+    var openMainWindow: (() -> Void)?
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let model else { waiting += urls; return }
+        open(urls, in: model)
+    }
+
+    func attach(_ model: AppModel) {
+        guard self.model == nil else { return }
+        self.model = model
+        let urls = waiting
+        waiting = []
+        if !urls.isEmpty { open(urls, in: model) }
+    }
+
+    private func open(_ urls: [URL], in model: AppModel) {
+        guard let url = urls.last(where: { !$0.isFileURL }) else { return }
+        Task {
+            // Before the store is open the model keeps the link until it is.
+            await model.openLink(url)
+            showMainWindow()
+        }
+    }
+
+    private func showMainWindow() {
+        NSApp.activate()
+        let main = NSApp.windows.first { $0.identifier?.rawValue.hasPrefix(Self.mainWindowID) == true }
+        if let main {
+            if main.isMiniaturized { main.deminiaturize(nil) }
+            main.makeKeyAndOrderFront(nil)
+        } else {
+            openMainWindow?()
+        }
+    }
+}
+
+/// Hands the delegate the model and a way to open the main window, which only a view can reach.
+struct ReceivesMessageLinks: ViewModifier {
+    @Environment(\.openWindow) private var openWindow
+    let delegate: MailAppDelegate
+    let model: AppModel
+
+    func body(content: Content) -> some View {
+        content.onAppear {
+            delegate.openMainWindow = { [openWindow] in openWindow(id: MailAppDelegate.mainWindowID) }
+            delegate.attach(model)
+        }
+    }
+}
+
 /// Small AppKit edges the views use.
 enum Platform {
     /// Shows a folder or file in the Finder.
     static func reveal(_ url: URL) {
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    /// Make Task (GKM-033): asks GitKittie Tasks for a new task about the message. Tasks shows
+    /// it in its new-task sheet; nothing is saved there until Create.
+    @MainActor
+    static func makeTask(from id: MailMessageID, model: AppModel) async {
+        guard let handoff = await model.taskHandoff(for: id) else { return }
+        if !NSWorkspace.shared.open(handoff.url) { model.actionError = TaskHandoff.notInstalled }
+    }
+
+    /// Copy Link to Message (GKM-033): the stable `gitkittie-mail://message/…` link.
+    @MainActor
+    static func copyLink(to id: MailMessageID, model: AppModel) async {
+        guard let link = await model.link(to: id) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(link.url.absoluteString, forType: .string)
     }
 
     /// Asks for `.eml` files or folders and imports them (GKM-012).

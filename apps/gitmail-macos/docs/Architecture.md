@@ -87,6 +87,12 @@ Rule fields that are absent are not checked; `color` is one of the Tasks board n
 
 *Export* (`MailStore+Export.swift`, MAIL-044): a message, conversations, a space or an account into a new folder the person picks, in the mail-folder layout, originals byte for byte. Tested by export → import into a fresh store → byte comparison, and by opening the export as a mail folder.
 
+## Tasks and stable links
+
+**What exists (GKM-033; MAIL-131..133).** A message has a stable link, `gitkittie-mail://message/<account-id>/m-<sha256(Message-ID)>` (`f-<content fingerprint>` without a Message-ID), made and resolved by `MessageLink` in MailStore: the account's messages first, then every account, oldest match first. It is built from what the message carries, not from the local id, so it survives a rebuilt index, a fresh download and an account added again, and it reveals nothing about the message. Both apps open it like a notification (`AppModel.openLink`, waiting for the store when the link launched the app). **Make Task** builds `gitkittie-tasks://new?title=…&body=…` (`TaskHandoff` in MailAppModel): subject, who, the day and the link, never the text. Tasks (`NewTaskRequest` in GitKanbanKit) only fills in its new-task sheet from it.
+
+Not built yet: export of metadata to Git through GitPont (GKM-107) and read-only agent access per space or account (GKM-108); see MAIL-134 and ThreatModel §7 and §10.
+
 ## Background processing
 
 macOS can monitor while running. iOS background execution is opportunistic, not guaranteed instant notifications or continuous filtering. Core mail requires no custom server. Optional self-hosted relay later for continuous monitoring and push, with explicit trust boundary, secure credentials and minimal notification payload. Do not advertise guaranteed instant push until validated.

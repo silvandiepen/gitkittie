@@ -97,6 +97,8 @@ struct MessageListView: View {
                                     MessageActionRowMenu(rowID: row.id)
                                     Divider()
                                     SpaceRowMenu(rowID: row.id)
+                                    Divider()
+                                    TaskRowMenu(row: row)
                                 }
                                 .onAppear {
                                     if row.id == browser.rows.last?.id { Task { await browser.loadMore() } }
