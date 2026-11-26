@@ -181,7 +181,12 @@ final class MailBrowser {
     /// Rows picked with ⌘-click or ⇧-click besides the selected one, for acting on several
     /// conversations at once (MailBrowser+Marking.swift).
     var markedRowIDs: Set<String> = []
-    private(set) var openThread: OpenThread?
+    private(set) var openThread: OpenThread? {
+        didSet { if oldValue?.id != openThread?.id { onOpenThreadChanged?() } }
+    }
+    /// Called when another conversation opens or the reader closes: the app model remembers
+    /// where the window is (MAIL-107).
+    @ObservationIgnored var onOpenThreadChanged: (@MainActor () -> Void)?
     /// An error from the last action, shown once.
     var actionError: String?
     /// Called when a read or flag change was queued for the provider (GKM-015).
@@ -479,6 +484,20 @@ final class MailBrowser {
     func reveal(_ message: MailMessageID, threadID: String) async {
         selectedRowID = rows.first { $0.threadID == threadID }?.id
         await openThread(threadID, focus: message, rowID: selectedRowID)
+    }
+
+    /// Opens a conversation again where the window was left (MAIL-107): only when the view
+    /// still holds it (not deleted, not moved out of it), selected in the list when its row is
+    /// loaded. Opening it marks it read, as choosing it does (MAIL-073, MAIL-108).
+    @discardableResult
+    func reopen(_ threadID: String) async -> Bool {
+        guard let store, !isSearching else { return false }
+        if !rows.contains(where: { $0.threadID == threadID }) {
+            guard (try? await store.threadIDs(query))?.contains(threadID) == true else { return false }
+        }
+        selectedRowID = rows.first { $0.threadID == threadID }?.id
+        await openThread(threadID, focus: nil, rowID: selectedRowID)
+        return openThread?.id == threadID
     }
 
     private func open(_ row: ListRow) async {
