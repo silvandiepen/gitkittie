@@ -40,11 +40,17 @@ struct GitMailApp: App {
         .commands {
             // File ▸ New Message and Attach Files… (ComposeCommands), then Import.
             CommandGroup(after: .newItem) {
-                Button("Import Messages…") { Task { await Platform.importMessages(into: model) } }
-                    .keyboardShortcut("i", modifiers: [.command, .shift])
-                    .disabled(model.phase != .ready || model.isImporting)
+                // No .disabled on an item with a shortcut: SwiftUI would keep the state from launch
+                // until the menu is opened; the action checks the model instead (GITKITTIE-098).
+                Button("Import Messages…") {
+                    guard model.canRun(.importMessages) else { return }
+                    Task { await Platform.importMessages(into: model) }
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
             }
             // One Message menu: Send and Reply first, then the actions on the conversations.
+            // Items without a shortcut can only be chosen from the open menu, which SwiftUI syncs
+            // as it opens, so their .disabled is current (GITKITTIE-098).
             CommandMenu("Message") {
                 let selected = model.browser.selectedMessage
                 ReplyCommands(model: model)

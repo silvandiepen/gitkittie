@@ -112,11 +112,13 @@ private struct ComposeEditor: View {
                 .disabled(compose.phase == .sending)
             }
         }
-        .focusedSceneValue(\.composeDraft, ComposeWindowCommands(
+        // What Send, Attach Files… and Delete Draft… in the menu bar act on while this window
+        // is in front (GITKITTIE-098).
+        .background(ComposeWindowRegistration(commands: ComposeWindowCommands(
             canSend: compose.phase == .editing,
             send: { send() },
             requestAttach: { importing = true },
-            requestDiscard: { confirmingDiscard = true }))
+            requestDiscard: { confirmingDiscard = true })))
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
             Task { await attach(urls) }

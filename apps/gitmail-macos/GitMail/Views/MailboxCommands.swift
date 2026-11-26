@@ -28,18 +28,24 @@ struct MailboxCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .textEditing) {
-            Button("Search Mail") { requests.searchRequests += 1 }
-                .keyboardShortcut("f", modifiers: [.command, .option])
-                .disabled(model.phase != .ready)
+            // Items with a shortcut have no .disabled: SwiftUI would keep the state from launch
+            // until the menu is opened. They check the model as they run (GITKITTIE-098).
+            Button("Search Mail") {
+                guard model.canRun(.searchMail) else { return }
+                requests.searchRequests += 1
+            }
+            .keyboardShortcut("f", modifiers: [.command, .option])
         }
         CommandMenu("Mailbox") {
             Button("Add Account…") { requests.accountSheet = .add }
             Button("New Space…") { requests.spaceSheet = .create }
             Divider()
             // As in Apple Mail's Get All New Mail.
-            Button("Sync Now") { Task { await model.sync.syncNow() } }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
-                .disabled(!model.sync.isRunning)
+            Button("Sync Now") {
+                guard model.canRun(.syncNow) else { return }
+                Task { await model.sync.syncNow() }
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
             Divider()
             AccountMenuItems(model: model, requests: requests, settings: settings, account: selectedAccount)
             Divider()
