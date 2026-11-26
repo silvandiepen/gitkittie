@@ -15,7 +15,8 @@ final class RemoteMapping {
     /// RemoteMapping+Actions.swift). 5: messages deleted at the provider, noticed and confirmed
     /// (GKM-042, MAIL-075; RemoteMapping+Deletions.swift). 6: each folder's role as the provider
     /// detected it, beside the role in use once the account's choices apply (GKM-066, MAIL-094).
-    static let schemaVersion = 6
+    /// 7: when a deletion check last could not tell, and how often in a row (GKM-076, MAIL-105).
+    static let schemaVersion = 7
     let database: SQLiteDatabase
 
     init(url: URL) throws {
@@ -59,6 +60,10 @@ final class RemoteMapping {
             if version < 6 {
                 // 5 → 6: the detected role (MAIL-094). Until now every role was the detected one.
                 try migrateToDetectedRoles()
+            }
+            if version < 7 {
+                // 6 → 7: undecided deletion checks (MAIL-105). No notice has one on record yet.
+                try migrateToUndecidedDeletionChecks()
             }
             try database.setUserVersion(Self.schemaVersion)
         }

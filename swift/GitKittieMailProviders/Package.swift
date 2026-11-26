@@ -151,7 +151,8 @@ let package = Package(
         ),
         .testTarget(
             name: "MailSyncTests",
-            dependencies: ["MailSync", "MailProvider"],
+            dependencies: ["MailSync", "MailProvider", .product(name: "MailCore", package: "GitKittieMailKit"),
+                           .product(name: "MailStore", package: "GitKittieMailKit")],
             swiftSettings: protocolSettings
         ),
         .testTarget(

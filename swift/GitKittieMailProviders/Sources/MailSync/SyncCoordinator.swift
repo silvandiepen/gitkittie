@@ -204,7 +204,9 @@ public actor SyncCoordinator {
     /// not downloaded (history left out by the window or the budget, too large, not reached yet)
     /// has it: those folders are searched for its Message-ID first, or, without one, for its
     /// sender and day, compared by size and header (``DeletionProbe``, MAIL-104); when that cannot
-    /// tell, it waits for the next pass. Then, with
+    /// tell, it is not marked and goes behind the others, checked again after a back-off
+    /// (``SyncOptions/undecidedDeletionBackoff``, MAIL-105), so candidates that can't be decided
+    /// never use up a pass's checks ahead of newer ones. Then, with
     /// ``SyncOptions/removesMailDeletedElsewhere``, the local copies go.
     private func reviewDeletions(_ session: any MailboxSession) async throws {
         guard unlistedFolders.isEmpty else { return }
@@ -217,10 +219,13 @@ public actor SyncCoordinator {
             }
             var confirmed: [DeletionCandidate] = []
             var checks = options.deletionChecksPerPass
+            let now = Date()
+            // In the store's order: never undecided first, then the least recently checked.
             for candidate in candidates {
                 try Task.checkCancellation()
                 guard !incomplete.isEmpty else { confirmed.append(candidate); continue }
                 guard checks > 0 else { continue }
+                guard Self.isDue(candidate, at: now, backoff: options.undecidedDeletionBackoff) else { continue }
                 checks -= 1
                 var found: Bool? = false
                 if let messageID = candidate.messageID {
@@ -234,6 +239,7 @@ public actor SyncCoordinator {
                     } catch {
                         // Not readable here now: nothing to look for it by, so it is not marked.
                         log.warning("sync", "could not read a message that left its last folder (\(error)); not marking it")
+                        try await store.recordUndecidedDeletionCheck(of: candidate.id, account: account, now: now)
                         continue
                     }
                     found = try await probe.find(in: incomplete, session)
@@ -241,7 +247,9 @@ public actor SyncCoordinator {
                 switch found {
                 case true?: try await store.dismissDeletion(of: candidate.id, account: account)
                 case false?: confirmed.append(candidate)
-                case nil: log.info("sync", "a message without a Message-ID left its last folder; not sure it is gone, checking again next pass")
+                case nil:
+                    log.info("sync", "a message without a Message-ID left its last folder; not sure it is gone, checking again later")
+                    try await store.recordUndecidedDeletionCheck(of: candidate.id, account: account, now: now)
                 }
             }
             if !confirmed.isEmpty {
@@ -257,6 +265,19 @@ public actor SyncCoordinator {
             }
         }
         progress.deletedAtProvider = try await store.deletedAtProvider(account: account).count
+    }
+
+    /// Whether a candidate is to be checked at the provider now: always when no check has failed
+    /// to decide it, else once its back-off has passed since the last one, the lower bound of
+    /// `backoff` doubled for each undecided check after the first, at most the upper bound.
+    /// A last check in the future (the clock was set back) is due at once.
+    static func isDue(_ candidate: DeletionCandidate, at now: Date, backoff: ClosedRange<Duration>) -> Bool {
+        guard let checkedAt = candidate.checkedAt, candidate.undecidedChecks > 0 else { return true }
+        let doublings = min(candidate.undecidedChecks - 1, 32)
+        let wait = min(seconds(backoff.lowerBound) * Double(1 << doublings), seconds(backoff.upperBound))
+        let elapsed = now.timeIntervalSince(checkedAt)
+        // A clock set back must not make it wait longer than the back-off.
+        return elapsed < 0 || elapsed >= wait
     }
 
     /// New mail in every folder first, then flags and removals, then history.
