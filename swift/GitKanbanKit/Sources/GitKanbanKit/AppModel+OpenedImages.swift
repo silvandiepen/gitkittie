@@ -29,12 +29,14 @@ extension AppModel {
         return images.count
     }
 
-    /// `restore()` is done and the last board is open again: start the task the images
-    /// opened during launch are for.
-    func startImagesOpenedBeforeRestore() {
+    /// `restore()` is done and the last board is open again: start the task the images and
+    /// the request opened during launch are for (one task, holding both).
+    func startWhatWasOpenedBeforeRestore() {
         let images = imagesAwaitingRestore
+        let request = requestAwaitingRestore
         imagesAwaitingRestore = []
-        guard !images.isEmpty else { return }
-        requestNewTask(images: images)
+        requestAwaitingRestore = nil
+        guard !images.isEmpty || request != nil else { return }
+        requestNewTask(images: images, request: request)
     }
 }

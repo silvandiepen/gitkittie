@@ -726,6 +726,11 @@ struct NewTaskSheet: View {
                 if product.isEmpty, let filtered = model.filterProduct { product = filtered }
                 let dropped = model.takeNewTaskImages()
                 if !dropped.isEmpty { Task { await add(dropped) } }
+                fill(from: model.takeNewTaskRequest())
+            }
+            // Another app asked for a task while this sheet is up (Make Task in Mail, GKM-033).
+            .onChange(of: model.newTaskRequest) { _, request in
+                if request != nil { fill(from: model.takeNewTaskRequest()) }
             }
             // Images opened in Tasks while this sheet is up (dropped on the Dock icon) join it.
             .onChange(of: model.newTaskImages.map(\.id)) { _, ids in
@@ -761,6 +766,12 @@ struct NewTaskSheet: View {
             }
         }
         .frame(minWidth: 560, minHeight: images.isEmpty ? 520 : 640)
+    }
+
+    /// Takes in what another app asked for (Make Task in Mail, GKM-033), keeping what was typed.
+    private func fill(from request: NewTaskRequest?) {
+        guard let request else { return }
+        (title, body_) = request.filling(title: title, body: body_)
     }
 
     // MARK: Images
