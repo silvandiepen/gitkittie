@@ -137,11 +137,15 @@ extension AppModel {
         isLoadingReviews = true
         defer { isLoadingReviews = false }
         let origin = activeRepo?.id ?? ""
-        reviews = Self.newestFirst(await RemoteBoardStore.loadReviews(source: source, folder: folder).map {
+        let onScreen = openBoardKey
+        let loaded = Self.newestFirst(await RemoteBoardStore.loadReviews(source: source, folder: folder).map {
             var request = $0
             request.origin = origin
             return request
         })
+        // The requests of a board that is no longer on screen are not this board's.
+        guard openBoardKey == onScreen else { return }
+        reviews = loaded
         if serverLogin == nil, let server = source as? ServerFolderSource {
             serverLogin = await server.whoami()?.login
         }
@@ -526,9 +530,12 @@ extension AppModel {
         let everything = paths.contains(RelayClient.everything)
         let touchesBoard = everything || paths.contains { $0.hasPrefix(projectPrefix) || $0 == project.folder }
         let touchesReviews = everything || (reviewFolder.map { folder in paths.contains { $0.hasPrefix(folder + "/") } } ?? false)
+        let onScreen = openBoardKey
         if touchesBoard, !isSaving,
            let fresh = try? await RemoteBoardStore.loadProjectBoard(
                source: source, project: project, rootConfig: rootConfig, loadBacklog: false) {
+            // Another board may have been opened while this one was read.
+            guard openBoardKey == onScreen, selectedProject?.id == project.id else { return }
             board = fresh
         }
         if touchesReviews || touchesBoard { await loadReviews() }
