@@ -305,18 +305,23 @@ final class MailBrowser {
 
     /// Reloads the first page. Keeps the selection when it is still in the list. With
     /// `keepingPlace` (after an action took rows out), as many rows as were loaded, so the list
-    /// stays where it was instead of going back to its first page (GKM-071).
+    /// stays where it was instead of going back to its first page (GKM-071). The same when the
+    /// selected row is below the first page (GKM-085): a refresh (the open conversation marked
+    /// read, a sync) dropped it, and with it the selection and the open conversation.
     func reload(keepingPlace: Bool = false) async {
         guard let store else { return }
         generation += 1
         let mine = generation
         let identity = listIdentity
-        if loadedList != identity {
+        let sameList = loadedList == identity
+        if !sameList {
             loadedList = identity
             clearMarks()
         }
+        let selectedIndex = selectedRowID.flatMap { id in rows.firstIndex { $0.id == id } }
+        let keepsSelection = sameList && (selectedIndex ?? 0) >= Self.pageSize
         do {
-            let count = keepingPlace ? max(rows.count, Self.pageSize) : Self.pageSize
+            let count = keepingPlace || keepsSelection ? max(rows.count, Self.pageSize) : Self.pageSize
             let found = try await page(from: store, offset: 0, limit: count)
             guard mine == generation else { return } // a newer query landed meanwhile
             rows = found
@@ -482,8 +487,24 @@ final class MailBrowser {
     /// Opens a message from its notification (GKM-037): its conversation, selected in the list
     /// when the list shows it, with that message expanded and read, as if it had been chosen.
     func reveal(_ message: MailMessageID, threadID: String) async {
+        await loadRows(upTo: threadID)
         selectedRowID = rows.first { $0.threadID == threadID }?.id
         await openThread(threadID, focus: message, rowID: selectedRowID)
+    }
+
+    /// Loads pages of the list until it has the conversation's row, when the view holds it below
+    /// the pages loaded so far (GKM-085). Without a row nothing is selected, and on iPhone the
+    /// reader is pushed by the list's selection: a notification for an older conversation opened
+    /// the list and not the conversation.
+    private func loadRows(upTo threadID: String) async {
+        guard let store, !isSearching, canLoadMore, !rows.contains(where: { $0.threadID == threadID }),
+              (try? await store.threadIDs(query))?.contains(threadID) == true else { return }
+        while canLoadMore, !rows.contains(where: { $0.threadID == threadID }) {
+            let loaded = rows.count
+            await loadMore()
+            // The view changed meanwhile, or a page failed: stop rather than ask again.
+            if rows.count == loaded { return }
+        }
     }
 
     /// Opens a conversation again where the window was left (MAIL-107): only when the view

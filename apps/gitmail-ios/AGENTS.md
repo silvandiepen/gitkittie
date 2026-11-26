@@ -16,7 +16,10 @@ MAIL-050..053, MAIL-067..070, MAIL-072 and MAIL-073..080, ThreatModel.md) first.
   `MessageListScreen` + `SearchChips` + `ServerResultsSection` (mail found on the server, GKM-041), `Reader/` (the safe reader: `MailReaderWeb`, link sheet),
   `Compose/` (compose, drafts, outbox), `Accounts/`, `Settings/` (with `NotificationsScreen`: account, space and list levels, MAIL-085). Tapping a notification opens its conversation (`AppModel.openFromNotification`, MAIL-086; `RootView` pushes the reader).
 - `Tests` — hosted in the app (the Keychain test needs its entitlement); `UITests` — the flow
-  against the local test server, with screenshots.
+  against the local test server, with screenshots. Every UI test adds its account through
+  `UITests/AddAccountForm.swift`, which reads each replaced field back (GKM-086); a tapped
+  notification is `UITestLaunch.notificationTapped` plus `GKM_UITEST_NOTIFICATION_SUBJECT`
+  (Debug only, GKM-085).
 
 ## Build and test
 

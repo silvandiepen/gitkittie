@@ -213,13 +213,21 @@ enum DynamicTypeAllowlist {
             }),
     ]
 
+    static let unsupported = "Dynamic Type font sizes are unsupported"
+
     static func skipReason(_ finding: AuditFinding, in app: XCUIApplication) -> String? {
-        // A finding without an element can't be checked against the containers, and it comes and
-        // goes: on the iPad's account form one run reports it and the next doesn't, with nothing on
-        // screen in a fixed size (GKM-081 probe; finding its source is GKM-083). It is printed
-        // with the audit's own words, not failed.
         guard let element = finding.element else {
-            return "names no element to check (GKM-083)"
+            // The one finding without an element (GKM-083): "unsupported", on the iPad's Add
+            // Account sheet, only while the form is scrolled down to the servers; 3 of 3 audits
+            // then, none at the top or on iPhone. Bisected on iPad Pro 13-inch (M5), iOS 26.2: it
+            // stays with the Security picker as a menu, segmented or removed, the top scroll edge
+            // effect soft, hard or hidden, the scroll indicators hidden, and the servers footer
+            // or the User name row removed. Every text in the form uses a text style (scripts/
+            // test.sh refuses fixed sizes), and the audit names nothing to look at. Anything else
+            // without an element fails.
+            let addAccount = app.navigationBars["Add Account"].exists
+            guard finding.summary == unsupported, addAccount, UIDevice.current.userInterfaceIdiom == .pad else { return nil }
+            return "names no element: the iPad's scrolled Add Account sheet (GKM-083)"
         }
         guard finding.summary == partially else { return nil }
         return containers.first { $0.contains(element, app) }.map { "\($0.name): \($0.reason)" }
