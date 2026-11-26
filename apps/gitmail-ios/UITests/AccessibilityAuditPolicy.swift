@@ -4,40 +4,44 @@ import XCTest
 /// only records, and the policy below looks at the app after the audit has finished.
 @MainActor
 struct AuditFinding {
+    struct Element {
+        var type: XCUIElement.ElementType
+        var identifier: String
+        var label: String
+        var frame: CGRect
+    }
+
     var type: XCUIAccessibilityAuditType
     var summary: String
-    var element: (type: XCUIElement.ElementType, identifier: String, label: String, frame: CGRect)?
+    /// The audit's longer explanation: for a finding without an element it is all there is.
+    var detail: String
+    var element: Element?
 
     init(_ issue: XCUIAccessibilityAuditIssue) {
         type = issue.auditType
         summary = issue.compactDescription
+        detail = issue.detailedDescription
         if let found = issue.element {
-            element = (found.elementType, found.identifier, found.label, found.frame)
+            element = Element(type: found.elementType, identifier: found.identifier, label: found.label, frame: found.frame)
         }
     }
 
     /// One line for the failure message: the audit type, what it says, and the element.
     var description: String {
-        let what = element.map { "\($0.type.rawValue) id='\($0.identifier)' label='\($0.label)' frame=\($0.frame)" } ?? "no element"
+        let what = element.map { "\($0.type.rawValue) id='\($0.identifier)' label='\($0.label)' frame=\($0.frame)" } ?? "no element (\(detail))"
         return "\(AccessibilityAuditPolicy.name(type)): \(summary) — \(what)"
     }
 }
 
-/// Which accessibility audit issues the UI tests skip, and why (GKM-061). Only issues in a
+/// Which accessibility audit issues the UI tests skip, and why (GKM-061, GKM-081). Only issues in a
 /// system control the app can't change are skipped, plus one false report, each with its
 /// reason written here. Everything else fails the test.
 @MainActor
 enum AccessibilityAuditPolicy {
     /// The reason a finding is skipped, or nil when it counts.
     static func skipReason(_ finding: AuditFinding, in app: XCUIApplication) -> String? {
-        // "Dynamic Type font sizes are partially unsupported" is reported, at the default size,
-        // for SwiftUI text in the system's own containers (ContentUnavailableView, Form section
-        // headers, footers and rows, List rows) that does grow: at Accessibility XXXL the same
-        // "No mail yet", "Servers" and "Incoming (IMAP)" fill the screen (GKM-061 screenshots).
-        // Scaling is tested for real by testMainScreensAtLargestTextSize, where text that does
-        // not fit fails as clipped and the screenshots show every main screen.
         if finding.type == .dynamicType {
-            return "SwiftUI text styles scale; checked at Accessibility XXXL instead"
+            return DynamicTypeAllowlist.skipReason(finding, in: app)
         }
         // A few reports name no element (elementDetection "Potentially inaccessible text",
         // textClipped on the list): there is nothing to check them against but the screenshot,
@@ -63,6 +67,26 @@ enum AccessibilityAuditPolicy {
                .contains(where: { $0.frame.contains(element.frame) && $0.label.contains(element.label) }) {
             return "a message row's text, shown whole and read whole"
         }
+        // The same for a row of the iPad's sidebar: "Drafts" stacked under its icon at
+        // Accessibility XXXL, and "Add Account" at the default size, are reported clipped while
+        // they show whole (GKM-064 screenshots, full runs 1 and 2). Only when the row (a mailbox,
+        // or a button in the sidebar) is labelled with exactly that text.
+        let sidebarRows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'mailbox.'"))
+            .allElementsBoundByIndex
+            + app.collectionViews.containing(NSPredicate(format: "identifier BEGINSWITH 'mailbox.'"))
+                .buttons.allElementsBoundByIndex
+        if finding.type == .textClipped, element.type == .staticText,
+           sidebarRows.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(element.frame) && $0.label == element.label }) {
+            return "a sidebar row's text, shown whole and read whole"
+        }
+        // An account's name above its folders is one line, shortened in the middle when it
+        // doesn't fit, on purpose (an address wrapped mid-domain otherwise); its row reads it
+        // whole. Reported clipped on iPhone while it showed whole (GKM-064, iPhone run 1). Only
+        // the header whose sync status names that same account.
+        if finding.type == .textClipped, element.type == .staticText,
+           app.staticTexts["syncStatus.\(element.label)"].exists {
+            return "an account's header, one line by design"
+        }
         // A one-line SwiftUI TextField (the subject, the account name) is reported clipped while
         // it shows all its text and its placeholder whole (GKM-061 screenshots); the field's text
         // layout is the system's.
@@ -84,11 +108,35 @@ enum AccessibilityAuditPolicy {
         let bars = app.navigationBars.allElementsBoundByIndex + app.toolbars.allElementsBoundByIndex
             + app.searchFields.allElementsBoundByIndex
         // Text that runs on below the screen, under the bottom toolbar, is measured through the
-        // toolbar's glass.
+        // toolbar's glass; text that runs on below the end of its list (the bottom of an iPad
+        // form sheet, GKM-064) is measured half-scrolled out of view.
         if finding.type == .contrast,
            app.toolbars.allElementsBoundByIndex.contains(where: { $0.frame.intersects(element.frame) })
             || element.frame.maxY > app.windows.firstMatch.frame.maxY {
             return "partly under the system's bottom toolbar"
+        }
+        // Text scrolled partly under a navigation bar (the top of an iPad form sheet, GKM-064)
+        // is measured through the bar's glass.
+        if finding.type == .contrast,
+           app.navigationBars.allElementsBoundByIndex.contains(where: { $0.frame.intersects(element.frame) }) {
+            return "partly under the system's navigation bar"
+        }
+        if finding.type == .contrast, element.type == .staticText,
+           app.collectionViews.allElementsBoundByIndex.contains(where: {
+               $0.frame.intersects(element.frame) && element.frame.minY < $0.frame.maxY && element.frame.maxY > $0.frame.maxY
+           }) {
+            return "partly scrolled out of the bottom of its list"
+        }
+        // In portrait the iPad lays the mailboxes over the list and the conversation and dims
+        // those (GKM-064): their text is measured through the system's dimming. Until the
+        // sidebar goes away they can't be read or used, and the same screens are audited
+        // without it.
+        let window = app.windows.firstMatch.frame
+        if finding.type == .contrast, UIDevice.current.userInterfaceIdiom == .pad, window.width < window.height,
+           let sidebar = app.collectionViews.containing(NSPredicate(format: "identifier BEGINSWITH 'mailbox.'"))
+               .allElementsBoundByIndex.first(where: { window.intersects($0.frame) }),
+           !sidebar.frame.intersects(element.frame) {
+            return "dimmed behind the sidebar the iPad lays over the list in portrait"
         }
         if bars.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(element.frame) }) {
             switch finding.type {
@@ -112,5 +160,68 @@ enum AccessibilityAuditPolicy {
         case .trait: "trait"
         default: "audit \(type.rawValue)"
         }
+    }
+}
+
+/// The only places a Dynamic Type finding is skipped (GKM-081). Each is a container the system
+/// draws, where SwiftUI text that does grow is reported as "partially unsupported": at
+/// Accessibility XXXL the same "No mail yet", "Servers", "Incoming (IMAP)" and sidebar rows fill
+/// the screen (GKM-061 and GKM-064 screenshots), and testMainScreensAtLargestTextSize fails text
+/// that doesn't fit there as clipped.
+///
+/// Everything else that names an element fails: "unsupported" (a fixed point size, which
+/// doesn't grow at all) anywhere, and "partially unsupported" outside these containers.
+@MainActor
+enum DynamicTypeAllowlist {
+    struct Container {
+        var name: String
+        var reason: String
+        var contains: @MainActor (AuditFinding.Element, XCUIApplication) -> Bool
+    }
+
+    static let partially = "Dynamic Type font sizes are partially unsupported"
+
+    static let containers: [Container] = [
+        Container(
+            name: "system bar",
+            reason: "the navigation bar, bottom toolbar and search field cap their text by design; a long press shows it in the Large Content Viewer",
+            contains: { element, app in
+                (app.navigationBars.allElementsBoundByIndex + app.toolbars.allElementsBoundByIndex
+                    + app.searchFields.allElementsBoundByIndex)
+                    .contains { $0.frame.insetBy(dx: -1, dy: -1).contains(element.frame) }
+            }),
+        Container(
+            name: "Form or List",
+            reason: "SwiftUI text in a Form or List row, section header or footer (Settings, the account form, the sidebar) grows with its text style",
+            contains: { element, app in
+                // The message rows are a List too, but they are the app's own layout: their text
+                // is never skipped.
+                let messageRows = app.descendants(matching: .any).matching(identifier: "messageRow").allElementsBoundByIndex
+                return element.type == .staticText
+                    && !messageRows.contains { $0.frame.contains(element.frame) && $0.label.contains(element.label) }
+                    && app.collectionViews.allElementsBoundByIndex
+                        .contains { $0.frame.insetBy(dx: -1, dy: -1).contains(element.frame) }
+            }),
+        Container(
+            name: "ContentUnavailableView",
+            reason: "the empty list's \"No mail yet\", its description and its Add Account button are the system's empty-state view, in its text styles",
+            contains: { element, app in
+                (element.type == .staticText
+                    && (element.label == "No mail yet" || element.label.hasPrefix("Add an account. Mail keeps every message")))
+                    || (element.type == .button && element.identifier == "addAccountButton"
+                        && app.staticTexts["No mail yet"].exists)
+            }),
+    ]
+
+    static func skipReason(_ finding: AuditFinding, in app: XCUIApplication) -> String? {
+        // A finding without an element can't be checked against the containers, and it comes and
+        // goes: on the iPad's account form one run reports it and the next doesn't, with nothing on
+        // screen in a fixed size (GKM-081 probe; finding its source is GKM-083). It is printed
+        // with the audit's own words, not failed.
+        guard let element = finding.element else {
+            return "names no element to check (GKM-083)"
+        }
+        guard finding.summary == partially else { return nil }
+        return containers.first { $0.contains(element, app) }.map { "\($0.name): \($0.reason)" }
     }
 }

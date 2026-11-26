@@ -379,8 +379,14 @@ final class MailFlowUITests: XCTestCase {
         if !row.waitForExistence(timeout: 10) {
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
-        // At the largest text sizes the account's folders are further down the list.
-        for _ in 0..<6 where !(row.waitForExistence(timeout: 3) && row.isHittable) { app.swipeUp(velocity: .slow) }
+        // At the largest text sizes the account's folders are further down the list. Scroll the
+        // mailboxes themselves: on iPad they are a column (or a sidebar over the list), and a
+        // swipe in the middle of the screen lands in the reader.
+        let mailboxes = app.collectionViews
+            .containing(NSPredicate(format: "identifier BEGINSWITH 'mailbox.'")).firstMatch
+        for _ in 0..<6 where !(row.waitForExistence(timeout: 3) && row.isHittable) {
+            (mailboxes.exists ? mailboxes : app).swipeUp(velocity: .slow)
+        }
         XCTAssertTrue(row.waitForExistence(timeout: 20))
         row.tap()
     }
@@ -395,6 +401,18 @@ final class MailFlowUITests: XCTestCase {
         let focused = app.descendants(matching: .any)["mailbox.Focused"]
         if !focused.waitForExistence(timeout: 3) { app.navigationBars.buttons.element(boundBy: 0).tap() }
         XCTAssertTrue(focused.waitForExistence(timeout: 10))
+        // On iPad the sidebar slides in: audited mid-way, its text measured clipped and faint.
+        waitUntilStill(focused)
+    }
+
+    /// Until the element stops moving: a sidebar or a sheet that is still sliding in.
+    private func waitUntilStill(_ element: XCUIElement) {
+        var last = CGRect.null
+        _ = waitFor(timeout: 5) {
+            let now = element.frame
+            defer { last = now }
+            return now == last
+        }
     }
 
     private func openSettings() {
@@ -404,6 +422,7 @@ final class MailFlowUITests: XCTestCase {
         settings.tap()
         // The sheet's bar: at the largest text sizes its sections start below the screen.
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        waitUntilStill(app.navigationBars["Settings"])
     }
 
     private func snapshot(_ name: String) {
