@@ -135,10 +135,17 @@ struct AddAccountForm {
         hideKeyboard()
         let picker = app.buttons["smtpSecurityPicker"]
         for _ in 0..<6 where !(picker.exists && picker.isHittable) { app.swipeUp() }
-        picker.tap()
+        // The menu's items exist while it is still opening, before they can be tapped ("activation
+        // point invalid"): tap TLS once it can be, and open the menu again if it never could.
         let tls = app.buttons["TLS"]
-        XCTAssertTrue(tls.waitForExistence(timeout: 5))
+        for _ in 0..<3 {
+            picker.tap()
+            if tls.waitForExistence(timeout: 5), waitFor(timeout: 5, { tls.isHittable }) { break }
+        }
+        XCTAssertTrue(tls.isHittable, "the Security menu offers TLS")
         tls.tap()
+        XCTAssertTrue(waitFor(timeout: 5) { picker.label.hasSuffix("TLS") && !picker.label.hasSuffix("STARTTLS") },
+                      "Security reads \(picker.label), not TLS")
     }
 
     private func errorText() -> String {
