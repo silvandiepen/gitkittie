@@ -18,6 +18,9 @@ enum OrganisationPause: Equatable {
     case offline
     /// The provider refused the password.
     case signInNeeded
+    /// This device can't save mail right now (disk nearly full, or the mail folder can't be
+    /// written): nothing moves at the provider until it can keep up again (GKM-091).
+    case cannotStoreHere
     /// The sync hasn't finished a pass since it started: the state here may be behind.
     case reconciling
     /// Changes made here haven't all reached the provider yet.
@@ -35,6 +38,7 @@ enum OrganisationPause: Equatable {
         switch progress.activity {
         case .waitingToRetry, .stopped: return .offline
         case .signInFailed: return .signInNeeded
+        case .pausedForSpace, .cannotStore: return .cannotStoreHere
         case .starting, .connecting, .importing, .checking: return .reconciling
         case .watching: break
         }
@@ -419,6 +423,7 @@ enum OrganisationText {
         case .noCoordinator: "No device runs it yet."
         case .offline: "Paused: \(DeviceWords.this) is offline. It runs again once it’s back online and up to date."
         case .signInNeeded: "Paused: sign in to this account again."
+        case .cannotStoreHere: "Paused: \(DeviceWords.this) can’t save mail right now. It runs again once it can."
         case .reconciling: "Waiting for the check for mail to finish."
         case .changesWaiting(let count): "Waiting: \(count == 1 ? "1 change" : "\(count) changes") still on the way to your provider."
         }
