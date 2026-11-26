@@ -1,6 +1,7 @@
 import MailAccounts
 import MailCore
 import SwiftUI
+import UIKit
 
 /// Add an iCloud account or any IMAP account (GKM-010): both servers are checked before
 /// anything is saved; the password goes to this device's Keychain only.
@@ -89,6 +90,14 @@ struct AddAccountScreen: View {
                         task?.cancel()
                         dismiss()
                     }
+                }
+                // The number pad has no Return: a way to put the keyboard away (GKM-061).
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                    .accessibilityIdentifier("keyboardDone")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") { add() }

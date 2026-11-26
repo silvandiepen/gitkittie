@@ -30,6 +30,7 @@ final class MailFlowUITests: XCTestCase {
         add.tap()
 
         fillInAccount(user)
+        hideKeyboard()
         snapshot("2-add-account")
         audit("add account")
         app.buttons["addAccountConfirm"].tap()
@@ -138,6 +139,7 @@ final class MailFlowUITests: XCTestCase {
         audit("large: first run")
         add.tap()
         fillInAccount(user)
+        hideKeyboard()
         snapshot("large-2-add-account")
         audit("large: add account")
         app.buttons["addAccountConfirm"].tap()
@@ -223,6 +225,11 @@ final class MailFlowUITests: XCTestCase {
         app.launch()
     }
 
+    private func hideKeyboard() {
+        let done = app.buttons["keyboardDone"]
+        if app.keyboards.firstMatch.exists, done.exists, done.isHittable { done.tap() }
+    }
+
     /// iOS may offer to save the test password in Passwords; the test never does.
     private func declineSavePassword(wait: TimeInterval = 3) {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -256,13 +263,16 @@ final class MailFlowUITests: XCTestCase {
     }
 
     private func replace(_ field: XCUIElement, with text: String) {
+        // Put the keyboard away first (the number pad has no Return): at the largest text sizes
+        // it covers the next field.
+        let done = app.buttons["keyboardDone"]
+        if app.keyboards.firstMatch.exists, done.exists, done.isHittable { done.tap() }
         for _ in 0..<4 where !field.exists { app.swipeUp(velocity: .slow) }
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         if !field.isHittable { app.swipeUp() }
         if field.frame.height > 60 {
             // At the largest text sizes the field wraps and its text sits at the bottom right:
-            // focus it first (XCUITest scrolls it into view, iOS lifts it above the keyboard),
-            // then tap the end of the text.
+            // focus it first (iOS lifts it above the keyboard), then tap the end of the text.
             field.tap()
             field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.85)).tap()
         } else {
