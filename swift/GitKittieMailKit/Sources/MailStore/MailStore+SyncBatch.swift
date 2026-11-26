@@ -16,7 +16,7 @@ public struct SyncedMessage: Sendable {
     }
 }
 
-/// What ``MailStore/storeSynced(_:account:)`` did with one message.
+/// What ``MailStore/storeSynced(_:account:floor:)`` did with one message.
 public enum SyncedOutcome: Equatable, Sendable {
     /// The location was already on record; only its flags were saved.
     case alreadyStored(MailMessageID)
@@ -42,7 +42,12 @@ extension MailStore {
     /// (``write(_:account:)``); flags and the downloaded byte count are saved once for the batch.
     /// When it returns, every message in the batch is durable and mapped, so a cursor covering
     /// them may be checkpointed.
-    public func storeSynced(_ messages: [SyncedMessage], account: MailAccountID) throws -> [SyncedOutcome] {
+    ///
+    /// With a `floor` (the sync's, GKM-091) nothing is written, not even a location, when the
+    /// batch's bytes would leave less free space than its minimum: it throws
+    /// ``MailStoreError/diskNearlyFull(freeBytes:minimumFreeBytes:)`` first.
+    public func storeSynced(_ messages: [SyncedMessage], account: MailAccountID, floor: FreeSpaceFloor? = nil) throws -> [SyncedOutcome] {
+        try floor?.check(incoming: messages.reduce(0) { $0 + Int64($1.eml.count) }, in: locations.mailFolder)
         let accountName = try SafePath.component(account.rawValue)
         let mapping = try mapping(for: accountName)
         var outcomes: [SyncedOutcome?] = Array(repeating: nil, count: messages.count)

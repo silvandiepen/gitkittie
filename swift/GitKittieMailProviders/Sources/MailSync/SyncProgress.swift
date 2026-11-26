@@ -67,6 +67,15 @@ public struct SyncOptions: Sendable {
     /// The account's folder choices (GKM-066, MAIL-093, MAIL-094): folders that don't sync are
     /// listed but never opened, and the special folders chosen by hand are the roles on record.
     public var mailboxes = MailboxSettings()
+    /// The least free space downloading leaves on the mail folder's disk (GKM-091, MAIL-123):
+    /// checked before each batch is downloaded and again by the store before it is written.
+    /// Under it the pass stops with ``SyncProgress/Activity/pausedForSpace(freeBytes:minimumFreeBytes:)``
+    /// and carries on by itself once there is room. `nil`: no floor (tests, the command line).
+    /// The app passes its own minimum (MAIL-106), so there is one number.
+    public var freeSpaceFloor: FreeSpaceFloor?
+    /// How often a sync stopped on this device (paused for space, or the store can't be
+    /// written, ``SyncProgress/Activity/cannotStore(_:reason:)``) looks again.
+    public var localStopRecheck: Duration = .seconds(60)
 
     public init(recentPerFolder: Int = 200, historyBudgetBytes: Int64? = nil, historyDays: Int? = nil, historyPerPass: Int = 10_000,
                 historySlice: Duration = .seconds(20), onDemandThreshold: Int? = 1_000_000, pinnedPerPass: Int = 50,
@@ -113,6 +122,15 @@ public struct SyncProgress: Sendable, Equatable {
         /// The provider refused the password (revoked app password, changed password). The
         /// sync stops until the person signs in again.
         case signInFailed(reason: String)
+        /// Downloading is paused: the mail folder's disk has less free than the floor
+        /// (``SyncOptions/freeSpaceFloor``, GKM-091). The sync looks again every
+        /// ``SyncOptions/localStopRecheck`` and carries on by itself when there is room.
+        case pausedForSpace(freeBytes: Int64, minimumFreeBytes: Int64)
+        /// Mail could not be saved on this device: the disk is full (without a floor), the folder
+        /// or Mail's records can't be written, are gone, or are damaged (GKM-091, MAIL-124). Not a
+        /// network problem: the sync tries again every ``SyncOptions/localStopRecheck``.
+        /// `reason` is the technical error, for the log.
+        case cannotStore(LocalStoreProblem, reason: String)
         case stopped
     }
 

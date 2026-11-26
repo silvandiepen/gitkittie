@@ -211,7 +211,7 @@ final class MobileSession {
                 guard model.sync.isSyncing(account.id), !model.sync.isPausedForSpace(account.id) else { return false }
                 guard let progress = model.sync.progress[account.id] else { return true }
                 switch progress.activity {
-                case .signInFailed, .waitingToRetry, .stopped: return false
+                case .signInFailed, .waitingToRetry, .pausedForSpace, .cannotStore, .stopped: return false
                 default: return (progress.lastCompletedPass ?? .distantPast) < start
                 }
             }

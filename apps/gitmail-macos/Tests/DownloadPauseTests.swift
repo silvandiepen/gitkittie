@@ -1,3 +1,4 @@
+import Synchronization
 import XCTest
 import MailAccounts
 import MailCore
@@ -17,8 +18,13 @@ final class DownloadPauseTests: XCTestCase {
     private var defaults: UserDefaults!
     private var defaultsSuite: String!
     private var credentials: KeychainCredentialStore!
-    /// What the disk that holds the mail folder has free, as the sync sees it.
-    private var free: Int64 = 0
+    /// What the disk that holds the mail folder has free, as the sync sees it. The sync's floor
+    /// reads it from its own actor (GKM-091), so it is behind a lock.
+    private let disk = Disk()
+    private var free: Int64 {
+        get { disk.free }
+        set { disk.free = newValue }
+    }
 
     override func setUp() async throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("gkm090-pause-\(UUID().uuidString)", isDirectory: true)
@@ -29,6 +35,7 @@ final class DownloadPauseTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        if let locations { try? Self.setPermissions(0o755, under: locations.mailFolder) }
         if let locations, let store = try? await MailStore.open(locations) {
             for account in (try? await store.accounts()) ?? [] { try? credentials.delete(for: account.id) }
         }
@@ -43,7 +50,7 @@ final class DownloadPauseTests: XCTestCase {
             syncOptions: SyncOptions(idleTimeout: .seconds(30),
                                      reconnect: ReconnectPolicy(initialDelay: .milliseconds(50), maxDelay: .milliseconds(200), jitter: 0)),
             defaults: defaults)
-        services.freeSpace = { [unowned self] _ in self.free }
+        services.freeSpace = { [disk] _ in disk.free }
         // The watch looks often, so "by itself" is seen within the test's time.
         services.freeSpaceCheckInterval = .milliseconds(100)
         return services
@@ -147,5 +154,100 @@ final class DownloadPauseTests: XCTestCase {
         }
         XCTAssertNil(model.sync.downloadPause)
         await model.sync.stopAll()
+    }
+
+    // MARK: The sync's own floor and other stops on this Mac (GKM-091)
+
+    func testTheSyncsOwnFloorStopsABatchAndShowsAsThePause() async throws {
+        let server = try await LocalMailServer.require()
+        let user = try await server.makeUser()
+        try await server.append(["Larger than the room left"], for: user)
+
+        // Just over the minimum: the model's own check finds room, but the message would take
+        // the disk under it, so the sync's floor stops before downloading it.
+        free = DownloadPause.macMinimumFreeBytes + 100
+        let model = AppModel(locations: locations, services: services(trust: server.trust))
+        await model.open()
+        let account = try await model.addAccount(draft(server, user))
+        try await waitUntil("the floor's pause") { model.syncStatus(account.id) == DownloadPause.shortText }
+        let pause = try XCTUnwrap(model.sync.downloadPause, "shown as the MAIL-106 pause, not as offline")
+        XCTAssertEqual(pause.minimumFreeBytes, DownloadPause.macMinimumFreeBytes, "one minimum for the pause and the floor")
+        XCTAssertTrue(model.sync.isPausedForSpace(account.id))
+        let stored = try await XCTUnwrap(model.mailStore).messageCount()
+        XCTAssertEqual(stored, 0)
+
+        // Room again: it carries on by itself.
+        free = Self.gigabytes(40)
+        try await waitUntil("the mail") { ((try? await model.mailStore?.messageCount()) ?? 0) == 1 }
+        try await waitUntil("the pause to clear") { model.sync.downloadPause == nil }
+        XCTAssertFalse(model.sync.isPausedForSpace(account.id))
+        await model.sync.stopAll()
+    }
+
+    func testAReadOnlyMailFolderIsSaidInWordsAndTheSyncCarriesOnWhenItIsWritable() async throws {
+        let server = try await LocalMailServer.require()
+        let user = try await server.makeUser()
+        free = Self.gigabytes(40)
+        let model = AppModel(locations: locations, services: services(trust: server.trust))
+        await model.open()
+        let account = try await model.addAccount(draft(server, user))
+        try await waitUntil("the first sync") { model.syncStatus(account.id) == "Up to date" }
+
+        try Self.setPermissions(0o555, under: locations.mailFolder)
+        defer { try? Self.setPermissions(0o755, under: locations.mailFolder) }
+        try await server.append(["While the folder is read-only"], for: user)
+        try await waitUntil("the stop") { model.syncStatus(account.id)?.hasPrefix("Can’t save mail") == true }
+        XCTAssertEqual(model.syncStatus(account.id),
+                       "Can’t save mail · the mail folder is read-only\nGive yourself permission to write to it again and it carries on by itself.")
+        XCTAssertNil(model.sync.downloadPause, "not a lack of space")
+
+        try Self.setPermissions(0o755, under: locations.mailFolder)
+        try await waitUntil("the mail") { ((try? await model.mailStore?.messageCount()) ?? 0) == 1 }
+        try await waitUntil("up to date again") { model.syncStatus(account.id) == "Up to date" }
+        await model.sync.stopAll()
+    }
+
+    func testEveryStopOnThisMacSaysWhatHappenedAndWhatToDo() {
+        func status(_ problem: LocalStoreProblem) -> [String?] {
+            var progress = SyncProgress()
+            progress.activity = .cannotStore(problem, reason: "technical")
+            return [SyncStatusText.line(progress), SyncStatusText.advice(progress)]
+        }
+        XCTAssertEqual(status(.diskFull), ["Can’t save mail · this Mac is out of space", "Free some space and it carries on by itself."])
+        XCTAssertEqual(status(.folderUnavailable), [
+            "Can’t save mail · the mail folder can’t be found",
+            "Reconnect the disk it is on, or choose the folder again in Settings ▸ Storage. It carries on by itself when it’s back.",
+        ])
+        XCTAssertEqual(status(.damaged), [
+            "Can’t save mail · Mail’s records on this Mac are damaged",
+            "Your mail files are not affected. Choose View ▸ Rebuild Search Index; it tries again by itself.",
+        ])
+        var paused = SyncProgress()
+        paused.activity = .pausedForSpace(freeBytes: 1, minimumFreeBytes: 2)
+        XCTAssertEqual(SyncStatusText.line(paused), DownloadPause.shortText)
+        XCTAssertNil(SyncStatusText.advice(paused), "the pause's own words are at the foot of the sidebar")
+    }
+
+    /// Sets the permissions of a folder and of every folder inside it.
+    private static func setPermissions(_ mode: Int, under folder: URL) throws {
+        let fileManager = FileManager.default
+        var folders = [folder.path]
+        if let paths = fileManager.enumerator(atPath: folder.path) {
+            for case let path as String in paths {
+                var isDirectory: ObjCBool = false
+                let full = folder.appendingPathComponent(path).path
+                if fileManager.fileExists(atPath: full, isDirectory: &isDirectory), isDirectory.boolValue { folders.append(full) }
+            }
+        }
+        for path in folders.reversed() { try fileManager.setAttributes([.posixPermissions: mode], ofItemAtPath: path) }
+    }
+}
+
+/// A disk's free space that a test sets and the sync reads from any thread.
+final class Disk: Sendable {
+    private let value = Mutex<Int64>(0)
+    var free: Int64 {
+        get { value.withLock { $0 } }
+        set { value.withLock { $0 = newValue } }
     }
 }

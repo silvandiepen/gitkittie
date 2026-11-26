@@ -86,13 +86,17 @@ extension MailStore {
     // MARK: - Storing what the sync fetched
 
     /// Stores messages the sync fetched partially (large attachments left at the provider), with
-    /// the same rules as ``storeSynced(_:account:)``: a location on record is never stored twice,
+    /// the same rules as ``storeSynced(_:account:floor:)``: a location on record is never stored twice,
     /// and the same message seen again gains a location instead of a copy. A partial copy
     /// matches a stored partial copy with the same signature (header, size, structure, every
     /// fetched part). It never matches a complete message by itself: where a complete message
     /// could be the same one, the outcome is `nil`, and the caller fetches the whole original and
-    /// stores it with ``storeSynced(_:account:)``, which compares bytes.
-    public func storeSyncedPartials(_ messages: [SyncedPartialMessage], account: MailAccountID) throws -> [SyncedOutcome?] {
+    /// stores it with ``storeSynced(_:account:floor:)``, which compares bytes.
+    /// With a `floor`, nothing is written when the batch would leave less free space than its
+    /// minimum (GKM-091), as for ``storeSynced(_:account:floor:)``.
+    public func storeSyncedPartials(_ messages: [SyncedPartialMessage], account: MailAccountID,
+                                    floor: FreeSpaceFloor? = nil) throws -> [SyncedOutcome?] {
+        try floor?.check(incoming: messages.reduce(0) { $0 + Int64($1.storedSize) }, in: locations.mailFolder)
         let accountName = try SafePath.component(account.rawValue)
         let mapping = try mapping(for: accountName)
         var outcomes: [SyncedOutcome?] = Array(repeating: nil, count: messages.count)

@@ -36,6 +36,9 @@ public enum MailStoreError: Error, Equatable, CustomStringConvertible {
     /// Bytes offered to complete a partial message are not that message: header, size or a
     /// fetched part differ (GKM-036).
     case partialMismatch(String)
+    /// Writing would leave less free space on the mail folder's disk than the sync's minimum
+    /// (``FreeSpaceFloor``, GKM-091). Nothing of the batch was written.
+    case diskNearlyFull(freeBytes: Int64, minimumFreeBytes: Int64)
 
     public var description: String {
         switch self {
@@ -55,6 +58,7 @@ public enum MailStoreError: Error, Equatable, CustomStringConvertible {
         case .partialMessage(let id): return "Message \(id) is not completely downloaded yet."
         case .attachmentNotDownloaded(let name): return "“\(name)” is not downloaded yet."
         case .partialMismatch(let id): return "The downloaded message does not match the partial copy of \(id)."
+        case .diskNearlyFull(let free, let minimum): return "Only \(free) bytes free on the mail folder's disk; the sync keeps \(minimum) free."
         }
     }
 }
