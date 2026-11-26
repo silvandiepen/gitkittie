@@ -66,17 +66,43 @@ public final class OneClickUnsubscriber: Sendable {
         let session = URLSession(configuration: Self.configuration(timeout: timeout), delegate: guardian, delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         do {
-            let (_, response) = try await session.data(for: Self.request(url, timeout: timeout))
+            let response = try await Self.send(Self.request(url, timeout: timeout), on: session)
+            // A redirect the guard refused is known from the guard, not from the response: CFNetwork
+            // sometimes finishes such a task with no response and no error (GKM-077).
+            if let refused = guardian.refused { return .redirectRefused(status: refused.status, host: refused.host) }
             guard let http = response as? HTTPURLResponse else { return .failed("No HTTP response.") }
             switch http.statusCode {
             case 200..<300: return .accepted(status: http.statusCode)
-            case 300..<400:
-                let location = http.value(forHTTPHeaderField: "Location").flatMap { URL(string: $0, relativeTo: http.url) }
-                return .redirectRefused(status: http.statusCode, host: location?.host)
+            case 300..<400: return .redirectRefused(status: http.statusCode, host: Self.locationHost(of: http))
             default: return .rejected(status: http.statusCode)
             }
         } catch {
+            if let refused = guardian.refused { return .redirectRefused(status: refused.status, host: refused.host) }
             return .failed(error.localizedDescription)
+        }
+    }
+
+    /// The host a redirect's Location points to, resolved against the URL that answered.
+    static func locationHost(of response: HTTPURLResponse) -> String? {
+        response.value(forHTTPHeaderField: "Location").flatMap { URL(string: $0, relativeTo: response.url) }?.host
+    }
+
+    /// One data task, its response or its error. Not `URLSession.data(for:)`: that force-unwraps the
+    /// response, and when a delegate refuses a redirect CFNetwork sometimes completes the task with
+    /// no response and no error, which crashed the process (GKM-077).
+    static func send(_ request: URLRequest, on session: URLSession) async throws -> URLResponse? {
+        let running = OSAllocatedUnfairLock<URLSessionDataTask?>(initialState: nil)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let task = session.dataTask(with: request) { _, response, error in
+                    if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: response) }
+                }
+                running.withLock { $0 = task }
+                task.resume()
+                if Task.isCancelled { task.cancel() }
+            }
+        } onCancel: {
+            running.withLock { $0 }?.cancel()
         }
     }
 }
@@ -88,6 +114,10 @@ final class RedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
     private let origin: URL
     private let policy: EndpointPolicy
     private let followed = OSAllocatedUnfairLock(initialState: 0)
+    private let refusal = OSAllocatedUnfairLock<(status: Int, host: String?)?>(initialState: nil)
+
+    /// The redirect this guard refused, if it refused one: its status and the host it pointed to.
+    var refused: (status: Int, host: String?)? { refusal.withLock { $0 } }
 
     init(origin: URL, policy: EndpointPolicy) {
         self.origin = origin
@@ -105,6 +135,7 @@ final class RedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
               let target = request.url, target.host?.lowercased() == origin.host?.lowercased(),
               target.scheme?.lowercased() == origin.scheme?.lowercased(), target.port == origin.port,
               policy.problem(with: target) == nil, request.httpMethod == "POST" else {
+            refusal.withLock { $0 = (response.statusCode, OneClickUnsubscriber.locationHost(of: response)) }
             completionHandler(nil)
             return
         }
