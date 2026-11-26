@@ -88,6 +88,7 @@ private struct WorkspaceSplit: View {
     @State private var storageRepo: AddedRepo?
     @State private var showAgentAccess = false
     @State private var showNotificationSettings = false
+    @State private var updates = AppUpdates()
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openWindow) private var openWindow
 
@@ -515,6 +516,10 @@ private struct WorkspaceSplit: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.stroke))
                         .padding(.horizontal, 10).padding(.bottom, 6)
                     }
+                    // A newer Tasks in the App Store: Update opens its page there.
+                    if updates.offer != nil {
+                        UpdateAvailableNotice(updates: updates).padding(.horizontal, 10).padding(.bottom, 6)
+                    }
                     footer
                 }
             }
@@ -536,6 +541,7 @@ private struct WorkspaceSplit: View {
         }
         .navigationSplitViewStyle(.balanced)
         .toolbarBackground(Theme.window, for: .windowToolbar)
+        .checksForAppUpdates(updates)
         // Reviews on every board: on launch, whenever the app comes forward, and when a
         // board is added or removed.
         .task(id: "\(scenePhase == .active)\n\(model.reviewInboxKey)") { if scenePhase == .active { await model.loadReviewInbox() } }
