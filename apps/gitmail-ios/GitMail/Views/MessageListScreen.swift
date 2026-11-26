@@ -233,8 +233,24 @@ private struct RowMenu: View {
     var body: some View {
         let scope = model.browser.scope
         if let sender = row.latest.from, !sender.address.isEmpty {
-            Button("See All Mail from \(SenderText.name(sender))", systemImage: "person.crop.circle") {
+            let name = SenderText.name(sender)
+            Button("See All Mail from \(name)", systemImage: "person.crop.circle") {
                 Task { await model.showAllMail(from: sender) }
+            }
+            // Blocking this sender in the row's account (GKM-072): a preview, then Apply.
+            if let rule = model.senders.blockingRule(for: sender.address, account: row.latest.account) {
+                Button(SenderRuleText.unblockMenuTitle(rule, name: name), systemImage: "hand.raised.slash") {
+                    Task { await model.senders.proposeRemoval(of: rule) }
+                }
+            } else {
+                Menu("Block \(name)", systemImage: "hand.raised") {
+                    ForEach(SenderRuleText.blockActions, id: \.self) { action in
+                        Button(SenderRuleText.blockMenuTitle(action, name: name),
+                               systemImage: action == .alwaysJunk ? "xmark.bin" : "trash") {
+                            Task { await model.senders.proposeBlock(action, address: sender, account: row.latest.account) }
+                        }
+                    }
+                }
             }
             Divider()
         }

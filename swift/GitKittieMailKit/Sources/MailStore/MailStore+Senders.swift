@@ -37,6 +37,8 @@ public struct SenderRulePreview: Sendable, Equatable {
         public var protection: SenderRuleProtection?
         /// You took it out of the rule.
         public var isExcluded: Bool
+        /// It is only in its account's Trash or Junk already: a blocking rule has nothing to move.
+        public var isInTrashOrJunk: Bool = false
 
         /// It would move: another view, purpose or disposition (which rule decided alone is no move).
         public var changes: Bool {
@@ -221,6 +223,24 @@ extension MailStore {
         try index.messages(decidedBy: rule).map(\.id).filter { try index.verdict(of: $0)?.isSilenced == true }
     }
 
+    /// What a blocking rule (Always Junk, Always Trash) moves now: the messages it decided,
+    /// or those of `candidates` it decided, that are not flagged, in no space and not already
+    /// only in Trash or Junk. Flags and spaces are read again here, at the moment of the move,
+    /// so mail flagged or put in a space after it was sorted still stays (MAIL-110).
+    public func messagesToBlock(by rule: SenderRule, among candidates: [MailMessageID]? = nil) throws -> [MailMessageID] {
+        guard rule.action.blocks, rule.isEnabled else { return [] }
+        let ids = try candidates ?? index.messages(decidedBy: rule.id).map(\.id)
+        return try ids.filter { id in
+            guard let verdict = try index.verdict(of: id), verdict.senderRule == rule.id, verdict.disposition == .muted else { return false }
+            return try !isBlockProtected(id) && !index.isTrashOrJunk(id)
+        }
+    }
+
+    /// Flagged, or in one of your spaces: a blocking rule leaves it where it is.
+    private func isBlockProtected(_ id: MailMessageID) throws -> Bool {
+        try index.summary(of: id)?.isFlagged == true || !index.spaces(containing: id).isEmpty
+    }
+
     // MARK: Planning (shared with classification)
 
     /// The verdict for one message with these sender rules: the rule that matches first in your
@@ -252,7 +272,10 @@ extension MailStore {
         if let winner {
             let corrected = verdict.reasons.contains(.userOverride)
             let latest = winner.action == .keepLatestOnly ? try isLatest(id, fingerprint: fingerprint, of: winner) : false
-            effect = SenderRuleEngine.effect(of: winner, classification: verdict, isCorrected: corrected, isLatest: latest)
+            let flagged = winner.action.blocks ? try index.summary(of: id)?.isFlagged == true : false
+            let inSpace = winner.action.blocks ? try !index.spaces(containing: id).isEmpty : false
+            effect = SenderRuleEngine.effect(of: winner, classification: verdict, isCorrected: corrected, isLatest: latest,
+                                             isFlagged: flagged, isInSpace: inSpace)
         }
         let disposition: SenderDisposition? = if case .disposition(let value) = effect { value } else { nil }
         let user: Set<ReasonCode> = [.userOverride, .userRuleList, .userRuleSender, .userRuleDomain]
@@ -316,7 +339,7 @@ extension MailStore {
         return SenderRulePreview.Item(id: id, account: planned.stored.account, subject: summary?.subject, from: summary?.from,
                                       date: summary?.date ?? Date(timeIntervalSince1970: 0), fingerprint: planned.fingerprint,
                                       before: before.map(Self.placement), after: Self.placement(planned.stored),
-                                      protection: protection, isExcluded: excluded)
+                                      protection: protection, isExcluded: excluded, isInTrashOrJunk: try index.isTrashOrJunk(id))
     }
 
     static func placement(_ verdict: StoredVerdict) -> SenderPlacement {

@@ -148,6 +148,11 @@ struct RuleOrderSheet: View {
                         Button("Move Down", systemImage: "chevron.down") { Task { await move(rule, by: 1) } }
                             .labelStyle(.iconOnly)
                             .disabled(index == model.senders.rules.count - 1)
+                        // A blocked sender's mail is in Junk or Trash, so the sender may not be in
+                        // the list any more: its rule is removed here (GKM-072).
+                        Button("Remove Rule…", systemImage: "minus.circle") { Task { await remove(rule) } }
+                            .labelStyle(.iconOnly)
+                            .help("Remove this rule")
                     }
                     .buttonStyle(.borderless)
                     .padding(.horizontal, 14)
@@ -169,5 +174,10 @@ struct RuleOrderSheet: View {
     private func move(_ rule: SenderRule, by offset: Int) async {
         dismiss()
         await model.senders.proposeMove(rule, by: offset)
+    }
+
+    private func remove(_ rule: SenderRule) async {
+        dismiss()
+        await model.senders.proposeRemoval(of: rule)
     }
 }

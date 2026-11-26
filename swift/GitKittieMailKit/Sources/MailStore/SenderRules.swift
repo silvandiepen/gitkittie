@@ -12,6 +12,10 @@ import MailCore
 // and never override a correction you made to one message. Muting and silent archiving are
 // virtual: the message keeps its folders and flags at the provider unless the rule also asks to
 // archive there, which the app sends through the action journal like any other action.
+//
+// Always Junk and Always Trash (GKM-072, MAIL-109..111) block a sender: the app moves its mail to
+// the account's Junk or Trash through the action journal, at once and as new mail arrives, on
+// every device that has the rule. Mail you flagged or put in a space stays where it is.
 
 /// What a rule is about: one mailing list or one sender address, in one account.
 ///
@@ -69,14 +73,22 @@ public enum SenderRuleAction: Codable, Sendable, Hashable {
     case keepTransactionsOnly
     /// The newest message stays; every older one is muted.
     case keepLatestOnly
+    /// Block: every message moves to the account's Junk at the provider, now and as it arrives
+    /// (GKM-072). Flagged mail and mail in a space stay where they are.
+    case alwaysJunk
+    /// Block: every message moves to the account's Trash at the provider, now and as it arrives.
+    case alwaysTrash
 
     /// Silent archive and mutes can also archive at the provider, if you ask for it.
     public var canArchiveAtProvider: Bool {
         switch self {
         case .silentArchive, .mute, .keepTransactionsOnly, .keepLatestOnly: true
-        case .inbox, .category: false
+        case .inbox, .category, .alwaysJunk, .alwaysTrash: false
         }
     }
+
+    /// Always Junk or Always Trash: the rule moves mail at the provider by itself.
+    public var blocks: Bool { self == .alwaysJunk || self == .alwaysTrash }
 }
 
 /// Where a rule put a message, besides its category.
@@ -137,6 +149,10 @@ public enum SenderRuleProtection: String, Codable, Sendable, Hashable {
     case transaction
     /// Kept by "keep latest only": the newest message.
     case latest
+    /// Flagged: a blocking rule leaves it where it is (GKM-072).
+    case flagged
+    /// In one of your spaces: a blocking rule leaves it where it is (GKM-072).
+    case space
 }
 
 /// What the winning rule did to one message.
@@ -165,7 +181,18 @@ enum SenderRuleEngine {
 
     /// The disposition the winning rule gives a classified message. `isLatest` says whether it
     /// is the newest message the rule matches (for keep latest only).
-    static func effect(of rule: SenderRule, classification: Classification, isCorrected: Bool, isLatest: Bool) -> SenderRuleEffect {
+    /// A blocking rule (Always Junk, Always Trash) acts on risky and corrected mail too: it is
+    /// about who sent it, and moving it out of the way is the safer direction. It leaves flagged
+    /// mail, mail in a space and account security mail where they are (MAIL-110).
+    static func effect(of rule: SenderRule, classification: Classification, isCorrected: Bool, isLatest: Bool,
+                       isFlagged: Bool = false, isInSpace: Bool = false) -> SenderRuleEffect {
+        if rule.action.blocks {
+            if isFlagged { return .protected(.flagged) }
+            if isInSpace { return .protected(.space) }
+            if classification.risk == .none, classification.purpose == .security { return .protected(.security) }
+            // Out of Focused and the category views until the move lands in Junk or Trash.
+            return .disposition(.muted)
+        }
         if case .category(let purpose) = rule.action {
             // The classifier applied it (rules never lower risk); a correction still wins.
             return isCorrected ? .protected(.corrected) : .purpose(purpose)
@@ -175,6 +202,7 @@ enum SenderRuleEngine {
         switch rule.action {
         case .inbox: return .disposition(.inbox)
         case .category: return .protected(.corrected) // handled above
+        case .alwaysJunk, .alwaysTrash: return .disposition(.muted) // handled above
         case .silentArchive, .mute, .keepTransactionsOnly, .keepLatestOnly:
             if classification.purpose == .security { return .protected(.security) }
             switch rule.action {
