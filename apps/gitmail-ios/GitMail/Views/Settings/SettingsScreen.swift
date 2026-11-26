@@ -47,6 +47,7 @@ struct SettingsScreen: View {
                 }
                 Section {
                     NavigationLink("Notifications") { NotificationsScreen() }
+                    NavigationLink("Blocked Senders") { BlockedSendersScreen() }
                     NavigationLink("Organisation") { OrganisationScreen() }
                 }
                 StorageSection()

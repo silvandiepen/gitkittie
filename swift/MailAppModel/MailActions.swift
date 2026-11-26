@@ -9,6 +9,9 @@ enum MessageAction: Equatable {
     case markRead, markUnread, flag, unflag
     case archive
     case moveToTrash
+    /// To the account's Junk (a `Junk` folder created on first use without one): what an Always
+    /// Junk rule does with a blocked sender's mail (GKM-072).
+    case moveToJunk
     /// To a folder of one account; messages of other accounts are left alone.
     case move(to: String, account: MailAccountID)
     /// Only from Trash, after a confirmation.
@@ -23,6 +26,7 @@ enum MessageAction: Equatable {
         case .unflag: "Unflag"
         case .archive: "Archive"
         case .moveToTrash: "Move to Trash"
+        case .moveToJunk: "Move to Junk"
         case .move: "Move"
         case .deletePermanently: "Delete"
         }
@@ -31,7 +35,7 @@ enum MessageAction: Equatable {
     /// Takes the messages out of the view they are in: the rows leave and the selection ends.
     var changesLocation: Bool {
         switch self {
-        case .archive, .moveToTrash, .move, .deletePermanently: true
+        case .archive, .moveToTrash, .moveToJunk, .move, .deletePermanently: true
         case .markRead, .markUnread, .flag, .unflag: false
         }
     }
@@ -247,6 +251,19 @@ final class MailActions {
                 changes.append(MailChange(message.id, .move(from: source, to: target.name, createTarget: target.create)))
             }
             return changes
+        case .moveToJunk:
+            // Out of every folder it is in but All Mail, Trash and Junk (as Move to Trash is).
+            var changes: [MailChange] = []
+            for message in messages {
+                guard let junk = junkFolder(for: message.account) else { continue }
+                let skipped = Set(roleFolders(of: message.account, roles: ["all", "trash", "junk"]))
+                let boxes = try await store.effectiveMailboxes(of: message.id)
+                let sources = folder.map { boxes.contains($0) ? [$0] : [] } ?? boxes.subtracting(skipped).sorted()
+                for source in sources where source != junk.name {
+                    changes.append(MailChange(message.id, .move(from: source, to: junk.name, createTarget: junk.create)))
+                }
+            }
+            return changes
         case .moveToTrash:
             var changes: [MailChange] = []
             for message in messages {
@@ -310,6 +327,14 @@ final class MailActions {
         return ("Trash", true)
     }
 
+    /// Junk: the \Junk folder (or the one chosen in Settings), else a Junk folder created on
+    /// first use, which counts as Junk at once (MAIL-110).
+    func junkFolder(for account: MailAccountID) -> (name: String, create: Bool)? {
+        guard let folders = sync.folders[account], !folders.isEmpty else { return nil }
+        if let junk = folders.first(where: { $0.role == "junk" }) { return (junk.name, false) }
+        return ("Junk", true)
+    }
+
     private func inbox(of account: MailAccountID) -> String? {
         sync.folders[account]?.first { $0.role == "inbox" }?.name
     }
@@ -333,6 +358,27 @@ final class MailActions {
         await browser.reload(keepingPlace: true)
         await sync.actionsQueued(for: accounts)
         await onMailChanged?()
+    }
+
+    /// Writes changes a sender rule decided (GKM-072) as one journal batch, sends and shows
+    /// them like any action, without an Undo of its own: the rule's Undo covers it, and a move
+    /// of newly arrived mail is the rule's doing, not a step of yours.
+    func write(_ changes: [MailChange]) async throws -> MailActionBatch? {
+        guard let store, !changes.isEmpty, let batch = try await store.perform(changes) else { return nil }
+        await browser.reload(keepingPlace: true)
+        await sync.actionsQueued(for: batch.accounts)
+        await onMailChanged?()
+        return batch
+    }
+
+    /// Takes back a batch written by ``write(_:)``; returns its inverse, which takes it back again (Redo).
+    func takeBack(_ batch: MailActionBatch) async throws -> MailActionBatch? {
+        guard let store else { return nil }
+        let inverse = try await store.undo(batch)
+        await browser.reload(keepingPlace: true)
+        if let inverse { await sync.actionsQueued(for: inverse.accounts) }
+        await onMailChanged?()
+        return inverse
     }
 
     // MARK: Undo (MAIL-037)

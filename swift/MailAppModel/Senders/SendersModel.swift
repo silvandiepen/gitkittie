@@ -12,6 +12,9 @@ import Observation
 /// never its folders or flags at the provider. Only a rule you set to "also archive at your
 /// provider" moves mail, and only while active mode is on for its account (GKM-031, MAIL-116):
 /// through the action journal, as an audited run of active organisation, undone from its history.
+/// Always Junk and Always Trash (GKM-072, MAIL-109..111) block a sender: applying one moves its
+/// mail to Junk or Trash through the journal in the same Undo as the rule, and new mail from it
+/// is moved after each sync. Flagged mail and mail in a space stay where they are.
 @MainActor
 @Observable
 final class SendersModel {
@@ -35,6 +38,8 @@ final class SendersModel {
         var preview: SenderRulePreview
         /// The rule being added or edited, whose exclusions the preview can change.
         var ruleID: String?
+        /// What a blocking rule does at the provider, or what removing one doesn't undo.
+        var notes: [String] = []
     }
 
     private(set) var senders: [SenderSummary] = []
@@ -75,6 +80,9 @@ final class SendersModel {
         rules = []
         selectedID = nil
         do {
+            // The rules, at once: new mail is checked against blocking rules after every sync,
+            // and the row menus offer to stop one, before the Senders view is ever opened.
+            rules = try await store.senderRules()
             arrivalCursor = try await store.latestArrival()
         } catch {
             notice = String(describing: error)
@@ -100,6 +108,15 @@ final class SendersModel {
     /// The rules for one sender or list, in your order.
     func rules(for sender: SenderSummary) -> [SenderRule] {
         rules.filter { $0.account == sender.account && $0.scope == sender.scope }
+    }
+
+    /// Your Always Junk and Always Trash rules, in your order (GKM-072).
+    var blockingRules: [SenderRule] { rules.filter(\.action.blocks) }
+
+    /// The blocking rule for exactly this address in this account, if there is one.
+    func blockingRule(for address: String, account: MailAccountID) -> SenderRule? {
+        let scope = SenderScope.sender(address.lowercased())
+        return rules.first { $0.action.blocks && $0.account == account && $0.scope == scope }
     }
 
     /// 1-based position of a rule in your order.
@@ -151,6 +168,25 @@ final class SendersModel {
         await preview(candidate, title: "\(SenderRuleText.title(action)) \(sender.displayName)", ruleID: rule.id)
     }
 
+    /// Always Junk or Always Trash for one From address in one account, from a row's menu
+    /// (GKM-072): like ``propose(_:for:)``, with the rules read again first, since the Senders
+    /// view may never have been opened.
+    func proposeBlock(_ action: SenderRuleAction, address: MailAddress, account: MailAccountID) async {
+        guard action.blocks, let store, !address.address.isEmpty else { return }
+        do {
+            rules = try await store.senderRules()
+        } catch {
+            notice = String(describing: error)
+            return
+        }
+        let scope = SenderScope.sender(address.address.lowercased())
+        let rule = SenderRule(account: account, scope: scope, action: action)
+        var candidate = rules.filter { !($0.account == account && $0.scope == scope) }
+        candidate.insert(rule, at: 0)
+        let name = address.name.flatMap { $0.isEmpty ? nil : $0 } ?? address.address
+        await preview(candidate, title: "\(SenderRuleText.title(action)) \(name)", ruleID: rule.id)
+    }
+
     func proposeEnabled(_ enabled: Bool, rule: SenderRule) async {
         await change(rule, title: enabled ? "Turn On Rule" : "Turn Off Rule") { $0.isEnabled = enabled }
     }
@@ -185,6 +221,7 @@ final class SendersModel {
         guard let store else { return }
         do {
             pending.preview = try await store.previewSenderRules(pending.rules)
+            pending.notes = SenderRuleText.blockNotes(current: rules, candidate: pending.rules, preview: pending.preview)
             self.pending = pending
         } catch {
             notice = String(describing: error)
@@ -203,7 +240,9 @@ final class SendersModel {
     private func preview(_ candidate: [SenderRule], title: String, ruleID: String?) async {
         guard let store else { return }
         do {
-            pending = PendingChange(title: title, rules: candidate, preview: try await store.previewSenderRules(candidate), ruleID: ruleID)
+            let preview = try await store.previewSenderRules(candidate)
+            pending = PendingChange(title: title, rules: candidate, preview: preview, ruleID: ruleID,
+                                    notes: SenderRuleText.blockNotes(current: rules, candidate: candidate, preview: preview))
         } catch {
             notice = String(describing: error)
         }
@@ -220,33 +259,58 @@ final class SendersModel {
         return await setRules(pending.rules, name: pending.title)
     }
 
-    private func setRules(_ new: [SenderRule], name: String, registersUndo: Bool = true) async -> SenderRulePreview? {
+    /// Saves `new`; a blocking rule that was added, turned on or edited then moves its sender's
+    /// mail (GKM-072). One Undo takes back both the rules and those moves. `movesMail` is off
+    /// while undoing and redoing: the moves are taken back, or made again, from their batch.
+    private func setRules(_ new: [SenderRule], name: String, registersUndo: Bool = true,
+                          movesMail: Bool = true) async -> SenderRulePreview? {
         guard let store else { return nil }
+        let previous: [SenderRule], result: SenderRulePreview
         do {
-            let (previous, result) = try await store.setSenderRules(new)
-            if registersUndo, let undoManager {
-                undoManager.beginUndoGrouping()
-                registerUndo(restoring: previous, name: name)
-                undoManager.endUndoGrouping()
-            }
-            await refresh()
-            await browser.reload()
-            await onPlacementsChanged?()
-            archiveAtProvider(rules: new.filter(\.archiveAtProvider))
-            return result
+            (previous, result) = try await store.setSenderRules(new)
         } catch {
             notice = String(describing: error)
             return nil
         }
+        await refresh()
+        await browser.reload()
+        await onPlacementsChanged?()
+        var moves: MailActionBatch?
+        if movesMail {
+            do {
+                moves = try await moveBlockedMail(of: Self.blockingRulesChanged(from: previous, to: new), store: store)
+            } catch {
+                notice = String(describing: error)
+            }
+        }
+        if registersUndo, let undoManager {
+            undoManager.beginUndoGrouping()
+            registerUndo(restoring: previous, moves: moves.map { batch in Task { batch } }, name: name)
+            undoManager.endUndoGrouping()
+        }
+        archiveAtProvider(rules: new.filter(\.archiveAtProvider))
+        return result
     }
 
-    /// Undo puts `rules` back; while undoing, the reverse is registered at once, so Redo works
-    /// (as MailActions does, MAIL-037).
-    private func registerUndo(restoring rules: [SenderRule], name: String) {
+    /// Undo puts `rules` back and takes back the mail the change moved; while undoing, the
+    /// reverse is registered at once, so Redo works (as MailActions does, MAIL-037).
+    private func registerUndo(restoring rules: [SenderRule], moves: Task<MailActionBatch?, Never>?, name: String) {
         undoManager?.registerUndo(withTarget: self) { target in
             MainActor.assumeIsolated {
-                target.registerUndo(restoring: target.rules, name: name)
-                target.pendingUndo = Task { _ = await target.setRules(rules, name: name, registersUndo: false) }
+                let current = target.rules
+                let step = Task { @MainActor [weak target] () -> MailActionBatch? in
+                    guard let target else { return nil }
+                    _ = await target.setRules(rules, name: name, registersUndo: false, movesMail: false)
+                    guard let applied = await moves?.value else { return nil }
+                    do {
+                        return try await target.actions.takeBack(applied)
+                    } catch {
+                        target.notice = String(describing: error)
+                        return nil
+                    }
+                }
+                target.pendingUndo = Task { _ = await step.value }
+                target.registerUndo(restoring: current, moves: moves == nil ? nil : step, name: name)
             }
         }
         undoManager?.setActionName(name)
@@ -275,12 +339,16 @@ final class SendersModel {
     }
 
     /// After a sync: new mail that a provider-archiving rule silenced is archived too, on the
-    /// device that coordinates its account (it waits while that device is paused, MAIL-117).
+    /// device that coordinates its account (it waits while that device is paused, MAIL-117), and
+    /// new mail from a blocked sender goes to Junk or Trash (GKM-072), with no Undo of its own:
+    /// the rule moved it, not a step of yours. What arrived before the rule is left as it is now.
     func afterSync() async {
         guard let store else { return }
         let archiving = Dictionary(rules.filter { $0.archiveAtProvider && $0.isEnabled }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let blocking = Dictionary(blockingRules.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         do {
             var silenced: [String: [MailMessageID]] = [:]
+            var blocked: [String: [MailMessageID]] = [:]
             while true {
                 let arrivals = try await store.arrivals(after: arrivalCursor, limit: 200)
                 guard let last = arrivals.last else { break }
@@ -288,15 +356,47 @@ final class SendersModel {
                 for arrival in arrivals where arrival.isSilenced {
                     if let rule = arrival.senderRule, archiving[rule] != nil { silenced[rule, default: []].append(arrival.id) }
                 }
+                for arrival in arrivals where arrival.disposition == .muted && arrival.spaces.isEmpty {
+                    if let rule = arrival.senderRule, blocking[rule] != nil { blocked[rule, default: []].append(arrival.id) }
+                }
             }
             for (id, ids) in silenced {
                 guard let rule = archiving[id] else { continue }
                 await organisation?.archive(ids, silencedBy: rule, trigger: .automatic)
             }
+            var changes: [MailChange] = []
+            for (id, arrived) in blocked {
+                guard let rule = blocking[id] else { continue }
+                changes += try await blockChanges(rule, ids: try await store.messagesToBlock(by: rule, among: arrived), store: store)
+            }
+            if !changes.isEmpty { _ = try await actions.write(changes) }
         } catch {
             notice = String(describing: error)
         }
         await refresh()
+    }
+
+    // MARK: Blocking (GKM-072)
+
+    /// The blocking rules of `new` that are not in `old` as they are now: added, turned on or
+    /// edited (an exclusion changed). Only these move mail when rules are saved, so mail you took
+    /// out of Junk yourself is not moved again by an unrelated change.
+    nonisolated static func blockingRulesChanged(from old: [SenderRule], to new: [SenderRule]) -> [SenderRule] {
+        new.filter { rule in rule.action.blocks && rule.isEnabled && !old.contains(rule) }
+    }
+
+    /// Moves what these blocking rules decided, as one journal batch; returns it for Undo.
+    private func moveBlockedMail(of rules: [SenderRule], store: MailStore) async throws -> MailActionBatch? {
+        var changes: [MailChange] = []
+        for rule in rules { changes += try await blockChanges(rule, ids: try await store.messagesToBlock(by: rule), store: store) }
+        return try await actions.write(changes)
+    }
+
+    private func blockChanges(_ rule: SenderRule, ids: [MailMessageID], store: MailStore) async throws -> [MailChange] {
+        guard !ids.isEmpty else { return [] }
+        let messages = try await store.summaries(of: ids)
+        return try await actions.plan(rule.action == .alwaysJunk ? .moveToJunk : .moveToTrash, messages: messages,
+                                      in: .allMail, wholeThreads: false, store: store)
     }
 }
 
@@ -313,6 +413,43 @@ extension SenderSummary {
 /// Rules and their effects in words.
 enum SenderRuleText {
     static let actions: [SenderRuleAction] = [.inbox, .silentArchive, .mute, .keepTransactionsOnly, .keepLatestOnly]
+    /// Blocking a sender (GKM-072): Sil chose to offer both.
+    static let blockActions: [SenderRuleAction] = [.alwaysJunk, .alwaysTrash]
+
+    /// The folder a blocking rule moves mail to, for sentences.
+    static func blockFolder(_ action: SenderRuleAction) -> String { action == .alwaysTrash ? "Trash" : "Junk" }
+
+    /// The row menu's item: "Always Junk Mail from Deals…".
+    static func blockMenuTitle(_ action: SenderRuleAction, name: String) -> String {
+        "Always \(blockFolder(action)) Mail from \(name)…"
+    }
+
+    /// The row menu's item when the sender is blocked already.
+    static func unblockMenuTitle(_ rule: SenderRule, name: String) -> String {
+        "Stop Moving Mail from \(name) to \(blockFolder(rule.action))…"
+    }
+
+    /// What a rule change does at the provider and what it doesn't undo: shown above its preview.
+    /// A blocking rule that is added, turned on or edited says how many messages it moves now;
+    /// one that is removed or turned off says its mail stays where it was moved.
+    static func blockNotes(current: [SenderRule], candidate: [SenderRule], preview: SenderRulePreview) -> [String] {
+        var notes: [String] = []
+        for rule in SendersModel.blockingRulesChanged(from: current, to: candidate) {
+            let moving = preview.items.filter {
+                $0.after.rule == rule.id && $0.after.disposition == .muted && !$0.isInTrashOrJunk && !$0.isExcluded
+            }.count
+            let folder = blockFolder(rule.action)
+            let now = moving == 0 ? "No message moves now." : moving == 1 ? "1 message moves to \(folder) now." : "\(moving) messages move to \(folder) now."
+            notes.append("\(now) This happens at your mail provider. New mail from \(rule.scope.name) goes to \(folder) after each check for mail, on this device and every other that has this rule. Flagged mail and mail in a space stay where they are. Undo puts it all back.")
+        }
+        for rule in current where rule.action.blocks && rule.isEnabled {
+            let after = candidate.first { $0.id == rule.id }
+            guard after == nil || after?.isEnabled == false else { continue }
+            let folder = blockFolder(rule.action)
+            notes.append("Mail from \(rule.scope.name) that was moved to \(folder) stays there: \(after == nil ? "removing" : "turning off") the rule doesn’t move it back. New mail is no longer moved.")
+        }
+        return notes
+    }
 
     static func title(_ action: SenderRuleAction) -> String {
         switch action {
@@ -322,6 +459,8 @@ enum SenderRuleText {
         case .mute: "Mute"
         case .keepTransactionsOnly: "Keep Receipts Only"
         case .keepLatestOnly: "Keep Latest Only"
+        case .alwaysJunk: "Always Junk"
+        case .alwaysTrash: "Always Trash"
         }
     }
 
@@ -333,6 +472,8 @@ enum SenderRuleText {
         case .mute: "Out of Focused and the category views, silent. Still in All Mail. Account security mail always shows."
         case .keepTransactionsOnly: "Receipts, orders, invoices and account security mail stay; the rest is muted."
         case .keepLatestOnly: "The newest message stays; older ones are muted."
+        case .alwaysJunk, .alwaysTrash:
+            "Every message moves to \(blockFolder(action)) at your mail provider, now and as it arrives. Flagged mail, mail in a space and account security mail stay where they are."
         }
     }
 
@@ -343,6 +484,8 @@ enum SenderRuleText {
         case .security: "Left alone: account security mail always shows."
         case .transaction: "Kept: it’s a receipt, order or invoice."
         case .latest: "Kept: it’s the newest."
+        case .flagged: "Stays where it is: it’s flagged."
+        case .space: "Stays where it is: it’s in a space."
         }
     }
 
@@ -355,6 +498,21 @@ enum SenderRuleText {
         case .protected(let protection): protection == .latest || protection == .transaction
             ? "kept it" : "matched, but left it alone"
         }
+    }
+
+    /// Where a preview item ends up: a blocking rule's mail goes to Junk or Trash.
+    static func placement(_ placement: SenderPlacement?, rules: [SenderRule]) -> String {
+        if let placement, placement.disposition == .muted, let id = placement.rule,
+           let rule = rules.first(where: { $0.id == id }), rule.action.blocks {
+            return blockFolder(rule.action)
+        }
+        return Self.placement(placement)
+    }
+
+    /// What the reader's "Why?" says the winning rule did.
+    static func effect(_ effect: SenderRuleEffect, of rule: SenderRule) -> String {
+        if rule.action.blocks, effect == .disposition(.muted) { return "moved it to \(blockFolder(rule.action))" }
+        return Self.effect(effect)
     }
 
     static func placement(_ placement: SenderPlacement?) -> String {
