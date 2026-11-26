@@ -36,8 +36,7 @@ final class MailFlowUITests: XCTestCase {
         app.buttons["addAccountConfirm"].tap()
 
         // Verified against both servers, saved, syncing: the sheet goes away.
-        XCTAssertTrue(app.textFields["addressField"].waitForNonExistence(timeout: 45), "the account was not added: \(errorText())")
-        declineSavePassword()
+        waitForAccountAdded()
 
         // The account's inbox fills.
         openMailbox("Inbox")
@@ -143,8 +142,7 @@ final class MailFlowUITests: XCTestCase {
         snapshot("large-2-add-account")
         audit("large: add account")
         app.buttons["addAccountConfirm"].tap()
-        XCTAssertTrue(app.textFields["addressField"].waitForNonExistence(timeout: 45), "the account was not added: \(errorText())")
-        declineSavePassword()
+        waitForAccountAdded()
 
         openMailbox("Inbox")
         let rows = app.descendants(matching: .any).matching(identifier: "messageRow")
@@ -223,6 +221,17 @@ final class MailFlowUITests: XCTestCase {
         app.launchArguments = ["-uiTestFreshStore"] + arguments
         app.launchEnvironment["GKM_TEST_CA_PEM_BASE64"] = server.caPEM.base64EncodedString()
         app.launch()
+    }
+
+    /// Verified against both servers, saved, syncing: the sheet goes away. iOS may offer to
+    /// save the password meanwhile, over the sheet; the test declines.
+    private func waitForAccountAdded() {
+        let added = waitFor(timeout: 60) {
+            self.declineSavePassword(wait: 0.5)
+            return !self.app.textFields["addressField"].exists
+        }
+        if !added { snapshot("account-not-added") }
+        XCTAssertTrue(added, "the account was not added: \(errorText())")
     }
 
     private func hideKeyboard() {

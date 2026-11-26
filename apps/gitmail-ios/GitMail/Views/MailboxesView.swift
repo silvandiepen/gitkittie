@@ -48,7 +48,6 @@ struct MailboxesView: View {
             ForEach(model.accounts, id: \.id) { account in
                 Section {
                     MailboxRow(title: "All of \(account.displayName)", systemImage: "person.crop.circle", count: nil)
-                        .accessibilityLabel("All mail of \(account.displayName)")
                         .tag(SidebarSelection.account(account.id))
                     ForEach(folders(of: account), id: \.self) { folder in
                         MailboxRow(title: folder.role == "inbox" ? "Inbox" : folder.path.joined(separator: " / "),

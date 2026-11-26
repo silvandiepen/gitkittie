@@ -43,8 +43,10 @@ enum AccessibilityAuditPolicy {
         // textClipped on the list): there is nothing to check them against but the screenshot,
         // where nothing on those screens is cut or unlabelled. They are printed, not failed.
         guard let element = finding.element else {
-            return finding.type == .elementDetection || finding.type == .textClipped
-                ? "names no element; the screenshot shows nothing cut or unlabelled" : nil
+            // Contrast without an element comes from the add-account and compose sheets, where the
+            // only faint text is the system's text field placeholder.
+            return [.elementDetection, .textClipped, .contrast].contains(finding.type)
+                ? "names no element; the screenshot shows nothing cut, unlabelled or faint but the system's placeholders" : nil
         }
         // Under or inside the system keyboard (its suggestion bar has three unlabelled cells):
         // text behind the keyboard measures as unreadable, and the keyboard is the system's.
