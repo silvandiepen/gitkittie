@@ -8,7 +8,10 @@ import SwiftUI
 // the selection to Trash while the list has focus (a bare ⌫ in the menu would also fire in text
 // fields).
 
-/// The Message menu's actions.
+/// The Message menu's actions. The ones with shortcuts read the marked or selected
+/// conversations when they run, not when the menu was built: SwiftUI syncs a menu only at
+/// launch and as it opens, and a shortcut uses the last sync (GITKITTIE-098). Their titles
+/// follow the selection each time the menu opens.
 struct MessageActionCommands: View {
     let model: AppModel
 
@@ -18,21 +21,17 @@ struct MessageActionCommands: View {
         let scope = model.browser.scope
         let actions = model.actions
         Button(rows.contains(where: \.isUnread) ? "Mark as Read" : "Mark as Unread") {
-            let action: MessageAction = rows.contains(where: \.isUnread) ? .markRead : .markUnread
-            Task { await actions.perform(action, targets: targets, in: scope) }
+            perform { rows in rows.contains(where: \.isUnread) ? .markRead : .markUnread }
         }
         .keyboardShortcut("u", modifiers: [.command, .shift])
-        .disabled(targets.isEmpty)
         Button(rows.contains(where: \.isFlagged) ? "Unflag" : "Flag") {
-            let action: MessageAction = rows.contains(where: \.isFlagged) ? .unflag : .flag
-            Task { await actions.perform(action, targets: targets, in: scope) }
+            perform { rows in rows.contains(where: \.isFlagged) ? .unflag : .flag }
         }
         .keyboardShortcut("l", modifiers: [.command, .shift])
-        .disabled(targets.isEmpty)
         Divider()
-        Button("Archive") { Task { await actions.perform(.archive, targets: targets, in: scope) } }
+        Button("Archive") { perform { _ in .archive } }
             .keyboardShortcut("a", modifiers: [.command, .control])
-            .disabled(targets.isEmpty)
+        // No shortcuts below (⌫ is the list's own): chosen from the open menu only, so current.
         Button("Move to Trash") { Task { await actions.trash(targets, in: scope) } }
             .disabled(targets.isEmpty || actions.isTrash(scope))
         if actions.isTrash(scope) {
@@ -40,6 +39,15 @@ struct MessageActionCommands: View {
                 .disabled(targets.isEmpty)
         }
         MoveToMenu(model: model, targets: targets)
+    }
+
+    /// Runs an action on the conversations marked or selected now; says so when there are none.
+    private func perform(_ action: @escaping ([ListRow]) -> MessageAction) {
+        guard model.canRun(.messageAction) else { return }
+        let targets = model.browser.targets(actingOn: nil)
+        let rows = model.browser.loadedRows(of: targets)
+        let scope = model.browser.scope
+        Task { await model.actions.perform(action(rows), targets: targets, in: scope) }
     }
 }
 

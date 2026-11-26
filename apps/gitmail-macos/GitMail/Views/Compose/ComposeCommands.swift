@@ -1,21 +1,28 @@
+import AppKit
 import MailCompose
 import SwiftUI
+
+// The menu items with shortcuts stay enabled and check when they run: SwiftUI syncs a menu item
+// only at launch and when its menu is opened, not when the model or the window in front changes
+// (GITKITTIE-098, `MenuCommand`).
 
 /// New Message (⌘N) in the File menu, with Attach Files… (⇧⌘A) for the compose window in front.
 struct ComposeCommands: Commands {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
-    /// The draft of the compose window in front, if one is.
-    @FocusedValue(\.composeDraft) private var draft
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Message") { open { await model.composeNew() } }
-                .keyboardShortcut("n")
-                .disabled(model.sending == nil)
-            Button("Attach Files…") { draft?.requestAttach() }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
-                .disabled(draft == nil)
+            Button("New Message") {
+                guard model.canRun(.newMessage) else { return }
+                open { await model.composeNew() }
+            }
+            .keyboardShortcut("n")
+            Button("Attach Files…") {
+                guard let draft = ComposeWindows.inFront else { return model.actionError = ComposeWindowDirectory.noWindowInFront }
+                draft.requestAttach()
+            }
+            .keyboardShortcut("a", modifiers: [.command, .shift])
         }
     }
 
@@ -30,45 +37,93 @@ struct ComposeCommands: Commands {
 /// Reply (⌘R), Reply All (⇧⌘R) and Forward (⇧⌘F) for the selected message.
 struct ReplyCommands: View {
     let model: AppModel
-    @FocusedValue(\.composeDraft) private var draft
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button("Send") { draft?.send() }
-            .keyboardShortcut("d", modifiers: [.command, .shift])
-            .disabled(draft?.canSend != true)
-        Button("Delete Draft…") { draft?.requestDiscard() }
-            .disabled(draft == nil)
+        Button("Send") {
+            guard let draft = ComposeWindows.inFront else { return model.actionError = ComposeWindowDirectory.noWindowInFront }
+            // Already sending: the window shows it.
+            guard draft.canSend else { return NSSound.beep() }
+            draft.send()
+        }
+        .keyboardShortcut("d", modifiers: [.command, .shift])
+        Button("Delete Draft…") {
+            guard let draft = ComposeWindows.inFront else { return model.actionError = ComposeWindowDirectory.noWindowInFront }
+            draft.requestDiscard()
+        }
         Divider()
-        Button("Reply") { open { await model.compose(.reply) } }
+        Button("Reply") { answer(.reply) }
             .keyboardShortcut("r")
-            .disabled(!model.canAnswer)
-        Button("Reply All") { open { await model.compose(.replyAll) } }
+        Button("Reply All") { answer(.replyAll) }
             .keyboardShortcut("r", modifiers: [.command, .shift])
-            .disabled(!model.canAnswer)
-        Button("Forward") { open { await model.compose(.forward) } }
+        Button("Forward") { answer(.forward) }
             .keyboardShortcut("f", modifiers: [.command, .shift])
-            .disabled(!model.canAnswer)
     }
 
-    private func open(_ make: @escaping @MainActor () async -> DraftID?) {
+    private func answer(_ action: AppModel.ComposeAction) {
+        guard model.canRun(.answer(action)) else { return }
         Task { @MainActor in
-            if let id = await make() { openWindow(id: ComposeScene.id, value: id) }
+            if let id = await model.compose(action) { openWindow(id: ComposeScene.id, value: id) }
         }
     }
 }
 
-/// What the menu bar can do in the compose window in front: the window publishes this as its
-/// focused scene value.
-struct ComposeWindowCommands {
-    var canSend: Bool
-    var send: @MainActor () -> Void
-    var requestAttach: @MainActor () -> Void
-    var requestDiscard: @MainActor () -> Void
+/// The compose windows of this app, by their NSWindow: what Send, Attach Files… and Delete
+/// Draft… act on.
+@MainActor
+enum ComposeWindows {
+    static let directory = ComposeWindowDirectory()
+
+    /// The compose window in front (the key window), when it is one.
+    static var inFront: ComposeWindowCommands? { directory.commands(inFront: NSApp.keyWindow) }
 }
 
-extension FocusedValues {
-    @Entry var composeDraft: ComposeWindowCommands?
+/// Registers a compose window's commands for the window it is in, and removes them when the
+/// view leaves that window.
+struct ComposeWindowRegistration: NSViewRepresentable {
+    let commands: ComposeWindowCommands
+
+    final class Probe: NSView {
+        var commands: ComposeWindowCommands?
+        private weak var registered: NSWindow?
+
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            super.viewWillMove(toWindow: newWindow)
+            if registered !== newWindow { unregister() }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            register()
+        }
+
+        func register() {
+            guard let window, let commands else { return }
+            ComposeWindows.directory.set(commands, for: window)
+            registered = window
+        }
+
+        func unregister() {
+            if let registered { ComposeWindows.directory.set(nil, for: registered) }
+            registered = nil
+        }
+    }
+
+    func makeNSView(context: Context) -> Probe {
+        let probe = Probe()
+        probe.commands = commands
+        return probe
+    }
+
+    func updateNSView(_ nsView: Probe, context: Context) {
+        nsView.commands = commands
+        nsView.register()
+    }
+
+    static func dismantleNSView(_ nsView: Probe, coordinator: ()) {
+        nsView.commands = nil
+        nsView.unregister()
+    }
 }
 
 /// The same actions in the main window's toolbar.
