@@ -133,6 +133,10 @@ targets:
       - path: Tests
       # The local GreenMail helper the Mac app's tests use too.
       - path: ../../swift/MailAppTestSupport
+      # The shared theme and its Increase Contrast tests (GKM-063). The theme is compiled into
+      # this bundle as on the Mac, so the same test file runs on both without `@testable`.
+      - path: ../../swift/GitKittieUI/Theme.swift
+      - path: ../../swift/GitKittieUITests
     dependencies:
       - target: GitMail
       # Visible to the tests; linked once, into the app they run in.
