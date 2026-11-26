@@ -5,8 +5,8 @@ import MailExtraction
 import MailStore
 import Observation
 
-/// What the sidebar has selected.
-enum SidebarSelection: Hashable {
+/// What the sidebar has selected. Codable: the window opens where it was left (MAIL-107).
+enum SidebarSelection: Hashable, Codable {
     case allMail
     /// Focused and the category views (GKM-018).
     case category(MailCategory)
@@ -34,6 +34,14 @@ enum SidebarSelection: Hashable {
         case .space(let id): .space(id)
         case .account(let id): .account(id)
         case .folder(let id, let name): .folder(id, name)
+        }
+    }
+
+    /// True when the window shows the message list and the reader for it.
+    var showsMail: Bool {
+        switch self {
+        case .allMail, .category, .account, .folder, .space: true
+        case .drafts, .outbox, .attachments, .senders, .cleanup: false
         }
     }
 }
@@ -95,8 +103,11 @@ final class AppModel {
     /// An error from the last action, for an alert; cleared when shown.
     var actionError: String?
 
-    /// Focused is where the window opens (GKM-018).
+    /// The window opens where it was left (MAIL-107), else in Focused (GKM-018).
     private(set) var selection: SidebarSelection = .category(.focused)
+    /// True while `open()` puts the window back where it was: what changes meanwhile is not a
+    /// new place to remember.
+    @ObservationIgnored private var restoringPlace = false
     /// Where "See All Mail from…" was opened from, to go back to.
     private(set) var senderReturn: SidebarSelection?
 
@@ -144,6 +155,7 @@ final class AppModel {
         browser.onActionsQueued = { [weak self] accounts in await self?.sync.actionsQueued(for: accounts) }
         browser.onMessagesOpened = { [weak self] ids in await self?.senders.recordOpen(ids) }
         browser.sync = sync
+        browser.onOpenThreadChanged = { [weak self] in self?.rememberPlace() }
         browser.onFetchAttachment = { [weak self] attachment, id in
             guard let self else { throw CancellationError() }
             return try await self.fetchAttachment(attachment, of: id)
@@ -189,6 +201,12 @@ final class AppModel {
             spaces.attach(opened)
             library.attach(opened, browser: browser)
             await senders.attach(opened)
+            // Back where the window was left (MAIL-107); `reload` falls back to Focused when
+            // that view is gone, and the conversation opens again only if the view still has it.
+            restoringPlace = true
+            defer { restoringPlace = false }
+            let place = LastPlace.load(deviceFolder: opened.locations.deviceFolder)
+            selection = place?.selection ?? .category(.focused)
             await browser.setScope(selection.scope)
             try await attention.attach(opened)
             if let current = sending, sendingFolder != opened.locations.mailFolder {
@@ -205,6 +223,11 @@ final class AppModel {
             }
             senders.unsubscribe.sending = sending
             try await reload()
+            if let place, let thread = place.threadID, place.selection == selection, selection.showsMail {
+                await browser.reopen(thread)
+            }
+            restoringPlace = false
+            rememberPlace()
             phase = .ready
             if let pending = pendingNotification {
                 pendingNotification = nil
@@ -225,6 +248,15 @@ final class AppModel {
         self.selection = selection
         await browser.setScope(selection.scope)
         if case .folder(let account, let name) = selection { await sync.setActiveFolder(name, account: account) }
+        rememberPlace()
+    }
+
+    /// Saves where the window is (MAIL-107): the sidebar's selection and the open conversation.
+    /// A failed write loses only the place: the window then opens in Focused.
+    func rememberPlace() {
+        guard !restoringPlace, let store else { return }
+        let thread = selection.showsMail ? browser.openThread?.id : nil
+        try? LastPlace(selection: selection, threadID: thread).save(deviceFolder: store.locations.deviceFolder)
     }
 
     /// "See All Mail from…" (GKM-071, MAIL-098): All Mail, every account and folder, narrowed to
@@ -260,11 +292,7 @@ final class AppModel {
                 actionError = "That message is no longer on \(DeviceWords.this)."
                 return
             }
-            let showsMail: Bool = switch selection {
-            case .allMail, .category, .account, .folder, .space: true
-            case .drafts, .outbox, .attachments, .senders, .cleanup: false
-            }
-            if !showsMail || browser.isSearching || !browser.rows.contains(where: { $0.threadID == summary.threadID }) {
+            if !selection.showsMail || browser.isSearching || !browser.rows.contains(where: { $0.threadID == summary.threadID }) {
                 let home = try await store.verdict(of: id)?.home ?? .focused
                 await browser.clearSearch()
                 await select(.category(home))
@@ -389,17 +417,21 @@ final class AppModel {
         for account in accounts { found[account.id] = try await store.folders(account: account.id) }
         folders = found
         await spaces.refresh(applyRules: true)
-        let stillThere: Bool = switch selection {
-        case .allMail, .category, .drafts, .outbox, .attachments, .senders, .cleanup: true
-        case .space(let id): spaces.space(id) != nil
-        case .account(let id): accounts.contains { $0.id == id }
+        var stillThere: Bool
+        switch selection {
+        case .allMail, .category, .drafts, .outbox, .attachments, .senders, .cleanup: stillThere = true
+        case .space(let id): stillThere = spaces.space(id) != nil
+        case .account(let id): stillThere = accounts.contains { $0.id == id }
         case .folder(let id, let name):
-            // A folder with stored mail, or one the sync knows at the provider (may be empty).
-            found[id]?.contains(name) == true || sync.folders[id]?.contains { $0.name == name } == true
+            // A folder with stored mail, or one the sync knows at the provider (may be empty;
+            // before the sync starts, as the sync state last recorded it).
+            stillThere = found[id]?.contains(name) == true || sync.folders[id]?.contains { $0.name == name } == true
+            if !stillThere { stillThere = (try? await store.syncedFolders(account: id))?.contains { $0.name == name } == true }
         }
         if !stillThere {
             selection = .category(.focused)
             await browser.setScope(selection.scope)
+            rememberPlace()
         }
         await browser.reload()
         await attention.refresh(accounts: accounts, arrivals: .leave)
