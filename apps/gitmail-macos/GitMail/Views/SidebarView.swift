@@ -31,6 +31,11 @@ struct SidebarView: View {
         .background(Theme.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
+                // The disk is nearly full: nothing downloads until there is room (MAIL-106).
+                if let pause = model.sync.downloadPause {
+                    DownloadPausedNotice(pause: pause) { settings.show(.storage, with: openSettings) }
+                        .padding(.horizontal, 10).padding(.top, 6)
+                }
                 // A newer Mail in the App Store: Update opens its page there.
                 if updates.offer != nil {
                     UpdateAvailableNotice(updates: updates).padding(.horizontal, 10).padding(.top, 6)

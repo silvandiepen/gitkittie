@@ -99,7 +99,10 @@ extension AppModel {
     @discardableResult
     func freeUpOfflineSpace(keeping budget: Int64) async -> EvictionResult? {
         do {
-            return try await mailStore?.evictCache(toFit: budget)
+            let result = try await mailStore?.evictCache(toFit: budget)
+            // Space given back may be what a paused download waits for (MAIL-106).
+            await sync.reviewFreeSpace()
+            return result
         } catch {
             actionError = String(describing: error)
             return nil
