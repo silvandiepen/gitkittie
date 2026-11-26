@@ -17,6 +17,20 @@ struct StorageSettingsTab: View {
 
     var body: some View {
         Form {
+            if let pause = model.sync.downloadPause {
+                Section {
+                    Label {
+                        Text(pause.text)
+                    } icon: {
+                        Image(systemName: "externaldrive.badge.exclamationmark").foregroundStyle(.orange)
+                    }
+                    .accessibilityIdentifier("storageDownloadPaused")
+                } footer: {
+                    Text("Mail needs \(DownloadPause.amount(pause.minimumFreeBytes)) free to download. Free Up Space below gives back downloaded attachments; a shorter history leaves older mail at your provider.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
             HistoryWindowSection()
 
             Section {
@@ -79,7 +93,7 @@ struct StorageSettingsTab: View {
             } header: {
                 Text("Mail Folder")
             } footer: {
-                Text("Each message is an .eml file with a readable Markdown copy beside it. Mail never deletes mail to make room.")
+                Text("Each message is an .eml file with a readable Markdown copy beside it. Mail never deletes mail to make room: below \(DownloadPause.amount(DownloadPause.macMinimumFreeBytes)) free it pauses downloading, and carries on by itself when there is room.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
