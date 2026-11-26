@@ -15,6 +15,10 @@ on:
       - .github/workflows/swift-gitkittiemailproviders.yml
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     # swift-nio-imap 0.5 needs Swift 6.2 (Xcode 26).

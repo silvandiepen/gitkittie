@@ -124,6 +124,14 @@ public actor SyncCoordinator {
                     loop = nil
                     return
                 }
+                if let stop = localStop(error) {
+                    // A problem on this device, not the network: said as it is, and looked at
+                    // again on its own schedule instead of the reconnect backoff (GKM-091).
+                    failures = 0
+                    progress.activity = stop
+                    do { try await waitOut(stop) } catch { break }
+                    continue
+                }
                 failures += 1
                 let delay = options.reconnect.delay(beforeRetry: failures, random: Double.random(in: 0..<1))
                 let reason = (error as? MailProviderError)?.description ?? String(describing: error)
@@ -133,6 +141,53 @@ public actor SyncCoordinator {
             }
         }
         progress.activity = .stopped
+    }
+
+    // MARK: - Stops on this device (GKM-091)
+
+    /// What a failed pass means when the cause is on this device: under the floor, or a store
+    /// that can't be written. Nil for everything else (the network, the server).
+    private func localStop(_ error: any Error) -> SyncProgress.Activity? {
+        if case MailStoreError.diskNearlyFull(let free, let minimum) = error {
+            log.warning("sync", "\(account): \(free) bytes free, under the \(minimum) the sync keeps; downloading paused")
+            return .pausedForSpace(freeBytes: free, minimumFreeBytes: minimum)
+        }
+        guard let problem = LocalStoreProblem(error) else { return nil }
+        let reason = String(describing: error)
+        log.warning("sync", "\(account): can't store mail (\(problem)): \(reason)")
+        if problem == .diskFull, let floor = options.freeSpaceFloor {
+            // The disk filled anyway (another app wrote meanwhile): the floor's pause, so it carries
+            // on when there is room.
+            return .pausedForSpace(freeBytes: floor.available(store.locations.mailFolder) ?? 0, minimumFreeBytes: floor.minimumFreeBytes)
+        }
+        return .cannotStore(problem, reason: reason)
+    }
+
+    /// Waits until a local stop may be over: for space, until the floor has room again (looking
+    /// every ``SyncOptions/localStopRecheck`` and saying how much is free); otherwise one
+    /// recheck interval, after which the pass is simply tried again.
+    private func waitOut(_ stop: SyncProgress.Activity) async throws {
+        guard case .pausedForSpace = stop, let floor = options.freeSpaceFloor else {
+            try await Task.sleep(for: options.localStopRecheck)
+            return
+        }
+        while true {
+            try await Task.sleep(for: options.localStopRecheck)
+            do {
+                try floor.check(incoming: 0, in: store.locations.mailFolder)
+                log.info("sync", "\(account): room again on the mail folder's disk; downloading")
+                return
+            } catch MailStoreError.diskNearlyFull(let free, let minimum) {
+                progress.activity = .pausedForSpace(freeBytes: free, minimumFreeBytes: minimum)
+            }
+        }
+    }
+
+    /// Throws ``MailStoreError/diskNearlyFull(freeBytes:minimumFreeBytes:)`` when downloading
+    /// `incoming` more bytes would go under the floor: checked before a batch is fetched, so a
+    /// batch that can't be stored is not downloaded either.
+    private func checkFloor(incoming: Int64) throws {
+        try options.freeSpaceFloor?.check(incoming: incoming, in: store.locations.mailFolder)
     }
 
     /// A pass, then waiting on the active folder; repeat. Returns only by throwing.
@@ -487,6 +542,8 @@ public actor SyncCoordinator {
                             return result
                         }
                     }
+                    // The floor (GKM-091): before each batch, so the pass stops before the disk fills.
+                    try checkFloor(incoming: next)
                     let fetched = try await session.fetchMessages(batch.map(\.id))
                     let byID = Dictionary(fetched.map { ($0.summary.id, $0) }, uniquingKeysWith: { a, _ in a })
                     // Stored as one batch: one flush per directory and one commit per database for
@@ -495,7 +552,8 @@ public actor SyncCoordinator {
                     try await settle(&storing, into: &result, folder: folder)
                     let store = self.store
                     let account = self.account
-                    storing = StoringBatch(task: Task { try await store.storeSynced(messages, account: account) })
+                    let floor = options.freeSpaceFloor
+                    storing = StoringBatch(task: Task { try await store.storeSynced(messages, account: account, floor: floor) })
                     if !options.pipelineStores { try await settle(&storing, into: &result, folder: folder) }
                 }
                 if !large.isEmpty {
@@ -565,6 +623,7 @@ public actor SyncCoordinator {
         var stored = 0
         for summary in summaries {
             try Task.checkCancellation()
+            try checkFloor(incoming: 0)
             guard let remote = structures[summary.id] else { continue } // expunged meanwhile
             guard let message = try await Self.partialCopy(of: summary, structure: remote, threshold: threshold, session, log: log) else {
                 whole.append(summary)
@@ -572,7 +631,7 @@ public actor SyncCoordinator {
             }
             guard try await allows(message.storedSize) else { return true }
             // One at a time: each is weighed against the budget by what is stored before it.
-            let outcome = try await store.storeSyncedPartials([message], account: account).first ?? nil
+            let outcome = try await store.storeSyncedPartials([message], account: account, floor: options.freeSpaceFloor).first ?? nil
             guard outcome != nil else { whole.append(summary); continue } // compare with a stored original
             stored += 1
             result.stored += 1
@@ -585,9 +644,11 @@ public actor SyncCoordinator {
                                                      maxMessageSize: session.maximumMessageSize)
         reportTooLarge(tooLarge, folder: folder, into: &result)
         for batch in batches {
-            guard try await allows(batch.reduce(0) { $0 + ($1.size ?? 0) }) else { return true }
+            let next = batch.reduce(0) { $0 + ($1.size ?? 0) }
+            guard try await allows(next) else { return true }
+            try checkFloor(incoming: Int64(next))
             let fetched = try await session.fetchMessages(batch.map(\.id))
-            let outcomes = try await store.storeSynced(fetched.map(Self.synced), account: account)
+            let outcomes = try await store.storeSynced(fetched.map(Self.synced), account: account, floor: options.freeSpaceFloor)
             result.stored += outcomes.count
             progress.imported += outcomes.count
             progress.remaining = max(0, progress.remaining - outcomes.count)
@@ -631,6 +692,8 @@ public actor SyncCoordinator {
         guard options.onDemandThreshold != nil else { return }
         let pinned = try await store.pinnedPartialMessages(account: account).prefix(options.pinnedPerPass)
         guard !pinned.isEmpty else { return }
+        // Pins download in the background, so they keep the floor too (GKM-091).
+        try checkFloor(incoming: 0)
         progress.activity = .importing(folder: "pinned messages")
         let completed = try await OnDemandFetcher.complete(Array(pinned), store: store, session: session, log: log)
         if completed > 0 { log.info("sync", "\(completed) pinned messages downloaded for offline") }

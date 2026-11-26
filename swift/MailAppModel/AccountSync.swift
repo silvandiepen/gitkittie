@@ -19,15 +19,23 @@ struct AccountServices {
     /// The iPhone sets its storage budget's cache here (MAIL-079).
     var offlineCacheBytes: Int64? = nil
     /// Free space on the disk that holds a folder (MAIL-106); tests pass a value of their own.
-    var freeSpace: @MainActor (URL) -> Int64? = FreeSpace.available(at:)
+    /// The sync's own floor reads it too (GKM-091), from its actor, so it is `@Sendable`.
+    var freeSpace: @Sendable (URL) -> Int64? = FreeSpace.available(at:)
     /// Under this much free space downloading pauses (MAIL-106): 2 GB on the Mac, the storage
-    /// budget's minimum on the iPhone and iPad (MAIL-051).
+    /// budget's minimum on the iPhone and iPad (MAIL-051). The one number: the sync's floor and
+    /// the store's check are this minimum too (GKM-091, MAIL-123).
     var minimumFreeBytes: Int64 = DownloadPause.macMinimumFreeBytes
-    /// How often a running sync looks at the free space besides as mail comes in.
+    /// How often a running sync looks at the free space besides as mail comes in; also how
+    /// often a sync stopped on this device (paused for space, store not writable) looks again.
     var freeSpaceCheckInterval: Duration = .seconds(60)
     /// Where a mail folder is (GKM-103, MAIL-126): in iCloud Drive or a File Provider folder the
     /// sync doesn't start. Tests pass a placement of their own.
     var folderPlacement: @Sendable (URL) -> MailFolderPlacement = MailFolderPlacement.of(_:)
+
+    /// The sync's floor (GKM-091): the minimum and the free-space reader above.
+    var freeSpaceFloor: FreeSpaceFloor {
+        FreeSpaceFloor(minimumFreeBytes: minimumFreeBytes, available: freeSpace)
+    }
 
     static var live: AccountServices {
         var options = SyncOptions()
@@ -110,8 +118,12 @@ final class AccountSync {
     /// True when the account syncs on this device: downloading, or paused for space.
     func isSyncing(_ account: MailAccountID) -> Bool { started[account] != nil }
 
-    /// True when the account's downloading is paused because the disk is nearly full (MAIL-106).
-    func isPausedForSpace(_ account: MailAccountID) -> Bool { started[account] != nil && coordinators[account] == nil }
+    /// True when the account's downloading is paused because the disk is nearly full (MAIL-106):
+    /// stopped by this sync's check, or by the sync's own floor (GKM-091).
+    func isPausedForSpace(_ account: MailAccountID) -> Bool {
+        guard started[account] != nil else { return false }
+        return coordinators[account] == nil || progress[account].map(Self.isPausedForSpace) == true
+    }
 
     /// Starts syncing every connected account that has its password on this device; reads the
     /// folders last seen for all of them, so the sidebar has them before the first connect.
@@ -194,6 +206,10 @@ final class AccountSync {
         var options = services.syncOptions
         options.removesMailDeletedElsewhere = account.removesDeletedMail
         options.mailboxes = account.mailboxSettings
+        // The floor inside the sync and the store (GKM-091): the same minimum as the pause, so a
+        // sync between this model's checks still stops before the disk fills.
+        options.freeSpaceFloor = services.freeSpaceFloor
+        options.localStopRecheck = services.freeSpaceCheckInterval
         let coordinator = SyncCoordinator(account: id, connector: connector,
                                           store: store, options: options, log: services.connections.log)
         coordinators[id] = coordinator
@@ -374,22 +390,36 @@ final class AccountSync {
     }
 
     /// True when the mail folder's disk has the minimum free; sets or clears `downloadPause`.
-    /// A disk whose free space can't be read is taken to have room.
+    /// A disk whose free space can't be read is taken to have room. With room, a download that
+    /// its own floor paused (GKM-091: a batch would have gone under the minimum) still shows the
+    /// pause until it carries on.
     private func hasRoom() -> Bool {
         lastSpaceCheck = .now
-        guard let store, let free = services.freeSpace(store.locations.mailFolder) else {
-            downloadPause = nil
+        guard let store, let free = services.freeSpace(store.locations.mailFolder), free < services.minimumFreeBytes else {
+            show(floorPause)
             return true
         }
-        guard free < services.minimumFreeBytes else {
+        show(DownloadPause(freeBytes: free, minimumFreeBytes: services.minimumFreeBytes))
+        return false
+    }
+
+    /// The pause a running download's floor reported, if any (GKM-091).
+    private var floorPause: DownloadPause? {
+        coordinators.keys.sorted { $0.rawValue < $1.rawValue }.lazy.compactMap { id -> DownloadPause? in
+            guard case .pausedForSpace(let free, let minimum) = self.progress[id]?.activity else { return nil }
+            return DownloadPause(freeBytes: free, minimumFreeBytes: minimum)
+        }.first
+    }
+
+    private func show(_ pause: DownloadPause?) {
+        guard let pause else {
             downloadPause = nil
-            return true
+            return
         }
         // The text gives the free space in tenths of a GB: a few bytes more or less is no news.
-        if downloadPause.map({ DownloadPause.amount($0.freeBytes) != DownloadPause.amount(free) }) ?? true {
-            downloadPause = DownloadPause(freeBytes: free, minimumFreeBytes: services.minimumFreeBytes)
+        if downloadPause.map({ DownloadPause.amount($0.freeBytes) != DownloadPause.amount(pause.freeBytes) }) ?? true {
+            downloadPause = pause
         }
-        return false
     }
 
     /// Checks again at once when the last check is more than a few seconds old.
@@ -423,6 +453,12 @@ final class AccountSync {
         if changed { scheduleRefresh() }
         // Mail came in: a fast first sync can fill gigabytes between the minute's checks.
         if previous?.imported != update.imported { checkFreeSpaceSoon() }
+        // The sync's own floor paused it, or it carries on (GKM-091): the pause shows as the
+        // MAIL-106 pause, with the same words, never as offline.
+        if Self.isPausedForSpace(update) || previous.map(Self.isPausedForSpace) == true {
+            lastSpaceCheck = nil
+            checkFreeSpaceSoon()
+        }
         // The sync reached the provider: queued actions can go now instead of at their backoff.
         if previous?.lastCompletedPass != update.lastCompletedPass || (previous.map(Self.isOffline) == true && !Self.isOffline(update)) {
             if let replayer = replayers[account] { Task { await replayer.kick() } }
@@ -440,6 +476,11 @@ final class AccountSync {
 
     private static func isOffline(_ progress: SyncProgress) -> Bool {
         if case .waitingToRetry = progress.activity { return true }
+        return false
+    }
+
+    private static func isPausedForSpace(_ progress: SyncProgress) -> Bool {
+        if case .pausedForSpace = progress.activity { return true }
         return false
     }
 
@@ -488,13 +529,59 @@ enum SyncStatusText {
             return seconds > 1 ? "Offline · trying again in \(seconds) s" : "Offline · trying again"
         case .signInFailed:
             return "Password needed"
+        case .pausedForSpace:
+            return DownloadPause.shortText
+        case .cannotStore(let problem, _):
+            return "Can’t save mail · " + LocalStopText.what(problem)
         case .stopped:
             return nil
         }
     }
 
+    /// What to do about a stop on this device, as a second line under ``line(_:now:)``; nil
+    /// when the status says it all.
+    static func advice(_ progress: SyncProgress?) -> String? {
+        guard case .cannotStore(let problem, _) = progress?.activity else { return nil }
+        return LocalStopText.advice(problem)
+    }
+
     static func needsPassword(_ progress: SyncProgress?) -> Bool {
         if case .signInFailed = progress?.activity { return true }
         return false
+    }
+}
+
+/// Plain words for a sync that stopped because of this device, not the network (GKM-091,
+/// MAIL-124): what happened, then what to do. Mail already stored is never touched by it.
+enum LocalStopText {
+    /// After "Can’t save mail · ".
+    static func what(_ problem: LocalStoreProblem) -> String {
+        switch problem {
+        case .diskFull: "\(DeviceWords.this) is out of space"
+        case .notWritable: "the mail folder is read-only"
+        case .folderUnavailable: "the mail folder can’t be found"
+        case .damaged: "Mail’s records on \(DeviceWords.this) are damaged"
+        }
+    }
+
+    static func advice(_ problem: LocalStoreProblem) -> String {
+        switch problem {
+        case .diskFull:
+            "Free some space and it carries on by itself."
+        case .notWritable:
+            "Give yourself permission to write to it again and it carries on by itself."
+        case .folderUnavailable:
+            #if os(macOS)
+            "Reconnect the disk it is on, or choose the folder again in Settings ▸ Storage. It carries on by itself when it’s back."
+            #else
+            "It carries on by itself when the folder is back."
+            #endif
+        case .damaged:
+            #if os(macOS)
+            "Your mail files are not affected. Choose View ▸ Rebuild Search Index; it tries again by itself."
+            #else
+            "Your mail files are not affected. It tries again by itself."
+            #endif
+        }
     }
 }
