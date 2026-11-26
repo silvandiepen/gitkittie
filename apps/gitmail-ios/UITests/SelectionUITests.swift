@@ -87,6 +87,8 @@ final class SelectionUITests: XCTestCase {
         replace(app.textFields["imapPortField"], with: "3993")
         replace(app.textFields["smtpHostField"], with: "localhost")
         replace(app.textFields["smtpPortField"], with: "3465")
+        let done = app.buttons["keyboardDone"]
+        if app.keyboards.firstMatch.exists, done.exists, done.isHittable { done.tap() }
         let security = app.buttons["smtpSecurityPicker"]
         if !security.isHittable { app.swipeUp() }
         security.tap()
@@ -105,6 +107,9 @@ final class SelectionUITests: XCTestCase {
 
     private func replace(_ field: XCUIElement, with text: String) {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
+        // The number pad has no Return: put it away (Done above it), or it covers the next field.
+        let done = app.buttons["keyboardDone"]
+        if app.keyboards.firstMatch.exists, done.exists, done.isHittable { done.tap() }
         if !field.isHittable { app.swipeUp() }
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         let current = field.value as? String ?? ""
@@ -113,7 +118,8 @@ final class SelectionUITests: XCTestCase {
     }
 
     private func openMailbox(_ title: String) {
-        let row = app.staticTexts[title].firstMatch
+        // Mailbox rows are one element each, named mailbox.<title> (GKM-061).
+        let row = app.descendants(matching: .any).matching(identifier: "mailbox.\(title)").firstMatch
         if !row.waitForExistence(timeout: 10) {
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }

@@ -408,12 +408,14 @@ struct MessageRow: View {
                 }
                 Text(summary.subject?.isEmpty == false ? summary.subject! : "(No subject)")
                     .font(.subheadline.weight(row.isUnread ? .medium : .regular))
-                    .lineLimit(isLarge ? 4 : 1)
+                    .lineLimit(isLarge ? nil : 1)
                 if !summary.snippet.isEmpty {
+                    // The snippet is short (200 characters at most, MailIndex.snippet); at the accessibility
+                    // sizes it is shown whole rather than cut.
                     Text(summary.snippet)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .lineLimit(isLarge ? 4 : 2)
+                        .lineLimit(isLarge ? nil : 2)
                 }
                 if let deletedAtProvider {
                     Label(deletedAtProvider, systemImage: "trash.slash")
