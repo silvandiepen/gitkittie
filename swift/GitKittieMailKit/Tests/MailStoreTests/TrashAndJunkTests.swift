@@ -318,4 +318,39 @@ final class TrashAndJunkTests: XCTestCase {
         let newlyHidden = (count - 200..<count).filter { $0 % 10 != 0 && $0 % 20 != 5 }.count
         XCTAssertEqual(try index.unreadCount(account: nil, mailbox: nil), count - hidden - newlyHidden)
     }
+    // MARK: - Chosen by hand (GKM-066, MAIL-094)
+
+    func testChoosingAnotherFolderAsTrashTakesItsMailOutOfTheViewsAtOnce() async throws {
+        let (store, _) = try await seeded()
+        let bin = try await store.ingest(SyntheticMail.plain(subject: "Old receipt", messageID: "receipt@example.com", body: "receipt"),
+                                         account: account, remote: location("Work", 1)).id
+        try await store.setFlags([bin: MailMessageFlags()], account: account)
+        let before = try await subjects(store, SearchQuery())
+        XCTAssertEqual(before, ["Garden", "Keep", "Old receipt", "Picnic"], "Work is an ordinary folder")
+
+        var settings = MailboxSettings()
+        settings.setSpecialFolder("Work", for: "trash")
+        try await store.applyMailboxSettings(settings, account: account)
+        let after = try await subjects(store, SearchQuery())
+        XCTAssertEqual(after, ["Garden", "Keep", "Picnic"], "Work is Trash now: its mail leaves All Mail")
+        let inWork = try await subjects(store, SearchQuery(account: account, mailbox: "Work"))
+        XCTAssertEqual(inWork, ["Old receipt"], "and still shows in its own folder")
+        let counts = try await store.categoryCounts()[.focused]
+        XCTAssertEqual(counts?.total, 3)
+
+        try await store.applyMailboxSettings(MailboxSettings(), account: account)
+        let back = try await subjects(store, SearchQuery())
+        XCTAssertEqual(back, ["Garden", "Keep", "Old receipt", "Picnic"], "back with the provider's Trash")
+    }
+
+    func testARenamedTrashKeepsItsMailOutOfTheViews() async throws {
+        let (store, ids) = try await seeded()
+        let picnic = try XCTUnwrap(ids["Picnic"])
+        try await store.perform([MailChange(picnic, .move(from: "INBOX", to: "Deleted Messages"))])
+        try await store.renameSyncedFolder("Deleted Messages", to: "Bin", delimiter: "/", account: account)
+        let all = try await subjects(store, SearchQuery())
+        XCTAssertEqual(all, ["Garden", "Keep"])
+        let inBin = try await subjects(store, SearchQuery(account: account, mailbox: "Bin"))
+        XCTAssertEqual(inBin, ["Picnic"])
+    }
 }
