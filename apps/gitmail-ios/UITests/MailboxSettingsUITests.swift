@@ -127,6 +127,8 @@ final class MailboxSettingsUITests: XCTestCase {
     }
 
     private func replace(_ field: XCUIElement, with text: String) {
+        // On iPad the account form is a sheet, and the server fields start below it.
+        for _ in 0..<4 where !field.exists { app.swipeUp(velocity: .slow) }
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         // The number pad has no Return: put it away (Done above it), or it covers the next field.
         let done = app.buttons["keyboardDone"]

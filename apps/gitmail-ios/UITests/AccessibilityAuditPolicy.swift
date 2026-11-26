@@ -67,6 +67,18 @@ enum AccessibilityAuditPolicy {
                .contains(where: { $0.frame.contains(element.frame) && $0.label.contains(element.label) }) {
             return "a message row's text, shown whole and read whole"
         }
+        // The same for a row of the iPad's sidebar: "Drafts" stacked under its icon at
+        // Accessibility XXXL, and "Add Account" at the default size, are reported clipped while
+        // they show whole (GKM-064 screenshots, full runs 1 and 2). Only when the row (a mailbox,
+        // or a button in the sidebar) is labelled with exactly that text.
+        let sidebarRows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'mailbox.'"))
+            .allElementsBoundByIndex
+            + app.collectionViews.containing(NSPredicate(format: "identifier BEGINSWITH 'mailbox.'"))
+                .buttons.allElementsBoundByIndex
+        if finding.type == .textClipped, element.type == .staticText,
+           sidebarRows.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(element.frame) && $0.label == element.label }) {
+            return "a sidebar row's text, shown whole and read whole"
+        }
         // A one-line SwiftUI TextField (the subject, the account name) is reported clipped while
         // it shows all its text and its placeholder whole (GKM-061 screenshots); the field's text
         // layout is the system's.
@@ -88,11 +100,35 @@ enum AccessibilityAuditPolicy {
         let bars = app.navigationBars.allElementsBoundByIndex + app.toolbars.allElementsBoundByIndex
             + app.searchFields.allElementsBoundByIndex
         // Text that runs on below the screen, under the bottom toolbar, is measured through the
-        // toolbar's glass.
+        // toolbar's glass; text that runs on below the end of its list (the bottom of an iPad
+        // form sheet, GKM-064) is measured half-scrolled out of view.
         if finding.type == .contrast,
            app.toolbars.allElementsBoundByIndex.contains(where: { $0.frame.intersects(element.frame) })
             || element.frame.maxY > app.windows.firstMatch.frame.maxY {
             return "partly under the system's bottom toolbar"
+        }
+        // Text scrolled partly under a navigation bar (the top of an iPad form sheet, GKM-064)
+        // is measured through the bar's glass.
+        if finding.type == .contrast,
+           app.navigationBars.allElementsBoundByIndex.contains(where: { $0.frame.intersects(element.frame) }) {
+            return "partly under the system's navigation bar"
+        }
+        if finding.type == .contrast, element.type == .staticText,
+           app.collectionViews.allElementsBoundByIndex.contains(where: {
+               $0.frame.intersects(element.frame) && element.frame.minY < $0.frame.maxY && element.frame.maxY > $0.frame.maxY
+           }) {
+            return "partly scrolled out of the bottom of its list"
+        }
+        // In portrait the iPad lays the mailboxes over the list and the conversation and dims
+        // those (GKM-064): their text is measured through the system's dimming. Until the
+        // sidebar goes away they can't be read or used, and the same screens are audited
+        // without it.
+        let window = app.windows.firstMatch.frame
+        if finding.type == .contrast, UIDevice.current.userInterfaceIdiom == .pad, window.width < window.height,
+           let sidebar = app.collectionViews.containing(NSPredicate(format: "identifier BEGINSWITH 'mailbox.'"))
+               .allElementsBoundByIndex.first(where: { window.intersects($0.frame) }),
+           !sidebar.frame.intersects(element.frame) {
+            return "dimmed behind the sidebar the iPad lays over the list in portrait"
         }
         if bars.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(element.frame) }) {
             switch finding.type {
