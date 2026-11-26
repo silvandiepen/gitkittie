@@ -25,6 +25,9 @@ struct SettingsScreen: View {
                                     Text(account.address).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Account \(account.displayName)")
+                            .accessibilityValue(account.address == account.displayName ? "" : account.address)
                         }
                         .accessibilityIdentifier("settingsAccountRow")
                     }

@@ -28,15 +28,14 @@ enum AccountSheet: Identifiable {
 /// Each account with its sync status, then its folders at the provider (GKM-010, GKM-011).
 struct AccountsSidebarSection: View {
     @Environment(AppModel.self) private var model
+    @Environment(MailWindowRequests.self) private var requests
     @Environment(SettingsNavigation.self) private var settings
-    @Environment(\.openSettings) private var openSettings
-    @Binding var sheet: AccountSheet?
 
     var body: some View {
         Section("Accounts") {
             if model.accounts.isEmpty {
                 Button {
-                    sheet = .add
+                    requests.accountSheet = .add
                 } label: {
                     Label("Add an Account…", systemImage: "plus.circle")
                         .font(.callout)
@@ -61,7 +60,7 @@ struct AccountsSidebarSection: View {
                 if folders.isEmpty, account.connection != nil {
                     Text("Folders appear after the first sync.")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .padding(.leading, 30)
                         .selectionDisabled()
                 }
@@ -74,24 +73,13 @@ struct AccountsSidebarSection: View {
         model.sidebarFolders(of: account)
     }
 
+    /// The Mailbox menu's account items, for this account.
     @ViewBuilder private func menu(for account: MailAccount) -> some View {
-        if model.needsPassword(account.id) {
-            Button("Sign In Again…") { sheet = .signIn(account) }
-        }
         if account.connection != nil {
             Button("Sync Now") { Task { await model.sync.syncNow() } }
+            Divider()
         }
-        Button("Account Settings…") { settings.show(.accounts, account: account.id, pane: .information, with: openSettings) }
-        if account.connection != nil {
-            Button("Mailboxes…") { settings.show(.accounts, account: account.id, pane: .mailboxes, with: openSettings) }
-        }
-        Button("Export Account…") { Task { await Platform.export(.account(account.id), what: account.displayName, model: model) } }
-        if (model.sync.replay[account.id]?.status.failed ?? 0) > 0 {
-            Button("Try Failed Changes Again") { Task { await model.actions.retryFailed(account: account.id) } }
-            Button("Discard Failed Changes") { Task { await model.actions.discardFailed(account: account.id) } }
-        }
-        Divider()
-        Button("Remove Account…") { sheet = .remove(account) }
+        AccountMenuItems(model: model, requests: requests, settings: settings, account: account)
     }
 }
 

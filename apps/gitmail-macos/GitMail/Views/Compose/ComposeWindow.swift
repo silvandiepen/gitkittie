@@ -100,21 +100,23 @@ private struct ComposeEditor: View {
         .navigationTitle(compose.subject.isEmpty ? "New Message" : compose.subject)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                // The shortcuts live in the menus (File ▸ Attach Files…, Message ▸ Send).
                 Button { importing = true } label: { Label("Attach", systemImage: "paperclip") }
-                    .help("Attach files")
-                    .keyboardShortcut("a", modifiers: [.command, .shift])
+                    .help("Attach files (⇧⌘A)")
                 Button(role: .destructive) { confirmingDiscard = true } label: { Label("Discard", systemImage: "trash") }
                     .help("Delete this draft")
-                Button {
-                    Task { if await compose.send() { dismiss() } }
-                } label: {
+                Button { send() } label: {
                     Label("Send", systemImage: "paperplane.fill")
                 }
                 .help("Send (⇧⌘D)")
-                .keyboardShortcut("d", modifiers: [.command, .shift])
                 .disabled(compose.phase == .sending)
             }
         }
+        .focusedSceneValue(\.composeDraft, ComposeWindowCommands(
+            canSend: compose.phase == .editing,
+            send: { send() },
+            requestAttach: { importing = true },
+            requestDiscard: { confirmingDiscard = true }))
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
             Task { await attach(urls) }
@@ -132,6 +134,10 @@ private struct ComposeEditor: View {
             Text("The draft and its attachments are removed from your mail folder.")
         }
         .onDisappear { Task { await compose.close() } }
+    }
+
+    private func send() {
+        Task { if await compose.send() { dismiss() } }
     }
 
     private var header: some View {
@@ -190,7 +196,7 @@ private struct ComposeEditor: View {
             Spacer()
             Text(saveText)
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 10)
@@ -246,7 +252,7 @@ private struct AttachmentStrip: View {
                     Image(systemName: "doc").foregroundStyle(.secondary).accessibilityHidden(true)
                     Text(attachment.filename).lineLimit(1)
                     Text(ByteCountFormatter.string(fromByteCount: Int64(attachment.size), countStyle: .file))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                     Button { compose.removeAttachment(attachment) } label: {
                         Image(systemName: "xmark").font(.caption2.weight(.semibold))
                     }

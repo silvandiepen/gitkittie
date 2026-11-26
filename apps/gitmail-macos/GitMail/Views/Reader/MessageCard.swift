@@ -234,6 +234,7 @@ struct AttachmentList: View {
                 .font(.caption.weight(.semibold))
                 .tracking(0.6)
                 .foregroundStyle(.secondary)
+                .accessibilityAddTraits(.isHeader)
             ForEach(attachments, id: \.self) { attachment in
                 // A part still at the provider (GKM-036) says so; opening fetches it once.
                 let isDownloading = model.browser.downloading.contains(MailBrowser.downloadKey(attachment, of: message))

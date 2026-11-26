@@ -1,11 +1,13 @@
 import MailAccounts
 import MailCore
 import SwiftUI
+import UIKit
 
 /// Add an iCloud account or any IMAP account (GKM-010): both servers are checked before
 /// anything is saved; the password goes to this device's Keychain only.
 struct AddAccountScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.dismiss) private var dismiss
     @State private var draft = AccountDraft()
     @State private var error: AccountSetupError?
@@ -33,9 +35,11 @@ struct AddAccountScreen: View {
                         .textContentType(.emailAddress)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .accessibilityLabel("Email address")
                         .accessibilityIdentifier("addressField")
                     SecureField(draft.provider == .iCloud ? "App-specific password" : "Password or app password", text: $draft.password)
                         .textContentType(.password)
+                        .accessibilityLabel(draft.provider == .iCloud ? "App-specific password" : "Password")
                         .accessibilityIdentifier("passwordField")
                 } footer: {
                     passwordNote
@@ -45,11 +49,14 @@ struct AddAccountScreen: View {
                     // On mail you send (MAIL-074); the account name is only for this app.
                     TextField("Your name", text: $draft.senderName)
                         .textContentType(.name)
+                        .accessibilityLabel("Your name")
                         .accessibilityIdentifier("senderNameField")
-                    TextField(draft.displayName.isEmpty ? "Account name (optional)" : draft.displayName, text: $draft.name)
+                    // A fixed prompt: the address as a placeholder was cut off (GKM-061).
+                    TextField("Account name (optional)", text: $draft.name)
                         .accessibilityIdentifier("nameField")
                 } footer: {
-                    Text("Your name is what people see on mail you send.")
+                    Text(draft.displayName.isEmpty ? "Your name is what people see on mail you send."
+                         : "Your name is what people see on mail you send. Without an account name, the account is called \(draft.displayName) here.")
                 }
 
                 if draft.provider == .other { servers }
@@ -68,6 +75,7 @@ struct AddAccountScreen: View {
                             ProgressView()
                             Text("Checking the incoming and outgoing servers…").foregroundStyle(.secondary)
                         }
+                        .accessibilityElement(children: .combine)
                     }
                 }
             }
@@ -82,6 +90,14 @@ struct AddAccountScreen: View {
                         task?.cancel()
                         dismiss()
                     }
+                }
+                // The number pad has no Return: a way to put the keyboard away (GKM-061).
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                    .accessibilityIdentifier("keyboardDone")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") { add() }
@@ -120,27 +136,27 @@ struct AddAccountScreen: View {
     private var servers: some View {
         Section {
             LabeledContent("Incoming (IMAP)") {
-                TextField("imap.example.com", text: $draft.imapHost)
-                    .multilineTextAlignment(.trailing)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                serverField("imap.example.com", text: $draft.imapHost)
                     .keyboardType(.URL)
+                    .accessibilityLabel("Incoming server (IMAP)")
                     .accessibilityIdentifier("imapHostField")
             }
             LabeledContent("Port") {
                 TextField("993", value: $draft.imapPort, format: .number.grouping(.never))
                     .multilineTextAlignment(.trailing).keyboardType(.numberPad)
+                    .accessibilityLabel("Incoming port")
                     .accessibilityIdentifier("imapPortField")
             }
             LabeledContent("Outgoing (SMTP)") {
-                TextField("smtp.example.com", text: $draft.smtpHost)
-                    .multilineTextAlignment(.trailing)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                serverField("smtp.example.com", text: $draft.smtpHost)
                     .keyboardType(.URL)
+                    .accessibilityLabel("Outgoing server (SMTP)")
                     .accessibilityIdentifier("smtpHostField")
             }
             LabeledContent("Port") {
                 TextField("587", value: $draft.smtpPort, format: .number.grouping(.never))
                     .multilineTextAlignment(.trailing).keyboardType(.numberPad)
+                    .accessibilityLabel("Outgoing port")
                     .accessibilityIdentifier("smtpPortField")
             }
             Picker("Security", selection: $draft.smtpSecurity) {
@@ -149,15 +165,26 @@ struct AddAccountScreen: View {
             }
             .accessibilityIdentifier("smtpSecurityPicker")
             LabeledContent("User name") {
-                TextField(draft.trimmedAddress.isEmpty ? "Your email address" : draft.trimmedAddress, text: $draft.username)
-                    .multilineTextAlignment(.trailing)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                // A short prompt: the address as a placeholder was cut off at the large sizes.
+                serverField("Optional", text: $draft.username)
+                    .accessibilityLabel("User name")
             }
         } header: {
             Text("Servers")
         } footer: {
-            Text("Connections are always encrypted, and the certificate is checked. Plain-text connections aren’t offered.")
+            Text("Without a user name, Mail signs in with your email address. Connections are always encrypted, and the certificate is checked. Plain-text connections aren’t offered.")
         }
+    }
+
+    /// A host or user name. At the accessibility sizes it wraps under its label instead of
+    /// being cut to "imap.example…" (GKM-061); a line break can't get into it.
+    private func serverField(_ prompt: String, text: Binding<String>) -> some View {
+        let large = typeSize.isAccessibilitySize
+        let oneLine = Binding(get: { text.wrappedValue },
+                              set: { text.wrappedValue = $0.replacingOccurrences(of: "\n", with: "") })
+        return TextField(prompt, text: oneLine, axis: large ? .vertical : .horizontal)
+            .multilineTextAlignment(large ? .leading : .trailing)
+            .textInputAutocapitalization(.never).autocorrectionDisabled()
     }
 
     private func add() {
@@ -166,11 +193,14 @@ struct AddAccountScreen: View {
         let draft = draft
         task = Task {
             defer { isVerifying = false }
+            // VoiceOver hears the check start and how it ended; the sheet changes out of sight.
+            AccessibilityNotification.Announcement("Checking the incoming and outgoing servers").post()
             do throws(AccountSetupError) {
                 try await model.addAccount(draft)
                 dismiss()
             } catch {
                 self.error = error
+                AccessibilityNotification.Announcement(error.message).post()
             }
         }
     }

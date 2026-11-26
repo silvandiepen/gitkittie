@@ -37,7 +37,7 @@ struct CategorySidebarSection: View {
             if model.attention.pendingClassification > 0 {
                 Text("Sorting \(model.attention.pendingClassification.formatted()) messages…")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .padding(.leading, 30)
                     .selectionDisabled()
             }
@@ -105,7 +105,7 @@ private struct CategoryRow: View {
         switch emphasis {
         case .attention: AnyShapeStyle(Theme.accent)
         case .normal: AnyShapeStyle(.secondary)
-        case .quiet: AnyShapeStyle(.tertiary)
+        case .quiet: AnyShapeStyle(.secondary)
         }
     }
 }

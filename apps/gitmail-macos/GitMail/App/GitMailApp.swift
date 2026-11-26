@@ -21,12 +21,15 @@ struct GitMailApp: App {
         model.respondToNotifications()
         _model = State(initialValue: model)
     }
+    /// What the menu bar asks the mail window for (GKM-061).
+    @State private var requests = MailWindowRequests()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(model)
                 .environment(settings)
+                .environment(requests)
                 .frame(minWidth: 960, minHeight: 600)
                 .background(SolidWindow())
                 .tint(Theme.accent)
@@ -35,15 +38,17 @@ struct GitMailApp: App {
                 .task { await model.open() }
         }
         .commands {
-            // One window is the mail; there is nothing new to make yet.
-            CommandGroup(replacing: .newItem) {}
+            // File ▸ New Message and Attach Files… (ComposeCommands), then Import.
             CommandGroup(after: .newItem) {
                 Button("Import Messages…") { Task { await Platform.importMessages(into: model) } }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
                     .disabled(model.phase != .ready || model.isImporting)
             }
+            // One Message menu: Send and Reply first, then the actions on the conversations.
             CommandMenu("Message") {
                 let selected = model.browser.selectedMessage
+                ReplyCommands(model: model)
+                Divider()
                 // Read, flag, archive, trash, move: the marked or selected conversations, with Undo (GKM-015).
                 MessageActionCommands(model: model)
                 Divider()
@@ -93,6 +98,7 @@ struct GitMailApp: App {
                     .keyboardShortcut(.upArrow, modifiers: [.command, .option])
             }
             ComposeCommands(model: model)
+            MailboxCommands(model: model, requests: requests, settings: settings)
             CommandGroup(after: .toolbar) {
                 Button("Rebuild Search Index") { Task { await model.rebuildIndex() } }
                     .disabled(model.phase != .ready || model.isRebuildingIndex)

@@ -123,6 +123,36 @@ struct MessageActionToolbar: ToolbarContent {
 }
 
 extension View {
+    /// The row menu's everyday actions as VoiceOver actions (VO-⌘-Space), for that row or
+    /// every marked row with it.
+    func rowActions(_ row: ListRow, model: AppModel) -> some View {
+        let threads = model.browser.threadIDs(actingOn: row.id)
+        let rows = model.browser.rows.filter { threads.contains($0.threadID) }
+        let scope = model.browser.scope
+        let actions = model.actions
+        let unread = rows.contains(where: \.isUnread)
+        let flagged = rows.contains(where: \.isFlagged)
+        return self
+            .accessibilityAction(named: unread ? "Mark as Read" : "Mark as Unread") {
+                Task { await actions.perform(unread ? .markRead : .markUnread, threads: threads, in: scope) }
+            }
+            .accessibilityAction(named: flagged ? "Unflag" : "Flag") {
+                Task { await actions.perform(flagged ? .unflag : .flag, threads: threads, in: scope) }
+            }
+            .accessibilityAction(named: "Archive") {
+                Task { await actions.perform(.archive, threads: threads, in: scope) }
+            }
+            .accessibilityAction(named: actions.isTrash(scope) ? "Delete Permanently…" : "Move to Trash") {
+                Task {
+                    if actions.isTrash(scope) {
+                        await actions.requestDeletion(threads: threads, in: scope)
+                    } else {
+                        await actions.perform(.moveToTrash, threads: threads, in: scope)
+                    }
+                }
+            }
+    }
+
     /// ⌫ in the list moves the marked or selected conversations to Trash (in Trash: asks to
     /// delete them permanently).
     func trashOnDelete(_ model: AppModel) -> some View {

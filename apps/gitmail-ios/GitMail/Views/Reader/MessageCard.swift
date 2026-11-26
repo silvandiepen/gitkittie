@@ -11,6 +11,7 @@ import SwiftUI
 /// with remote content off), and its attachments, opened only when tapped.
 struct MessageCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var typeSize
     let message: ThreadMessage
     let isOnlyMessage: Bool
     @State private var openingLink: LinkAssessment?
@@ -54,24 +55,35 @@ struct MessageCard: View {
         let sender = message.content?.sender
         let front = message.stored?.front
         return VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                // The name the sender wrote, and always the address under it (ThreatModel §3).
-                Text(sender?.name ?? sender?.address ?? message.summary.from?.displayName ?? "Unknown sender")
-                    .font(.body.weight(.semibold))
-                Spacer(minLength: 8)
-                if message.summary.isFlagged {
-                    Image(systemName: "flag.fill").foregroundStyle(.orange).accessibilityLabel("Flagged")
+            // Name, date and address are one element: the name the sender wrote and, always,
+            // the address, with one target instead of a small selectable address (GKM-061).
+            VStack(alignment: .leading, spacing: 4) {
+                // At the accessibility sizes the date goes under the name (GKM-061).
+                let line = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+                line {
+                    // The name the sender wrote, and always the address under it (ThreatModel §3).
+                    Text(sender?.name ?? sender?.address ?? message.summary.from?.displayName ?? "Unknown sender")
+                        .font(.body.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
+                    if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if message.summary.isFlagged {
+                            Image(systemName: "flag.fill").foregroundStyle(.orange).accessibilityLabel("Flagged")
+                        }
+                        Text(MessageDate.short(message.summary.date))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                Text(MessageDate.short(message.summary.date))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if sender?.name != nil, let address = sender?.address {
+                    Text(address).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
+                }
             }
-            if sender?.name != nil, let address = sender?.address {
-                Text(address).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
-            }
+            .accessibilityElement(children: .combine)
             if let front {
-                if !front.to.isEmpty { Text("To \(people(front.to))").font(.subheadline).foregroundStyle(.secondary).lineLimit(3) }
-                if !front.cc.isEmpty { Text("Cc \(people(front.cc))").font(.subheadline).foregroundStyle(.secondary).lineLimit(3) }
+                if !front.to.isEmpty { Text("To \(people(front.to))").font(.subheadline).foregroundStyle(.secondary).lineLimit(typeSize.isAccessibilitySize ? nil : 3) }
+                if !front.cc.isEmpty { Text("Cc \(people(front.cc))").font(.subheadline).foregroundStyle(.secondary).lineLimit(typeSize.isAccessibilitySize ? nil : 3) }
             }
             ForEach(sender?.warnings ?? [], id: \.self) { warning in
                 NoticeLine(systemImage: "exclamationmark.shield", tint: .orange, text: warning.message)
@@ -183,6 +195,7 @@ struct MessageCard: View {
 struct AttachmentList: View {
     let attachments: [AttachmentReference]
     let open: (AttachmentReference) -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -190,16 +203,17 @@ struct AttachmentList: View {
                 .font(.caption.weight(.semibold))
                 .tracking(0.6)
                 .foregroundStyle(.secondary)
+                .accessibilityAddTraits(.isHeader)
             ForEach(attachments, id: \.self) { attachment in
                 Button { open(attachment) } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "doc").foregroundStyle(.secondary)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(attachment.fileName).lineLimit(1).truncationMode(.middle)
+                            Text(attachment.fileName).lineLimit(typeSize.isAccessibilitySize ? 3 : 1).truncationMode(.middle)
                             Text("\(attachment.mediaType), \(MessageDate.byteCount(attachment.size))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                                .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
                         }
                         Spacer()
                     }

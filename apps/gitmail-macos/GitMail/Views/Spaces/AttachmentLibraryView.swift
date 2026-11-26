@@ -54,6 +54,11 @@ struct AttachmentLibraryView: View {
                             Task { await library.select(item.id) }
                         }
                         .contextMenu { menu(for: item) }
+                        // VoiceOver: VO-Space selects it (and shows its message); the menu's
+                        // items are its actions.
+                        .accessibilityAction { Task { await library.select(item.id) } }
+                        .accessibilityAction(named: "Quick Look") { quickLook(item) }
+                        .accessibilityAction(named: "Save As…") { save(item) }
                         .onAppear {
                             if item.id == library.items.last?.id { Task { await library.loadMore() } }
                         }
@@ -156,7 +161,7 @@ private struct AttachmentRow: View {
                 .foregroundStyle(.secondary)
                 Text(item.subject?.isEmpty == false ? item.subject! : "(No subject)")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         }

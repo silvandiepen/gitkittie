@@ -99,6 +99,8 @@ final class MailboxSettingsUITests: XCTestCase {
         replace(app.textFields["imapPortField"], with: "3993")
         replace(app.textFields["smtpHostField"], with: "localhost")
         replace(app.textFields["smtpPortField"], with: "3465")
+        let done = app.buttons["keyboardDone"]
+        if app.keyboards.firstMatch.exists, done.exists, done.isHittable { done.tap() }
         let security = app.buttons["smtpSecurityPicker"]
         if !security.isHittable { app.swipeUp() }
         security.tap()
@@ -126,6 +128,9 @@ final class MailboxSettingsUITests: XCTestCase {
 
     private func replace(_ field: XCUIElement, with text: String) {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
+        // The number pad has no Return: put it away (Done above it), or it covers the next field.
+        let done = app.buttons["keyboardDone"]
+        if app.keyboards.firstMatch.exists, done.exists, done.isHittable { done.tap() }
         if !field.isHittable { app.swipeUp() }
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         let current = field.value as? String ?? ""

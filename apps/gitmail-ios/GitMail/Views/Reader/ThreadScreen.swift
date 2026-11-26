@@ -121,6 +121,7 @@ struct ThreadScreen: View {
 /// An older message in the conversation: who, a line of it, when. Tap to read it.
 private struct CollapsedMessage: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var typeSize
     let message: ThreadMessage
 
     var body: some View {
@@ -128,11 +129,14 @@ private struct CollapsedMessage: View {
             Task { await model.browser.toggleExpanded(message.id) }
         } label: {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline) {
+                // At the accessibility sizes the date goes under the sender (GKM-061).
+                let header = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                                                          : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+                header {
                     Text(message.summary.from?.displayName ?? "Unknown sender")
                         .font(.subheadline.weight(message.summary.isUnread ? .semibold : .medium))
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
+                        .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
+                    if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
                     Text(MessageDate.short(message.summary.date))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
@@ -140,7 +144,7 @@ private struct CollapsedMessage: View {
                 Text(message.summary.snippet)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)

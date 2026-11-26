@@ -13,12 +13,17 @@ enum UITestLaunch {
     @MainActor
     static func session() -> MobileSession {
         let environment = ProcessInfo.processInfo.environment
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("uitest-\(UUID().uuidString)", isDirectory: true)
+        // A named store (`-uiTestStoreName <name>`) is kept across launches of one test, so a
+        // test can relaunch with another text size; otherwise every launch starts empty.
+        let arguments = ProcessInfo.processInfo.arguments
+        let name = arguments.firstIndex(of: "-uiTestStoreName").flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("uitest-\(name ?? UUID().uuidString)", isDirectory: true)
+        let isFresh = !FileManager.default.fileExists(atPath: root.path)
         let locations = StoreLocations(mailFolder: root.appendingPathComponent("Mail", isDirectory: true),
                                        deviceFolder: root.appendingPathComponent("Device", isDirectory: true))
         let suite = "app.hakobs.gitmail.uitest"
         let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
+        if isFresh { defaults.removePersistentDomain(forName: suite) }
         var services = AccountServices.live
         services.defaults = defaults
         services.credentials = KeychainCredentialStore(service: "app.hakobs.gitmail.uitest")
