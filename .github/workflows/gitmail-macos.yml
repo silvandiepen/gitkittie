@@ -25,6 +25,10 @@ on:
       - .github/workflows/gitmail-macos.yml
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-test:
     # Xcode 26 / Swift 6.2: GitKittieMailProviders (swift-nio-imap 0.5) needs macOS 15 and Swift 6.2.
