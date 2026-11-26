@@ -146,6 +146,7 @@ final class AppModel {
             guard let self else { throw CancellationError() }
             return try await self.fetchAttachment(attachment, of: id)
         }
+        actions.onMailChanged = { [weak self] in await self?.refreshAfterMailChange() }
         senders.onPlacementsChanged = { [weak self] in
             guard let self else { return }
             await self.attention.refresh(accounts: self.accounts, arrivals: .leave)
@@ -347,6 +348,15 @@ final class AppModel {
         await browser.reload()
         await attention.refresh(accounts: accounts, arrivals: .notify)
         await senders.afterSync()
+    }
+
+    /// After an action, its Undo or Redo: the category counts, the badge and the spaces' counts
+    /// are re-read at once, as the list is (mail moved to Trash or Junk leaves them; GKM-075).
+    func refreshAfterMailChange() async {
+        await spaces.refresh()
+        await attention.refresh(accounts: accounts, arrivals: .leave)
+        // The Senders view's numbers, once it has been opened.
+        if !senders.senders.isEmpty { await senders.refresh() }
     }
 
     private func reload() async throws {

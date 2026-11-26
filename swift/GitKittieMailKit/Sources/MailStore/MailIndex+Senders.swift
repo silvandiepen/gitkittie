@@ -61,11 +61,11 @@ extension MailIndex {
             SELECT c.account_id, c.list_id, c.from_domain, c.from_address, c.home, c.disposition,
                    count(*), sum(1 - m.seen), sum(m.sort_date >= ?), min(m.sort_date), max(m.sort_date),
                    (SELECT m2.from_name FROM messages m2 JOIN message_classes c2 ON c2.local_id = m2.local_id
-                    WHERE c2.account_id = c.account_id AND c2.list_id IS c.list_id
+                    WHERE c2.account_id = c.account_id AND c2.list_id IS c.list_id AND m2.trash_or_junk = 0
                       AND (c.list_id IS NOT NULL OR c2.from_address IS c.from_address)
                     ORDER BY m2.sort_date DESC LIMIT 1)
             FROM message_classes c JOIN messages m ON m.local_id = c.local_id
-            WHERE (c.list_id IS NOT NULL OR c.from_address IS NOT NULL)
+            WHERE (c.list_id IS NOT NULL OR c.from_address IS NOT NULL) AND \(Self.notTrashOrJunk)
             """
         var values: [SQLiteValue] = [.double(now.addingTimeInterval(-30 * 86_400).timeIntervalSince1970)]
         if let account { sql += " AND c.account_id = ?"; values.append(.text(account.rawValue)) }
@@ -101,12 +101,14 @@ extension MailIndex {
         return found.values.sorted { ($0.lastSeen, $0.id) > ($1.lastSeen, $1.id) }
     }
 
-    /// Classified messages a scope covers, newest first (ignoring rules and exclusions).
-    func members(of scope: SenderScope, account: MailAccountID) throws -> [SenderScopeMember] {
+    /// Classified messages a scope covers, newest first (ignoring rules and exclusions). Rules
+    /// see every one; the sender's view leaves out mail only in Trash or Junk (MAIL-102).
+    func members(of scope: SenderScope, account: MailAccountID, includesTrashAndJunk: Bool = true) throws -> [SenderScopeMember] {
         var sql = """
             SELECT m.local_id, m.fingerprint, m.sort_date FROM message_classes c JOIN messages m ON m.local_id = c.local_id
             WHERE c.account_id = ?
             """
+        if !includesTrashAndJunk { sql += " AND \(Self.notTrashOrJunk)" }
         var values: [SQLiteValue] = [.text(account.rawValue)]
         switch scope {
         case .list(let id, let organisation):

@@ -16,13 +16,14 @@ struct CleanupRow {
 }
 
 extension MailIndex {
-    /// Rows matching `clause` (over `messages m` and `message_classes c`), newest first.
+    /// Rows matching `clause` (over `messages m` and `message_classes c`), newest first. Mail
+    /// only in Trash or Junk is already cleaned up, and left out (MAIL-102).
     func cleanupRows(where clause: String, _ values: [SQLiteValue]) throws -> [CleanupRow] {
         let statement = try database.prepare("""
             SELECT \(Self.summaryColumns), c.list_id, c.from_address, COALESCE(c.home, 'focused'), COALESCE(c.purpose, 'unknown'),
                    COALESCE((SELECT sum(b.size) FROM message_blobs b WHERE b.local_id = m.local_id), 0)
             FROM messages m LEFT JOIN message_classes c ON c.local_id = m.local_id
-            WHERE \(clause) ORDER BY m.sort_date DESC, m.local_id
+            WHERE (\(clause)) AND \(Self.notTrashOrJunk) ORDER BY m.sort_date DESC, m.local_id
             """).bind(values)
         var rows: [CleanupRow] = []
         while try statement.step() {
@@ -41,8 +42,9 @@ extension MailIndex {
     func noisyStreams(minimum: Int, limit: Int) throws -> [(account: MailAccountID, list: String?, sender: String?)] {
         let statement = try database.prepare("""
             SELECT c.account_id, c.list_id, CASE WHEN c.list_id IS NULL THEN c.from_address END, count(*) AS volume
-            FROM message_classes c
+            FROM message_classes c JOIN messages m ON m.local_id = c.local_id
             WHERE c.home IN ('updates', 'subscriptions', 'promotions') AND (c.list_id IS NOT NULL OR c.from_address IS NOT NULL)
+              AND \(Self.notTrashOrJunk)
             GROUP BY c.account_id, COALESCE('l:' || c.list_id, 's:' || c.from_address)
             HAVING volume >= ? ORDER BY volume DESC, c.account_id, 2, 3 LIMIT ?
             """).bind([.int(Int64(minimum)), .int(Int64(limit))])
@@ -53,9 +55,9 @@ extension MailIndex {
         return result
     }
 
-    /// Messages per account.
+    /// Messages per account, leaving out mail only in Trash or Junk (MAIL-102).
     func messageCounts() throws -> [MailAccountID: Int] {
-        let statement = try database.prepare("SELECT account_id, count(*) FROM messages GROUP BY account_id")
+        let statement = try database.prepare("SELECT account_id, count(*) FROM messages m WHERE \(Self.notTrashOrJunk) GROUP BY account_id")
         var result: [MailAccountID: Int] = [:]
         while try statement.step() { if let account = statement.text(0) { result[MailAccountID(account)] = statement.int(1) } }
         return result

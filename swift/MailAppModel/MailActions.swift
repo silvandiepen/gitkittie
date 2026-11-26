@@ -51,6 +51,9 @@ final class MailActions {
         var count: Int
     }
 
+    /// Called after an action, its Undo or Redo changed mail: the counts, badge and spaces
+    /// follow at once, like the list (GKM-075). Set by the app model.
+    @ObservationIgnored var onMailChanged: (@MainActor () async -> Void)?
     /// The window's undo manager (Edit ▸ Undo, ⌘Z). Set by the mail window; tests pass their own.
     @ObservationIgnored weak var undoManager: UndoManager?
     @ObservationIgnored private var store: MailStore?
@@ -139,6 +142,7 @@ final class MailActions {
             registerUndo(batch, name: action.undoName)
             await sync.actionsQueued(for: batch.accounts)
             await browser.reload()
+            await onMailChanged?()
         } catch {
             notice = String(describing: error)
         }
@@ -247,6 +251,7 @@ final class MailActions {
         registerUndo(batch, name: name)
         await sync.actionsQueued(for: batch.accounts)
         await browser.reload()
+        await onMailChanged?()
     }
 
     // MARK: Undo (MAIL-037)
@@ -275,6 +280,7 @@ final class MailActions {
                 let inverse = try await store.undo(applied)
                 if let inverse { await self?.sync.actionsQueued(for: inverse.accounts) }
                 await self?.browser.reload()
+                await self?.onMailChanged?()
                 return inverse
             } catch {
                 self?.notice = String(describing: error)
