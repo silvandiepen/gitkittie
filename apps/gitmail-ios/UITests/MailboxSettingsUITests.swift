@@ -43,7 +43,8 @@ final class MailboxSettingsUITests: XCTestCase {
 
         // New folder, at the provider.
         app.buttons["newFolderButton"].tap()
-        let newName = app.textFields["newFolderName"]
+        // A system alert's field doesn't carry SwiftUI's accessibility identifier: find it in the alert.
+        let newName = app.alerts["New Folder"].textFields.firstMatch
         XCTAssertTrue(newName.waitForExistence(timeout: 5))
         newName.typeText("Receipts")
         app.alerts.buttons["Create"].tap()
@@ -60,7 +61,7 @@ final class MailboxSettingsUITests: XCTestCase {
         XCTAssertTrue(waitFor(timeout: 10) { (show.value as? String) == "0" }, "the folder is hidden")
         snapshot("settings-folder")
         app.buttons["renameFolderButton"].tap()
-        let rename = app.textFields["renameFolderName"]
+        let rename = app.alerts["Rename Folder"].textFields.firstMatch
         XCTAssertTrue(rename.waitForExistence(timeout: 5))
         rename.tap()
         rename.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12) + "Bills")

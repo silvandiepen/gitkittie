@@ -70,7 +70,6 @@ struct AccountMailboxesScreen: View {
         }
         .alert("New Folder", isPresented: $creating) {
             TextField("Name", text: $newName)
-                .accessibilityIdentifier("newFolderName")
             Button("Cancel", role: .cancel) {}
             Button("Create") { create() }
         } message: {
@@ -246,7 +245,7 @@ struct FolderSettingsScreen: View {
         .navigationTitle(folder.map { $0.role == "inbox" ? "Inbox" : $0.displayName } ?? "Folder")
         .toolbar { if isWorking { ToolbarItem(placement: .topBarTrailing) { ProgressView() } } }
         .alert("Rename Folder", isPresented: $renaming) {
-            TextField("Name", text: $name).accessibilityIdentifier("renameFolderName")
+            TextField("Name", text: $name)
             Button("Cancel", role: .cancel) {}
             Button("Rename") { rename() }
         } message: {
