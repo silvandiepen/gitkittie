@@ -11,6 +11,8 @@ Implemented:
   - `Libgit2Engine` (iOS, embedded libgit2 — new) — pending
 - ✅ `KeychainService` — generic keychain item store (service/account configurable)
 - ✅ `GitHubOAuthService` — GitHub device-flow OAuth (Foundation-only; macOS + iOS)
+- ✅ `AppStoreUpdates` (own product, no dependencies) — "Update available": the App Store lookup,
+  version comparison, the minimum-OS rule and the once-a-day throttle; tests parse recorded lookups
 
 Pending extraction from `apps/gitfolder-macos` (need an Xcode build to verify the app still compiles):
 - `FolderAccessService` (AppKit + security-scoped bookmarks; entangled with the app's model)

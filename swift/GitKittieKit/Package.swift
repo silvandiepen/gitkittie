@@ -11,13 +11,21 @@ let package = Package(
     name: "GitKittieKit",
     platforms: [.macOS(.v13), .iOS(.v16)],
     products: [
-        .library(name: "GitKittieKit", targets: ["GitKittieKit"])
+        .library(name: "GitKittieKit", targets: ["GitKittieKit"]),
+        // "Update available": the App Store lookup, the version rules and the once-a-day
+        // throttle. Its own product with no dependencies, so an app that does not use the
+        // git engine (Mail) can link it alone.
+        .library(name: "AppStoreUpdates", targets: ["AppStoreUpdates"])
     ],
     dependencies: [
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.0")
     ],
     targets: [
         .target(name: "GitKittieKit", dependencies: ["Yams"]),
-        .testTarget(name: "GitKittieKitTests", dependencies: ["GitKittieKit"])
+        .testTarget(name: "GitKittieKitTests", dependencies: ["GitKittieKit"]),
+        .target(name: "AppStoreUpdates",
+                swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]),
+        .testTarget(name: "AppStoreUpdatesTests", dependencies: ["AppStoreUpdates"],
+                    resources: [.copy("Fixtures")])
     ]
 )
