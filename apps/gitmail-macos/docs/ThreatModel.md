@@ -136,7 +136,7 @@ The mail folder is the user's. That is the point of the product, and it is also 
 | Other apps reading the folder | Default location inside the app's container; choosing a shared location is explicit, with a plain warning that other apps and sync tools can read it | GKM-005, GKM-009 |
 | iCloud Drive or GitKittie Folder syncing mail | Allowed, but only after a warning; index, cache and cursors are outside the folder (MAIL-013) so they never travel with it | GKM-005 |
 | Git export making mail permanent history | Opt-in, metadata-only by default; full-message export warns about confidentiality and persistent history; all hosting via GitPont, never a silent push | GKM-033 |
-| Backups (Time Machine, third-party) | Stated in docs: the folder and Application Support are in backups unless excluded; encrypted archive export for people who need it | GKM-032, GKM-034 |
+| Backups (Time Machine, third-party) | Stated in docs: the folder and Application Support are in backups unless excluded; encrypted archive export for people who need it (built: AES-256-GCM records bound to the header, their order and the end; recovery key shown once and never kept; restore all or nothing, paths confined; MAIL-128, MAIL-129) | GKM-032, GKM-034 |
 | Partial writes, corruption | Atomic writes, integrity hashes, schema migrations with tests | GKM-005 |
 | A tampered EML in the folder (from sync or another app) | Files read back from the folder are untrusted input, parsed with the same limits as network mail | GKM-005 |
 
@@ -148,7 +148,7 @@ The user's own private database, but not a blanket end-to-end guarantee. Under s
 | --- | --- | --- |
 | Metadata reveals relationships (sender addresses in rules, space names, notes) | Put sender addresses, notes, space names, rule patterns and anything derived from mail content in encrypted fields; keep only opaque IDs in queryable fields | GKM-026 |
 | Raw mail in CloudKit | Never by default; no message bodies or attachments in metadata sync | GKM-026 |
-| Key loss (iCloud Keychain reset) loses encrypted metadata | Design key recovery and test it: what the user loses, and what they can rebuild from the mail folder and provider | GKM-026, GKM-032 |
+| Key loss (iCloud Keychain reset) loses encrypted metadata | Design key recovery and test it: what the user loses, and what they can rebuild from the mail folder and provider. Encrypted archives (GKM-032): the recovery key is the only key; losing it loses that archive and nothing else, the live folder and provider are unaffected | GKM-026, GKM-032 |
 | Users assuming "private" means "only I can read it" | Explain standard vs Advanced Data Protection in onboarding and the privacy policy, without overclaiming | GKM-026, GKM-034 |
 | Cross-device mixups (same address, different accounts) | Explicit account mapping, not display address alone | GKM-026 |
 
