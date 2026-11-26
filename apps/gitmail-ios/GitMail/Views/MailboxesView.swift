@@ -47,7 +47,8 @@ struct MailboxesView: View {
             }
             ForEach(model.accounts, id: \.id) { account in
                 Section {
-                    MailboxRow(title: "All of \(account.displayName)", systemImage: "person.crop.circle", count: nil)
+                    MailboxRow(title: "All of \(account.displayName)", systemImage: "person.crop.circle", count: nil,
+                               shortensInMiddle: true)
                         .tag(SidebarSelection.account(account.id))
                     ForEach(folders(of: account), id: \.self) { folder in
                         MailboxRow(title: folder.role == "inbox" ? "Inbox" : folder.path.joined(separator: " / "),
@@ -181,28 +182,63 @@ struct MailboxRow: View {
     var tint: Color?
     /// What the number counts, for VoiceOver: "3 unread", "12 messages".
     var countMeaning: (Int) -> String = { "\($0) unread" }
+    /// For a name that is often an address: shortened in the middle rather than wrapped
+    /// mid-domain ("example.-com") in the iPad sidebar (GKM-064), like the account's header.
+    var shortensInMiddle = false
     @Environment(\.dynamicTypeSize) private var typeSize
     @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 24
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
-                .frame(width: iconWidth)
-                .accessibilityHidden(true)
-            // A long folder or space name wraps at the accessibility sizes instead of vanishing.
-            Text(title).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            if let count {
-                Text("\(count.value)")
-                    .font(.callout.monospacedDigit().weight(count.isAttention ? .semibold : .regular))
-                    .foregroundStyle(count.isAttention ? AnyShapeStyle(Theme.accentText) : AnyShapeStyle(.secondary))
+        Group {
+            if typeSize.isAccessibilitySize {
+                // At the accessibility sizes the icon and the count go above the name, so the name
+                // has the column's whole width: beside a scaled icon, the iPad sidebar broke even
+                // "Focused" in the middle of the word (GKM-064).
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack { icon; Spacer(minLength: 8); countText }
+                    name
+                }
+            } else {
+                HStack(spacing: 12) {
+                    icon
+                    name
+                    Spacer(minLength: 8)
+                    countText
+                }
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(count.map { countMeaning($0.value) } ?? "")
         .accessibilityIdentifier("mailbox.\(title)")
+    }
+}
+
+private extension MailboxRow {
+    var icon: some View {
+        Image(systemName: systemImage)
+            .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
+            .frame(width: iconWidth)
+            .accessibilityHidden(true)
+    }
+
+    /// A long folder or space name wraps at the accessibility sizes instead of vanishing.
+    @ViewBuilder var name: some View {
+        if shortensInMiddle {
+            Text(title)
+                .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
+                .truncationMode(.middle)
+        } else {
+            Text(title).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder var countText: some View {
+        if let count {
+            Text("\(count.value)")
+                .font(.callout.monospacedDigit().weight(count.isAttention ? .semibold : .regular))
+                .foregroundStyle(count.isAttention ? AnyShapeStyle(Theme.accentText) : AnyShapeStyle(.secondary))
+        }
     }
 }
 

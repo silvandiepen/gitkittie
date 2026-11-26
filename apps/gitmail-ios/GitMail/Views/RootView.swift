@@ -35,14 +35,18 @@ struct MailSplitView: View {
     @State private var undo = UndoManager()
     /// Read outside the split view: inside, its columns have their own size classes.
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
+        // On iPad the columns widen at the accessibility sizes, where a 300 pt sidebar fits a
+        // word or two per line (GKM-064). The reader keeps the rest.
+        let large = typeSize.isAccessibilitySize
         NavigationSplitView(columnVisibility: $columns, preferredCompactColumn: $router.compactColumn) {
             MailboxesView()
-                .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 360)
+                .navigationSplitViewColumnWidth(min: large ? 320 : 260, ideal: large ? 420 : 300, max: large ? 480 : 360)
         } content: {
             ContentColumn()
-                .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 480)
+                .navigationSplitViewColumnWidth(min: 320, ideal: large ? 440 : 380, max: large ? 560 : 480)
         } detail: {
             DetailColumn()
         }
@@ -79,7 +83,7 @@ struct MailSplitView: View {
         // portrait for landscape whenever the keyboard was up. Too narrow for both leading columns
         // and a readable conversation (420 pt) beside them, the system lays the sidebar over the list.
         .onGeometryChange(for: Bool.self) { proxy in
-            proxy.size.width < 300 + 380 + 420
+            proxy.size.width < (large ? 420 + 440 : 300 + 380) + 420
         } action: { sidebarOverlays = $0 }
         // In portrait the system puts the sidebar away when a mailbox is chosen, but the
         // visibility stays `.all`, so the next update (a text size change, the accessibility
