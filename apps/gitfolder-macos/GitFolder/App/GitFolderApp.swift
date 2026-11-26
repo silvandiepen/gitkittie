@@ -4,10 +4,11 @@ import SwiftUI
 @main
 struct GitFolderApp: App {
     @State private var appModel = AppModel()
+    @State private var updates: AppUpdates
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView()
+            MenuBarView(updates: updates)
                 .environment(appModel)
         } label: {
             Image("MenuBarIcon")
@@ -29,11 +30,14 @@ struct GitFolderApp: App {
     init() {
         let model = AppModel()
         _appModel = State(initialValue: model)
+        let updates = AppUpdates()
+        _updates = State(initialValue: updates)
         Task { @MainActor in
             model.loadIfNeeded()
             DispatchQueue.main.async {
                 model.requestLaunchAtLoginIfNeeded()
             }
+            await updates.check()
         }
     }
 }

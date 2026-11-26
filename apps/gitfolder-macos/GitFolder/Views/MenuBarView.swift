@@ -4,11 +4,15 @@ import SwiftUI
 struct MenuBarView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.openSettings) private var openSettings
+    let updates: AppUpdates
 
     var body: some View {
         VStack {
             header
             Divider()
+
+            // A newer Folder in the App Store: Update opens its page there.
+            UpdateAvailableMenu(updates: updates)
 
             Button(appModel.isSyncing ? "Syncing…" : "Sync All Now", systemImage: "arrow.triangle.2.circlepath") {
                 appModel.syncNow()
@@ -61,6 +65,9 @@ struct MenuBarView: View {
         .onAppear {
             appModel.loadIfNeeded()
         }
+        // A menu-bar app runs for weeks: look again whenever the menu opens (at most one
+        // request a day; the checker throttles).
+        .task { await updates.check() }
     }
 
     private var header: some View {

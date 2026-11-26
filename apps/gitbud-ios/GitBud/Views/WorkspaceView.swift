@@ -7,11 +7,12 @@ struct WorkspaceView: View {
     @Environment(AppModel.self) private var model
     // History and the commit side by side wherever there is room; iPhone collapses it anyway.
     @State private var columns: NavigationSplitViewVisibility = .all
+    @State private var updates = AppUpdates()
 
     var body: some View {
         @Bindable var model = model
         NavigationSplitView(columnVisibility: $columns) {
-            RepositoryList()
+            RepositoryList(updates: updates)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 280)
         } content: {
             if model.selectedRepository != nil {
@@ -31,11 +32,13 @@ struct WorkspaceView: View {
                     .background(Theme.window)
             }
         }
+        .checksForAppUpdates(updates)
     }
 }
 
 /// The repositories of the connected account, newest activity first.
 struct RepositoryList: View {
+    let updates: AppUpdates
     @Environment(AppModel.self) private var model
     @State private var search = ""
 
@@ -67,6 +70,12 @@ struct RepositoryList: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(Theme.sidebar.ignoresSafeArea())
+        // A newer Bud in the App Store: Update opens its page there.
+        .safeAreaInset(edge: .bottom) {
+            if updates.offer != nil {
+                UpdateAvailableNotice(updates: updates).padding(.horizontal, 16).padding(.bottom, 8)
+            }
+        }
         .overlay {
             if model.isLoadingRepositories, model.repositories.isEmpty { ProgressView() }
         }

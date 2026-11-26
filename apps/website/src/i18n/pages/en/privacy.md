@@ -12,6 +12,10 @@ There is no GitKittie account. No email, no password, no user profile. The apps 
 
 The apps do not collect, transmit, or store any personal data on GitKittie servers, and do not phone home with telemetry, analytics, or usage data. File contents move directly from your device to your own repositories.
 
+## Checking for updates
+
+At most once a day, each app asks Apple's public App Store lookup whether a newer version is out, sending only the app's bundle id and your store country; nothing about you or your files, and nothing to GitKittie.
+
 ## Local data
 
 Configuration (folder paths, repository URLs, sync intervals, board settings) is stored locally on your device. Access tokens are stored in the system Keychain, not in a plain config file.

@@ -33,13 +33,16 @@ targets:
       - path: GitKanban
       # Views both apps draw the same way (the rendered Markdown page).
       - path: ../../swift/TasksUI
-      # The colours every GitKittie app shares.
+      # The colours and the "Update available" notice every GitKittie app shares.
       - path: ../../swift/GitKittieUI
       # The rendered, editable Markdown view's web runtime (from Lezin), kept as a folder.
       - path: ../../swift/RichEditorWeb
         type: folder
         buildPhase: resources
     dependencies:
+      # "Update available" (swift/GitKittieUI/UpdateNotice.swift, GITKITTIE-094).
+      - package: GitKittieKit
+        product: AppStoreUpdates
       - package: GitKanbanKit
         product: GitKanbanKit
       - package: GitKittieKit

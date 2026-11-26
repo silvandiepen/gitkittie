@@ -9,6 +9,7 @@ struct ContentView: View {
     @Environment(AppModel.self) private var model
     @State private var isShowingCommandPalette = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var updates = AppUpdates()
 
     var body: some View {
         Group {
@@ -19,6 +20,7 @@ struct ContentView: View {
                 repositoryWorkspace
             }
         }
+        .checksForAppUpdates(updates)
         .background {
             // Invisible shortcut host: ⌘K works wherever focus happens to be.
             Button("") { isShowingCommandPalette = true }
@@ -46,7 +48,7 @@ struct ContentView: View {
         @Bindable var model = model
 
         return NavigationSplitView(columnVisibility: $columnVisibility) {
-            Sidebar(selection: $model.workspaceMode)
+            Sidebar(selection: $model.workspaceMode, updates: updates)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230)
         } detail: {
             VStack(spacing: 0) {

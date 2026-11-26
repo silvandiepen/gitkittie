@@ -9,9 +9,19 @@ struct MailboxesView: View {
     @Environment(AppModel.self) private var model
     @Environment(MobileSession.self) private var session
     @Environment(MailRouter.self) private var router
+    @State private var updates = AppUpdates()
 
     var body: some View {
         List(selection: selection) {
+            // A newer Mail in the App Store: Update opens its page there.
+            if updates.offer != nil {
+                Section {
+                    UpdateAvailableNotice(updates: updates)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .selectionDisabled()
+                }
+            }
             if let notice = session.storageNotice {
                 Section { NoticeLine(systemImage: "externaldrive.badge.exclamationmark", tint: .orange, text: notice) }
             }
@@ -72,6 +82,7 @@ struct MailboxesView: View {
         .listStyle(.sidebar)
         .themedList()
         .navigationTitle("Mailboxes")
+        .checksForAppUpdates(updates)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { router.showsSettings = true } label: { Image(systemName: "gearshape") }

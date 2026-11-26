@@ -22,6 +22,6 @@ const body = usePageMarkdown('privacy')
 
 <template>
   <MarketingLayout>
-    <LegalDoc title="Privacy Policy" updated="July 2026" :content="body" />
+    <LegalDoc title="Privacy Policy" updated="November 2026" :content="body" />
   </MarketingLayout>
 </template>

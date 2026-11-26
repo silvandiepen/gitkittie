@@ -8,6 +8,7 @@ import SwiftUI
 struct Sidebar: View {
     @Environment(AppModel.self) private var model
     @Binding var selection: GitBudWorkspaceMode
+    let updates: AppUpdates
 
     var body: some View {
         List(selection: Binding<GitBudWorkspaceMode?>(
@@ -61,7 +62,15 @@ struct Sidebar: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(GitBudTheme.sidebar.ignoresSafeArea())
-        .safeAreaInset(edge: .bottom, spacing: 0) { footer }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                // A newer Bud in the App Store: Update opens its page there.
+                if updates.offer != nil {
+                    UpdateAvailableNotice(updates: updates).padding(.horizontal, 10).padding(.top, 6)
+                }
+                footer
+            }
+        }
     }
 
     private func row(_ mode: GitBudWorkspaceMode) -> some View {

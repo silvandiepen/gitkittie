@@ -7,6 +7,7 @@ import UIKit
 /// Top-level flow: restore → connect → pick a repo → board.
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @State private var updates = AppUpdates()
 
     var body: some View {
         NavigationStack {
@@ -18,7 +19,7 @@ struct RootView: View {
                 } else if !model.hasHome {
                     ConnectView()
                 } else {
-                    HomeView()
+                    HomeView(updates: updates)
                 }
             }
         }
@@ -26,6 +27,7 @@ struct RootView: View {
         .overlay(alignment: .bottomTrailing) {
             SyncIndicator().padding(.trailing, 16).padding(.bottom, 12)
         }
+        .checksForAppUpdates(updates)
     }
 }
 
@@ -229,6 +231,7 @@ private struct ConnectView: View {
 /// The home screen: added repos, each showing the boards you picked from it. Tap a
 /// board to open it. Add a repo, then browse it to select boards. Saved locally.
 private struct HomeView: View {
+    let updates: AppUpdates
     @Environment(AppModel.self) private var model
     @State private var showAdd = false
     @State private var showAddServer = false
@@ -389,6 +392,11 @@ private struct HomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 16))
                     .accessibilityIdentifier("boardSuggestion")
+                }
+
+                // A newer Tasks in the App Store: Update opens its page there.
+                if updates.offer != nil {
+                    UpdateAvailableNotice(updates: updates)
                 }
 
                 ForEach(model.addedRepos) { repo in
