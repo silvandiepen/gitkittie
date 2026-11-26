@@ -40,8 +40,9 @@ struct BackgroundRun: Codable, Equatable {
 final class MobileSession {
     let model: AppModel
     private(set) var budget: StorageBudget
-    /// Set when the sync stopped because the device is short of space; says so in words.
-    private(set) var storageNotice: String?
+    /// Set while downloading is paused because the device is short of space; says so in words.
+    /// The pause itself is the shared sync's (`AccountSync.downloadPause`, MAIL-106), the Mac's too.
+    var storageNotice: String? { model.sync.downloadPause?.text }
     private(set) var isActive = false
     /// True while the index is made again because the mail folder changed in Files.
     private(set) var isCheckingFolder = false
@@ -51,10 +52,8 @@ final class MobileSession {
     private(set) var lastBackgroundRun: BackgroundRun?
 
     @ObservationIgnored let defaults: UserDefaults
-    @ObservationIgnored private let freeSpace: @Sendable (URL) -> Int64?
     @ObservationIgnored private var opening: Task<Void, Never>?
     @ObservationIgnored private var leaving: Task<Void, Never>?
-    @ObservationIgnored private var spaceWatch: Task<Void, Never>?
     /// How long to wait for a submission in flight before letting iOS suspend the app anyway;
     /// the outbox journal keeps a cut-off send at most once.
     @ObservationIgnored var sendGrace: Duration = .seconds(25)
@@ -64,13 +63,14 @@ final class MobileSession {
          freeSpace: @escaping @Sendable (URL) -> Int64? = FreeSpace.available) {
         self.model = model
         self.defaults = defaults
-        self.freeSpace = freeSpace
         self.budget = StorageBudget.load(from: defaults)
         if let data = defaults.data(forKey: Self.lastRunKey) {
             lastBackgroundRun = try? JSONDecoder().decode(BackgroundRun.self, from: data)
         }
         model.sync.services.syncOptions = budget.syncOptions
         model.sync.services.offlineCacheBytes = budget.cacheBytes
+        model.sync.services.freeSpace = freeSpace
+        model.sync.services.minimumFreeBytes = budget.minimumFreeBytes
     }
 
     /// The app's model: the Keychain, the standard folders, in-process attachment text with
@@ -116,21 +116,20 @@ final class MobileSession {
         if !firstOpen { await model.sync.stopAll() }
         await checkMailFolder(store)
         guard isActive else { return }
-        if hasRoom(store) {
-            await model.sync.start(model.accounts, store: store)
+        // The sync looks at the free space itself: under the budget's minimum nothing downloads,
+        // and it carries on by itself when there is room (MAIL-106).
+        await model.sync.start(model.accounts, store: store)
+        if model.sync.downloadPause == nil {
             await model.registerForSending(model.accounts)
             model.indexAttachmentTextInBackground()
         }
         await trimCache(store)
-        watchFreeSpace()
     }
 
     /// The app left the screen: stop the sync and IDLE (iOS closes sockets soon anyway), let a
     /// submission in flight finish under a background task, trim the cache.
     func enteredBackground(_ runner: any BackgroundTaskRunning) async {
         isActive = false
-        spaceWatch?.cancel()
-        spaceWatch = nil
         let task = Task { @MainActor in
             let expiry = Expiry()
             let id = runner.begin("Finish sending") { expiry.passed = true }
@@ -184,8 +183,8 @@ final class MobileSession {
         guard let store = model.mailStore, !isActive else { return run }
         if kind == .processing { await checkMailFolder(store) }
         let before = (try? await store.messageCount()) ?? 0
-        if hasRoom(store) {
-            await model.sync.start(model.accounts, store: store)
+        await model.sync.start(model.accounts, store: store)
+        if model.sync.downloadPause == nil {
             run.cutShort = !(await waitForOnePass(since: started))
             if extractText, !Task.isCancelled {
                 model.indexAttachmentTextInBackground()
@@ -209,7 +208,7 @@ final class MobileSession {
     private func waitForOnePass(since start: Date) async -> Bool {
         while !Task.isCancelled {
             let waiting = model.accounts.filter { account in
-                guard model.sync.isSyncing(account.id) else { return false }
+                guard model.sync.isSyncing(account.id), !model.sync.isPausedForSpace(account.id) else { return false }
                 guard let progress = model.sync.progress[account.id] else { return true }
                 switch progress.activity {
                 case .signInFailed, .waitingToRetry, .stopped: return false
@@ -237,13 +236,12 @@ final class MobileSession {
         budget.save(to: defaults)
         model.sync.services.syncOptions = budget.syncOptions
         model.sync.services.offlineCacheBytes = budget.cacheBytes
+        model.sync.services.minimumFreeBytes = budget.minimumFreeBytes
         guard isActive, let store = model.mailStore else { return }
         // Running syncs keep the options they started with: start them again.
         await model.sync.stopAll()
-        if hasRoom(store) {
-            await model.sync.start(model.accounts, store: store)
-            await model.registerForSending(model.accounts)
-        }
+        await model.sync.start(model.accounts, store: store)
+        if model.sync.downloadPause == nil { await model.registerForSending(model.accounts) }
         await trimCache(store)
     }
 
@@ -268,36 +266,6 @@ final class MobileSession {
         var budget = self.budget
         budget.historyDays = 0
         await setBudget(budget)
-    }
-
-    /// False, with the notice set, when free space is under the budget's minimum.
-    private func hasRoom(_ store: MailStore) -> Bool {
-        guard let free = freeSpace(store.locations.mailFolder) else { storageNotice = nil; return true }
-        if free < budget.minimumFreeBytes {
-            let limit = ByteCountFormatter.string(fromByteCount: budget.minimumFreeBytes, countStyle: .memory)
-            storageNotice = "Mail stopped downloading: less than \(limit) is free on \(DeviceWords.this). It carries on when there is room."
-            return false
-        }
-        storageNotice = nil
-        return true
-    }
-
-    /// While active, looks at free space every minute: stops the sync under the minimum and
-    /// starts it again when there is room.
-    private func watchFreeSpace() {
-        spaceWatch?.cancel()
-        spaceWatch = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
-                guard let self, self.isActive, let store = self.model.mailStore else { return }
-                let wasPaused = self.storageNotice != nil
-                if !self.hasRoom(store) {
-                    if !wasPaused { await self.model.sync.stopAll() }
-                } else if wasPaused {
-                    await self.model.sync.start(self.model.accounts, store: store)
-                }
-            }
-        }
     }
 
     // MARK: The mail folder (MAIL-051)

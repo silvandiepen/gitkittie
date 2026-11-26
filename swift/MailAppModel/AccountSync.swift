@@ -18,6 +18,13 @@ struct AccountServices {
     /// The most the offline cache of attachments keeps (GKM-036); `nil` takes the Mac's default.
     /// The iPhone sets its storage budget's cache here (MAIL-079).
     var offlineCacheBytes: Int64? = nil
+    /// Free space on the disk that holds a folder (MAIL-106); tests pass a value of their own.
+    var freeSpace: @MainActor (URL) -> Int64? = FreeSpace.available(at:)
+    /// Under this much free space downloading pauses (MAIL-106): 2 GB on the Mac, the storage
+    /// budget's minimum on the iPhone and iPad (MAIL-051).
+    var minimumFreeBytes: Int64 = DownloadPause.macMinimumFreeBytes
+    /// How often a running sync looks at the free space besides as mail comes in.
+    var freeSpaceCheckInterval: Duration = .seconds(60)
 
     static var live: AccountServices {
         var options = SyncOptions()
@@ -59,8 +66,14 @@ final class AccountSync {
     private(set) var folders: [MailAccountID: [SyncedFolder]] = [:]
     /// Each account's action replay: what is waiting to reach the provider (GKM-015).
     private(set) var replay: [MailAccountID: ReplayProgress] = [:]
+    /// Set while downloading is paused because the mail folder's disk is nearly full (MAIL-106);
+    /// says so in words. Nil when there is room.
+    private(set) var downloadPause: DownloadPause?
 
     @ObservationIgnored private var coordinators: [MailAccountID: SyncCoordinator] = [:]
+    /// Every account this sync was started for, downloading or paused for space, as it was
+    /// started: a pause and its resume keep the account's settings.
+    @ObservationIgnored private var started: [MailAccountID: MailAccount] = [:]
     @ObservationIgnored private var listeners: [MailAccountID: Task<Void, Never>] = [:]
     @ObservationIgnored private var replayers: [MailAccountID: ActionReplayer] = [:]
     @ObservationIgnored private var replayListeners: [MailAccountID: Task<Void, Never>] = [:]
@@ -69,6 +82,11 @@ final class AccountSync {
     /// Each account's server search: mail left at the provider (GKM-041).
     @ObservationIgnored private var searchers: [MailAccountID: ServerSearcher] = [:]
     @ObservationIgnored private var refreshPending = false
+    /// The store the sync writes into, for the free space checks.
+    @ObservationIgnored private var store: MailStore?
+    @ObservationIgnored private var spaceWatch: Task<Void, Never>?
+    @ObservationIgnored private var lastSpaceCheck: ContinuousClock.Instant?
+    @ObservationIgnored private var reviewingSpace = false
     /// Settable so the iPhone app can apply a changed storage budget (`syncOptions`) to the next
     /// start; a running sync keeps the options it started with.
     @ObservationIgnored var services: AccountServices
@@ -79,43 +97,38 @@ final class AccountSync {
         self.services = services
     }
 
+    /// True while some account is downloading (not paused for space, not stopped).
     var isRunning: Bool { !coordinators.isEmpty }
 
-    func isSyncing(_ account: MailAccountID) -> Bool { coordinators[account] != nil }
+    /// True when the account syncs on this device: downloading, or paused for space.
+    func isSyncing(_ account: MailAccountID) -> Bool { started[account] != nil }
+
+    /// True when the account's downloading is paused because the disk is nearly full (MAIL-106).
+    func isPausedForSpace(_ account: MailAccountID) -> Bool { started[account] != nil && coordinators[account] == nil }
 
     /// Starts syncing every connected account that has its password on this device; reads the
     /// folders last seen for all of them, so the sidebar has them before the first connect.
+    /// Under the minimum free space nothing downloads, and it says so (MAIL-106); the free
+    /// space is looked at again as mail comes in and once a minute.
     func start(_ accounts: [MailAccount], store: MailStore) async {
+        self.store = store
+        _ = hasRoom()
+        watchFreeSpace()
         for account in accounts {
             folders[account.id] = (try? await store.syncedFolders(account: account.id)) ?? []
-            guard account.connection != nil, coordinators[account.id] == nil else { continue }
+            guard account.connection != nil, started[account.id] == nil else { continue }
             await start(account, store: store)
         }
     }
 
     /// Starts one account's sync. Without a password on this device (a folder from another
-    /// Mac, or a removed Keychain item) it says so instead.
+    /// Mac, or a removed Keychain item) it says so instead. Actions, attachments on demand and
+    /// server search start whatever the free space; downloading only when there is room.
     func start(_ account: MailAccount, store: MailStore) async {
-        guard let connection = account.connection, coordinators[account.id] == nil else { return }
-        let secret: Secret?
-        do {
-            secret = try services.credentials.secret(for: account.id)
-        } catch {
-            progress[account.id] = Self.signInNeeded(String(describing: error))
-            return
-        }
-        guard let secret else {
-            progress[account.id] = Self.signInNeeded("\(DeviceWords.thisAtStart) has no password for this account yet.")
-            return
-        }
-        let connector = services.connections.imap(connection, password: secret)
-        var options = services.syncOptions
-        options.removesMailDeletedElsewhere = account.removesDeletedMail
-        options.mailboxes = account.mailboxSettings
-        let coordinator = SyncCoordinator(account: account.id, connector: connector,
-                                          store: store, options: options, log: services.connections.log)
-        coordinators[account.id] = coordinator
+        guard started[account.id] == nil, let connector = connector(for: account) else { return }
+        self.store = store
         let id = account.id
+        started[id] = account
         // Everyday actions go over their own connection, so a flag never waits for an import.
         let replayer = ActionReplayer(account: id, connector: connector, store: store,
                                       reconnect: services.syncOptions.reconnect, log: services.connections.log)
@@ -132,6 +145,39 @@ final class AccountSync {
             }
         }
         await replayer.start()
+        if hasRoom() { await startDownloading(account, connector: connector, store: store) }
+        if spaceWatch == nil { watchFreeSpace() }
+    }
+
+    /// The account's IMAP connector with its password; nil, with the account's status saying
+    /// why, when this device has no password for it.
+    private func connector(for account: MailAccount) -> (any MailboxConnector)? {
+        guard let connection = account.connection else { return nil }
+        let secret: Secret?
+        do {
+            secret = try services.credentials.secret(for: account.id)
+        } catch {
+            progress[account.id] = Self.signInNeeded(String(describing: error))
+            return nil
+        }
+        guard let secret else {
+            progress[account.id] = Self.signInNeeded("\(DeviceWords.thisAtStart) has no password for this account yet.")
+            return nil
+        }
+        return services.connections.imap(connection, password: secret)
+    }
+
+    /// Starts the account's download coordinator: folders, new mail, history, IDLE.
+    private func startDownloading(_ account: MailAccount, connector: any MailboxConnector, store: MailStore) async {
+        let id = account.id
+        // Stopped meanwhile (a resume and a stop can cross at an await): it stays stopped.
+        guard coordinators[id] == nil, started[id] != nil else { return }
+        var options = services.syncOptions
+        options.removesMailDeletedElsewhere = account.removesDeletedMail
+        options.mailboxes = account.mailboxSettings
+        let coordinator = SyncCoordinator(account: id, connector: connector,
+                                          store: store, options: options, log: services.connections.log)
+        coordinators[id] = coordinator
         listeners[id] = Task { [weak self] in
             for await update in coordinator.updates {
                 guard let self else { return }
@@ -146,6 +192,7 @@ final class AccountSync {
         // Stop listening first: the coordinator's last update (stopped) still carries the folders
         // as it last recorded them, which must not overwrite folders changed meanwhile (GKM-066).
         listeners.removeValue(forKey: account)?.cancel()
+        started[account] = nil
         if let coordinator = coordinators.removeValue(forKey: account) { await coordinator.stop() }
         if let replayer = replayers.removeValue(forKey: account) { await replayer.stop() }
         fetchers[account] = nil
@@ -261,8 +308,11 @@ final class AccountSync {
     func replayer(for account: MailAccountID) -> ActionReplayer? { replayers[account] }
 
     func stopAll() async {
-        for id in Array(coordinators.keys) { await stop(id) }
+        spaceWatch?.cancel()
+        spaceWatch = nil
+        for id in Array(started.keys) { await stop(id) }
         folders = [:]
+        downloadPause = nil
     }
 
     /// The folder the person is looking at, so its account waits on it.
@@ -280,6 +330,68 @@ final class AccountSync {
         replay[account] = nil
     }
 
+    // MARK: Free space (MAIL-106)
+
+    /// Looks at the free space on the mail folder's disk: pauses every download under the
+    /// minimum, and starts the paused ones again when there is room. The watch calls it once a
+    /// minute and as mail comes in; Settings calls it after freeing space.
+    func reviewFreeSpace() async {
+        guard let store, !reviewingSpace else { return }
+        reviewingSpace = true
+        defer { reviewingSpace = false }
+        if hasRoom() {
+            for (id, account) in started.sorted(by: { $0.key.rawValue < $1.key.rawValue }) where coordinators[id] == nil {
+                guard let connector = connector(for: account) else { continue }
+                await startDownloading(account, connector: connector, store: store)
+            }
+        } else {
+            for id in Array(coordinators.keys) {
+                // The account stays started (actions, attachments, search); only downloading stops.
+                listeners.removeValue(forKey: id)?.cancel()
+                if let coordinator = coordinators.removeValue(forKey: id) { await coordinator.stop() }
+            }
+        }
+    }
+
+    /// True when the mail folder's disk has the minimum free; sets or clears `downloadPause`.
+    /// A disk whose free space can't be read is taken to have room.
+    private func hasRoom() -> Bool {
+        lastSpaceCheck = .now
+        guard let store, let free = services.freeSpace(store.locations.mailFolder) else {
+            downloadPause = nil
+            return true
+        }
+        guard free < services.minimumFreeBytes else {
+            downloadPause = nil
+            return true
+        }
+        // The text gives the free space in tenths of a GB: a few bytes more or less is no news.
+        if downloadPause.map({ DownloadPause.amount($0.freeBytes) != DownloadPause.amount(free) }) ?? true {
+            downloadPause = DownloadPause(freeBytes: free, minimumFreeBytes: services.minimumFreeBytes)
+        }
+        return false
+    }
+
+    /// Checks again at once when the last check is more than a few seconds old.
+    private func checkFreeSpaceSoon() {
+        if let last = lastSpaceCheck, ContinuousClock.now - last < .seconds(5) { return }
+        lastSpaceCheck = .now
+        Task { [weak self] in await self?.reviewFreeSpace() }
+    }
+
+    /// While the sync runs, looks at the free space every `freeSpaceCheckInterval`.
+    private func watchFreeSpace() {
+        spaceWatch?.cancel()
+        let interval = services.freeSpaceCheckInterval
+        spaceWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard !Task.isCancelled, let self else { return }
+                await self.reviewFreeSpace()
+            }
+        }
+    }
+
     // MARK: Updates
 
     private func receive(_ update: SyncProgress, for account: MailAccountID) {
@@ -289,6 +401,8 @@ final class AccountSync {
         let changed = previous == nil || previous?.imported != update.imported || previous?.folders != update.folders
             || previous?.lastCompletedPass != update.lastCompletedPass
         if changed { scheduleRefresh() }
+        // Mail came in: a fast first sync can fill gigabytes between the minute's checks.
+        if previous?.imported != update.imported { checkFreeSpaceSoon() }
         // The sync reached the provider: queued actions can go now instead of at their backoff.
         if previous?.lastCompletedPass != update.lastCompletedPass || (previous.map(Self.isOffline) == true && !Self.isOffline(update)) {
             if let replayer = replayers[account] { Task { await replayer.kick() } }
