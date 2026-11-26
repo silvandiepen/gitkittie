@@ -11,6 +11,8 @@ struct AddAccountSheet: View {
     @State private var error: AccountSetupError?
     @State private var isVerifying = false
     @State private var chosenFolder: URL?
+    /// Why the folder just picked can't hold the mail (GKM-103); cleared by the next pick.
+    @State private var folderRefusal: String?
     @State private var task: Task<Void, Never>?
 
     var body: some View {
@@ -178,14 +180,22 @@ struct AddAccountSheet: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
             }
+            if let folderRefusal { SheetError(message: folderRefusal) }
         }
     }
 
     private func chooseFolder() {
         Task {
-            chosenFolder = await Platform.chooseFolder(
+            guard let url = await Platform.chooseFolder(
                 title: "Choose a Mail Folder", prompt: "Use Folder",
-                message: "GitKittie Mail keeps each message as an .eml file with a readable Markdown copy beside it.") ?? chosenFolder
+                message: "GitKittie Mail keeps each message as an .eml file with a readable Markdown copy beside it.") else { return }
+            folderRefusal = nil
+            // iCloud Drive and folders other apps sync can't hold the mail yet (GKM-103).
+            if let reason = model.mailFolderRefusal(for: url) {
+                folderRefusal = reason
+                return
+            }
+            chosenFolder = url
         }
     }
 
