@@ -143,6 +143,15 @@ public final class AppModel {
     public var newTaskImages: [TaskImage] = []
     /// ⌘N with no board open: the sheet that asks which board the new task is for.
     public var isChoosingBoardForNewTask = false
+    /// ⌘N while the board on screen ("repoID|folder") was still being read: the new task
+    /// starts there once it is (see `requestNewTask`).
+    @ObservationIgnored var newTaskAwaitsBoard: String?
+    /// Images opened in Tasks (dropped on the Dock icon, Open With) that wait for the board
+    /// their new task goes on: the board being read, or the one picked in the chooser.
+    @ObservationIgnored var imagesAwaitingBoard: [TaskImage] = []
+    /// Images opened in Tasks before it had restored — a drop on the Dock icon that launched
+    /// it. They start their task once `restore()` has reopened the last board.
+    @ObservationIgnored var imagesAwaitingRestore: [TaskImage] = []
     public var boardViewMode: BoardViewMode = .lanes
     public var showQuickCreate = false
 
@@ -322,6 +331,8 @@ public final class AppModel {
         await refreshSyncItems()
         Task { await flushOutbox() }
         await reopenLastBoard()
+        isRestoring = false
+        startImagesOpenedBeforeRestore()
     }
 
     /// Restore just enough to write a card from outside the app (the share extension):
@@ -804,6 +815,7 @@ public final class AppModel {
             errorMessage = error.localizedDescription
         }
         guard !transient else { return }
+        startAwaitedNewTask(onBoard: key)
         await loadProducts()
         if board != nil { await boardWasOpened(repo, folder: folder) }
         await loadReviews()
@@ -813,7 +825,7 @@ public final class AppModel {
     /// Keep the board that is on screen for when it is opened again.
     func rememberOpenBoard() {
         guard let repo = activeRepo, let folder = activeBoardFolder, let workspace, let project = selectedProject, let board,
-              transientListing == nil, !isDemo else { return }
+              project.folder == folder, transientListing == nil, !isDemo else { return }
         let key = "\(repo.id)|\(folder)"
         boardCache[key] = CachedBoard(workspace: workspace, project: project, board: board, loadedBacklogLanes: loadedBacklogLanes,
                                       docs: docsBoardKey == key ? docs : [], docSources: docsBoardKey == key ? docSources : [], products: products)
@@ -825,11 +837,14 @@ public final class AppModel {
     public func loadTransientCards() async {
         guard transientListing != nil, !hasTransientCards, let source, let project = selectedProject,
               let rootConfig = workspace?.rootConfig else { return }
+        let onScreen = openBoardKey
         isLoadingBoard = true
         defer { isLoadingBoard = false }
         do {
-            board = try await RemoteBoardStore.loadProjectBoard(
+            let loaded = try await RemoteBoardStore.loadProjectBoard(
                 source: source, project: project, rootConfig: rootConfig, loadBacklog: false)
+            guard openBoardKey == onScreen else { return }
+            board = loaded
             hasTransientCards = true
         } catch {
             errorMessage = error.localizedDescription
@@ -869,15 +884,21 @@ public final class AppModel {
 
     public func selectProject(_ project: BoardProject) async {
         guard let source, let workspace else { return }
+        // Another board opened while this one was read keeps the screen: what was read here
+        // must not take its place (and ⌘N must not file tasks into it).
+        let onScreen = openBoardKey
         isLoadingBoard = true
         defer { isLoadingBoard = false }
-        loadedBacklogLanes = []
         do {
-            board = try await RemoteBoardStore.loadProjectBoard(
+            let loaded = try await RemoteBoardStore.loadProjectBoard(
                 source: source, project: project, rootConfig: workspace.rootConfig, loadBacklog: false
             )
+            guard openBoardKey == onScreen else { return }
+            loadedBacklogLanes = []
+            board = loaded
             selectedProject = project
         } catch {
+            guard openBoardKey == onScreen else { return }
             errorMessage = error.localizedDescription
         }
         await loadReviews()
@@ -885,11 +906,14 @@ public final class AppModel {
 
     /// Lazily load a backlog lane's cards on demand.
     public func loadBacklogLane(_ lane: Lane) async {
-        guard let source, let project = selectedProject, let rootConfig = workspace?.rootConfig, var board else { return }
+        guard let source, let project = selectedProject, let rootConfig = workspace?.rootConfig else { return }
+        let onScreen = openBoardKey
         loadingBacklogLane = lane.id
         defer { loadingBacklogLane = nil }
         let cards = (try? await RemoteBoardStore.loadLaneCards(
             source: source, project: project, lane: lane, rootConfig: rootConfig)) ?? []
+        // The board as it is now, and only if it is still the one the lane belongs to.
+        guard openBoardKey == onScreen, selectedProject?.id == project.id, var board else { return }
         if let index = board.columns.firstIndex(where: { $0.lane.id == lane.id }) {
             board.columns[index].cards = cards
             self.board = board
@@ -1344,12 +1368,16 @@ public final class AppModel {
 
     func performWrite(_ operation: @escaping () async throws -> Void) async {
         guard let project = selectedProject else { return }
+        let onScreen = openBoardKey
         isSaving = true
         errorMessage = nil
         do { try await operation() } catch { errorMessage = error.localizedDescription }
         isSaving = false
         // A transiently opened board is not on screen: don't reload it after every write.
         guard transientListing == nil else { return }
+        // Another board was opened while this was being sent: that board is on screen now,
+        // and reading this one back would put it in its place.
+        guard openBoardKey == onScreen, selectedProject?.id == project.id else { return }
         await selectProject(project)
     }
 

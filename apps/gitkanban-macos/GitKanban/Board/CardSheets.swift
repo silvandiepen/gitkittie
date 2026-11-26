@@ -727,6 +727,12 @@ struct NewTaskSheet: View {
                 let dropped = model.takeNewTaskImages()
                 if !dropped.isEmpty { Task { await add(dropped) } }
             }
+            // Images opened in Tasks while this sheet is up (dropped on the Dock icon) join it.
+            .onChange(of: model.newTaskImages.map(\.id)) { _, ids in
+                guard !ids.isEmpty else { return }
+                let opened = model.takeNewTaskImages()
+                Task { await add(opened) }
+            }
             .fileImporter(isPresented: $isImporting, allowedContentTypes: [.image], allowsMultipleSelection: true) { result in
                 guard case .success(let urls) = result else { return }
                 Task { await add(urls.compactMap { TaskImage.from(fileURL: $0) }) }

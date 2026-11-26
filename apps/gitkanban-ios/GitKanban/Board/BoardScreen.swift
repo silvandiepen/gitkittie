@@ -139,6 +139,8 @@ struct BoardScreen: View {
             }
             if let lane = firstLane {
                 Button { model.newTaskLane = lane } label: { Image(systemName: "plus") }
+                    // ⌘N on an iPad with a keyboard, as on the Mac.
+                    .keyboardShortcut("n")
                     .help("New task")
                     .accessibilityLabel("New task")
                     .accessibilityIdentifier("newTaskButton")
