@@ -46,6 +46,10 @@ struct MailSplitView: View {
                 .navigationSplitViewColumnWidth(min: large ? 320 : 260, ideal: large ? 420 : 300, max: large ? 480 : 360)
         } content: {
             ContentColumn()
+                // Always Junk or Always Trash from a row's menu (GKM-072), on the list it was
+                // asked from: beside the split view's own sheets it kept them from opening. In
+                // Settings, Blocked Senders shows its own, over that sheet.
+                .sheet(item: rulePreview) { _ in RulePreviewScreen().environment(model) }
                 .navigationSplitViewColumnWidth(min: 320, ideal: large ? 440 : 380, max: large ? 560 : 480)
         } detail: {
             DetailColumn()
@@ -106,8 +110,14 @@ struct MailSplitView: View {
         }
     }
 
+    /// A sender rule change waiting for Apply, unless Settings is open (it shows its own).
+    private var rulePreview: Binding<SendersModel.PendingChange?> {
+        Binding(get: { router.showsSettings ? nil : model.senders.pending },
+                set: { if $0 == nil { model.senders.pending = nil } })
+    }
+
     private var currentError: String? {
-        model.actionError ?? model.browser.actionError ?? model.actions.notice ?? model.spaces.actionError
+        model.actionError ?? model.browser.actionError ?? model.actions.notice ?? model.spaces.actionError ?? model.senders.notice
     }
 
     private var errorShown: Binding<Bool> {
@@ -119,6 +129,7 @@ struct MailSplitView: View {
         model.browser.actionError = nil
         model.actions.notice = nil
         model.spaces.actionError = nil
+        model.senders.notice = nil
     }
 }
 
