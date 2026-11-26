@@ -79,6 +79,14 @@ enum AccessibilityAuditPolicy {
            sidebarRows.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(element.frame) && $0.label == element.label }) {
             return "a sidebar row's text, shown whole and read whole"
         }
+        // An account's name above its folders is one line, shortened in the middle when it
+        // doesn't fit, on purpose (an address wrapped mid-domain otherwise); its row reads it
+        // whole. Reported clipped on iPhone while it showed whole (GKM-064, iPhone run 1). Only
+        // the header whose sync status names that same account.
+        if finding.type == .textClipped, element.type == .staticText,
+           app.staticTexts["syncStatus.\(element.label)"].exists {
+            return "an account's header, one line by design"
+        }
         // A one-line SwiftUI TextField (the subject, the account name) is reported clipped while
         // it shows all its text and its placeholder whole (GKM-061 screenshots); the field's text
         // layout is the system's.
@@ -196,10 +204,12 @@ enum DynamicTypeAllowlist {
             }),
         Container(
             name: "ContentUnavailableView",
-            reason: "the empty list's \"No mail yet\" and its description are the system's empty-state view, in its text styles",
-            contains: { element, _ in
-                element.type == .staticText
-                    && (element.label == "No mail yet" || element.label.hasPrefix("Add an account. Mail keeps every message"))
+            reason: "the empty list's \"No mail yet\", its description and its Add Account button are the system's empty-state view, in its text styles",
+            contains: { element, app in
+                (element.type == .staticText
+                    && (element.label == "No mail yet" || element.label.hasPrefix("Add an account. Mail keeps every message")))
+                    || (element.type == .button && element.identifier == "addAccountButton"
+                        && app.staticTexts["No mail yet"].exists)
             }),
     ]
 
