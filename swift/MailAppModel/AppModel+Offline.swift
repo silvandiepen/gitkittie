@@ -176,9 +176,9 @@ extension AppModel {
 /// folder takes.
 enum FreeSpace {
     /// Free space on the volume, as the system reports it for things the person asked for.
-    static func available(at url: URL) -> Int64? {
-        let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        return values?.volumeAvailableCapacityForImportantUsage
+    /// The same reading as the sync's floor (GKM-091).
+    @Sendable static func available(at url: URL) -> Int64? {
+        FreeSpaceFloor.volumeAvailable(at: url)
     }
 
     static func allocatedSize(of folder: URL) -> Int64 {
