@@ -98,6 +98,7 @@ struct MailboxesView: View {
             }
             // On iPhone, choosing a mailbox (again) shows its list.
             router.compactColumn = .content
+            router.mailboxChoices += 1
             Task { await model.select(new) }
         })
     }

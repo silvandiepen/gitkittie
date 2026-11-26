@@ -29,6 +29,8 @@ struct MailSplitView: View {
     @Environment(AppModel.self) private var model
     @Environment(MobileSession.self) private var session
     @State private var columns = NavigationSplitViewVisibility.all
+    /// Whether the iPad lays the mailboxes over the list (portrait) instead of beside them.
+    @State private var sidebarOverlays = false
     @State private var router = MailRouter()
     @State private var undo = UndoManager()
     /// Read outside the split view: inside, its columns have their own size classes.
@@ -72,6 +74,23 @@ struct MailSplitView: View {
         }
         .onChange(of: sizeClass, initial: true) { _, sizeClass in
             router.isCollapsed = sizeClass == .compact
+        }
+        // By the width alone: the keyboard shortens the view, and comparing with the height took
+        // portrait for landscape whenever the keyboard was up. Too narrow for both leading columns
+        // and a readable conversation (420 pt) beside them, the system lays the sidebar over the list.
+        .onGeometryChange(for: Bool.self) { proxy in
+            proxy.size.width < 300 + 380 + 420
+        } action: { sidebarOverlays = $0 }
+        // In portrait the system puts the sidebar away when a mailbox is chosen, but the
+        // visibility stays `.all`, so the next update (a text size change, the accessibility
+        // audit) laid it over the list again, where it swallowed the tap on a message (GKM-084).
+        // Say what is shown instead; turned to landscape, all three columns come back.
+        .onChange(of: router.mailboxChoices) {
+            // (On iPhone the split view is one stack and has no sidebar to put away.)
+            if !router.isCollapsed, sidebarOverlays, columns == .all { columns = .doubleColumn }
+        }
+        .onChange(of: sidebarOverlays) { _, overlays in
+            if !overlays { columns = .all }
         }
         .onChange(of: model.browser.selectedRowID) { _, id in
             if id != nil { router.compactColumn = .detail }
@@ -141,6 +160,8 @@ final class MailRouter {
     var showsMailboxesAlone: Bool { isCollapsed && compactColumn == .sidebar }
     var showsAddAccount = false
     var showsSettings = false
+    /// Counts the times a mailbox is chosen in the sidebar, the same one again included.
+    var mailboxChoices = 0
 
     func compose(_ id: DraftID?) {
         guard let id else { return }
