@@ -211,7 +211,11 @@ extension MailStore {
                 try mapping.setState(.done, of: Array(sequences.dropLast()), at: now)
                 try mapping.setState(.awaitingSync, of: [last], at: now)
             } else {
-                try mapping.setState(.done, of: sequences, at: now)
+                // When the provider said where the message went, it was this command that moved
+                // it: a sync that saw it leave the source meanwhile and superseded the row was
+                // seeing this very move. The row is done, so Undo can bring the message back
+                // (GKM-071: with hundreds in one batch, the sync often looks in between).
+                try mapping.setState(.done, of: sequences, at: now, includingSuperseded: !to.isEmpty)
             }
         }
         try refreshIndex(ids, account: account, mapping: mapping)

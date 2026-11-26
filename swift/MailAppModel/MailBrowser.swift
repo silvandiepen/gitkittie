@@ -78,6 +78,8 @@ struct SearchFilters: Equatable {
     var flaggedOnly = false
     /// The category chip (GKM-018).
     var category: MailCategory?
+    /// The From chip: exactly this sender's address, from "See All Mail from…" (GKM-071).
+    var sender: MailAddress?
 
     var isEmpty: Bool { self == SearchFilters() }
 }
@@ -202,10 +204,12 @@ final class MailBrowser {
     @ObservationIgnored private var serverQuery: ServerQuery?
     @ObservationIgnored private var serverTask: Task<Void, Never>?
 
-    private var store: MailStore?
+    @ObservationIgnored private(set) var store: MailStore?
     private var preferences: RemoteContentPreferences?
     private var quickLookFolder: URL?
     private var generation = 0
+    /// What the loaded list shows; a change of view, search or chips ends a selection of many.
+    @ObservationIgnored private var loadedList: ListIdentity?
     /// Injected for tests; the user's calendar and clock otherwise.
     var calendar = Calendar.current
     var now: () -> Date = Date.init
@@ -260,6 +264,14 @@ final class MailBrowser {
         await reload()
     }
 
+    /// "See All Mail from…" (GKM-071): one sender's mail, the search cleared and the From chip
+    /// set. The view (All Mail) is the app model's to choose.
+    func showSender(_ sender: MailAddress) async {
+        searchText = ""
+        filters = SearchFilters(sender: sender)
+        await reload()
+    }
+
     /// The query the list runs: the scope, then the search text's own syntax, then the chips.
     var query: SearchQuery {
         var query = SearchQuery.parse(searchText, calendar: calendar)
@@ -273,27 +285,50 @@ final class MailBrowser {
         query.unreadOnly = query.unreadOnly || filters.unreadOnly
         query.flaggedOnly = query.flaggedOnly || filters.flaggedOnly
         query.category = filters.category ?? query.category ?? scope.category
+        query.sender = filters.sender?.address
         return query
     }
 
-    /// Reloads the first page. Keeps the selection when it is still in the list.
-    func reload() async {
+    /// The view, search text and chips: what a selection of many belongs to.
+    struct ListIdentity: Equatable {
+        var scope: MailScope
+        var searchText: String
+        var filters: SearchFilters
+    }
+
+    var listIdentity: ListIdentity { ListIdentity(scope: scope, searchText: searchText, filters: filters) }
+
+    /// Reloads the first page. Keeps the selection when it is still in the list. With
+    /// `keepingPlace` (after an action took rows out), as many rows as were loaded, so the list
+    /// stays where it was instead of going back to its first page (GKM-071).
+    func reload(keepingPlace: Bool = false) async {
         guard let store else { return }
         generation += 1
         let mine = generation
+        let identity = listIdentity
+        if loadedList != identity {
+            loadedList = identity
+            clearMarks()
+        }
         do {
-            let found = try await page(from: store, offset: 0)
+            let count = keepingPlace ? max(rows.count, Self.pageSize) : Self.pageSize
+            let found = try await page(from: store, offset: 0, limit: count)
             guard mine == generation else { return } // a newer query landed meanwhile
             rows = found
-            canLoadMore = found.count == Self.pageSize
+            canLoadMore = found.count == count
             if let selected = selectedRowID, !rows.contains(where: { $0.id == selected }) {
                 selectedRowID = nil
                 openThread = nil
             }
             // A row that left the view (trashed, moved, archived) leaves the marks with it, so
-            // the next action never reaches mail no longer shown (GKM-075).
+            // the next action never reaches mail no longer shown (GKM-075). Marks may include
+            // rows not loaded yet (Select All, GKM-071): those are checked against the view's ids.
             let shown = Set(rows.map(\.id))
-            if !markedRowIDs.isSubset(of: shown) { markedRowIDs.formIntersection(shown) }
+            if !markedRowIDs.isSubset(of: shown) {
+                let inView = try await viewRowIDs(from: store)
+                guard mine == generation else { return }
+                markedRowIDs.formIntersection(Set(inView))
+            }
             updateServerSearch()
         } catch {
             actionError = String(describing: error)
@@ -304,7 +339,7 @@ final class MailBrowser {
         guard let store, canLoadMore else { return }
         let mine = generation
         do {
-            let more = try await page(from: store, offset: rows.count)
+            let more = try await page(from: store, offset: rows.count, limit: Self.pageSize)
             guard mine == generation else { return }
             rows += more
             canLoadMore = more.count == Self.pageSize
@@ -313,12 +348,20 @@ final class MailBrowser {
         }
     }
 
-    private func page(from store: MailStore, offset: Int) async throws -> [ListRow] {
+    /// The id of every row the view has, loaded or not, in the list's order: what Select All
+    /// takes (GKM-071). Ids only, so thousands load no rows.
+    func viewRowIDs(from store: MailStore) async throws -> [String] {
+        let query = query
+        if isSearching { return try await store.messageIDs(query).map(ListRow.id(of:)) }
+        return try await store.threadIDs(query).map { "t:" + $0 }
+    }
+
+    private func page(from store: MailStore, offset: Int, limit: Int) async throws -> [ListRow] {
         let query = query
         if isSearching {
-            return try await store.search(query, limit: Self.pageSize, offset: offset).map(ListRow.message)
+            return try await store.search(query, limit: limit, offset: offset).map(ListRow.message)
         }
-        return try await store.threads(query, limit: Self.pageSize, offset: offset).map(ListRow.thread)
+        return try await store.threads(query, limit: limit, offset: offset).map(ListRow.thread)
     }
 
     // MARK: Searching the server (GKM-041)

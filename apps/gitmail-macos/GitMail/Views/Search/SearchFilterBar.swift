@@ -26,6 +26,17 @@ struct SearchFilterBar: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
+                // "See All Mail from…" (GKM-071): exactly this address; closing it goes back.
+                if let sender = filters.sender {
+                    Button { Task { await model.leaveSenderView() } } label: {
+                        Chip(title: "From \(SenderText.name(sender))", systemImage: "xmark.circle.fill", isActive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Only mail from \(sender.address). Click or press Escape to go back.")
+                    .accessibilityLabel("From \(sender.address)")
+                    .accessibilityHint("Shows all mail again")
+                    .accessibilityIdentifier("senderChip")
+                }
                 if model.accounts.count > 1 {
                     Menu {
                         Button("Any Account") { update { $0.account = nil; $0.folder = nil } }

@@ -129,6 +129,30 @@ final class ServerSearchAppTests: XCTestCase {
         XCTAssertNotNil(ServerQuery.make(SearchQuery(text: "invoice", space: MailSpaceID()), explicitCategory: nil)?.unavailable)
     }
 
+    /// "See All Mail from…" (GKM-071, MAIL-098): the sender's older mail is asked of the server
+    /// by FROM, and only that exact address is shown, though IMAP matches a longer one too.
+    func testSeeAllMailFromAlsoFindsTheSendersOlderMailOnTheServer() async throws {
+        XCTAssertEqual(ServerQuery.make(SearchQuery(sender: "deals@shop.example"), explicitCategory: nil)?.criteria.senders,
+                       ["deals@shop.example"], "a sender alone is enough to ask")
+        let server = try await LocalMailServer.require()
+        let user = try await server.makeUser()
+        try await server.append(["Deal old", "Deal new"], for: user, receivedDaysAgo: [90, 0], from: "Deals <deals@shop.example>")
+        try await server.append(["Hot old"], for: user, receivedDaysAgo: [90], from: "Hot <hot-deals@shop.example>")
+        try await server.append(["Bo old"], for: user, receivedDaysAgo: [90])
+        let model = AppModel(locations: locations, services: services(trust: server.trust))
+        model.browser.serverSearchDelay = .zero
+        await model.open()
+        let account = try await model.addAccount(draft(server, user))
+        try await waitUntil("the first sync") { model.syncStatus(account.id)?.hasPrefix("Up to date") == true }
+
+        await model.showAllMail(from: MailAddress(name: "Deals", address: "deals@shop.example"))
+        XCTAssertEqual(subjects(model), ["Deal new"])
+        try await waitUntil("the server's results") { !model.browser.server.hits.isEmpty }
+        XCTAssertEqual(model.browser.server.hits.map(\.subject), ["Deal old"], "never hot-deals@, never Bo")
+        XCTAssertEqual(model.browser.server, .found(model.browser.server.hits, total: 1))
+        await model.sync.stopAll()
+    }
+
     func testOldMailIsFoundOnTheServerOpensAndIsThenALocalResult() async throws {
         let (model, account, _) = try await syncedModel(["Invoice March", "Lunch", "Invoice April", "Invoice today"],
                                                         receivedDaysAgo: [90, 1, 60, 0])

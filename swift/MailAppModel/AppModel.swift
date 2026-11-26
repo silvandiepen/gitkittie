@@ -97,6 +97,8 @@ final class AppModel {
 
     /// Focused is where the window opens (GKM-018).
     private(set) var selection: SidebarSelection = .category(.focused)
+    /// Where "See All Mail from…" was opened from, to go back to.
+    private(set) var senderReturn: SidebarSelection?
 
     /// A notification that was opened before the store was (GKM-037): shown once it is.
     @ObservationIgnored private var pendingNotification: MailMessageID?
@@ -218,10 +220,30 @@ final class AppModel {
     }
 
     func select(_ selection: SidebarSelection) async {
+        senderReturn = nil
         guard selection != self.selection else { return }
         self.selection = selection
         await browser.setScope(selection.scope)
         if case .folder(let account, let name) = selection { await sync.setActiveFolder(name, account: account) }
+    }
+
+    /// "See All Mail from…" (GKM-071, MAIL-098): All Mail, every account and folder, narrowed to
+    /// exactly this sender's address by the From chip. Escape or the chip's close goes back.
+    func showAllMail(from sender: MailAddress) async {
+        let back = senderReturn ?? selection
+        await select(.allMail)
+        await browser.showSender(sender)
+        senderReturn = back
+    }
+
+    /// Ends "See All Mail from…": the From chip off, back to the view it started from.
+    func leaveSenderView() async {
+        guard browser.filters.sender != nil else { return }
+        let back = senderReturn
+        var filters = browser.filters
+        filters.sender = nil
+        await browser.setFilters(filters)
+        if let back { await select(back) }
     }
 
     /// A notification was clicked (GKM-037, MAIL-086): show its conversation. The list stays

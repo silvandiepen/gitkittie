@@ -118,7 +118,7 @@ final class PartialMessageTests: XCTestCase {
         let pending = try await store.pendingClassificationCount()
         XCTAssertEqual(pending, 0, "verdicts kept: migrated, not rebuilt")
         let schema = try await store.indexSchemaForTesting()
-        XCTAssertEqual(schema, 8, "on through 6 → 7 (provider deletions, MAIL-075) and 7 → 8 (Trash and Junk, MAIL-102) as well")
+        XCTAssertEqual(schema, 9, "on through 6 → 7 (provider deletions, MAIL-075), 7 → 8 (Trash and Junk, MAIL-102) and 8 → 9 (the sender index, MAIL-098) as well")
         let listed = try await store.search(SearchQuery())
         XCTAssertEqual(listed.count, 1, "summaries read the new table")
         XCTAssertNil(listed.first?.deletedAtProvider)

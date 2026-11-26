@@ -9,7 +9,9 @@ struct ReaderView: View {
 
     var body: some View {
         Group {
-            if let thread = model.browser.openThread {
+            if model.browser.selectsMany {
+                SelectionSummaryView()
+            } else if let thread = model.browser.openThread {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(thread.subject?.isEmpty == false ? thread.subject! : "(No subject)")

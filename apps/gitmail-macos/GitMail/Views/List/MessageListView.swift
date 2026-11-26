@@ -29,6 +29,7 @@ struct MessageListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.window)
         .navigationTitle(title)
+        .navigationSubtitle(browser.filters.sender.map { "From \(SenderText.name($0))" } ?? "")
         .searchable(text: searchText, placement: .toolbar, prompt: "Search mail")
         .toolbar { MessageActionToolbar(model: model) }
         .toolbar {
@@ -54,7 +55,7 @@ struct MessageListView: View {
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         ForEach(browser.rows) { row in
-                            MessageRow(row: row, isSelected: row.id == browser.selectedRowID || browser.isMarked(row.id),
+                            MessageRow(row: row, isSelected: browser.markedRowIDs.isEmpty ? row.id == browser.selectedRowID : browser.isMarked(row.id),
                                        showsAccount: model.accounts.count > 1,
                                        accountName: model.accounts.first { $0.id == row.latest.account }?.displayName,
                                        isPending: model.sync.replay[row.latest.account]?.status.pendingMessages.contains(row.latest.id) == true,
@@ -72,6 +73,7 @@ struct MessageListView: View {
                                 }
                                 .draggable(SpaceLook.dragPayload(browser.threadIDs(actingOn: row.id)))
                                 .contextMenu {
+                                    SeeAllMailFromButton(row: row)
                                     MessageActionRowMenu(rowID: row.id)
                                     Divider()
                                     SpaceRowMenu(rowID: row.id)
@@ -91,6 +93,13 @@ struct MessageListView: View {
                 .focusEffectDisabled()
                 .focused($listFocused)
                 .trashOnDelete(model)
+                // ⌘A (Edit ▸ Select All) takes every row of the view, loaded or not (GKM-071).
+                .onCommand(#selector(NSResponder.selectAll(_:))) { Task { await browser.selectAll() } }
+                // Escape: first the selection of many, then "See All Mail from…".
+                .onExitCommand {
+                    if !browser.markedRowIDs.isEmpty { browser.clearMarks() }
+                    else if browser.filters.sender != nil { Task { await model.leaveSenderView() } }
+                }
                 .onMoveCommand { direction in
                     switch direction {
                     case .down: Task { await browser.selectNext() }

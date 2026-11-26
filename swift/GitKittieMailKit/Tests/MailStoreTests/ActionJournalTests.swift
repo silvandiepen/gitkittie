@@ -168,6 +168,35 @@ final class ActionJournalTests: XCTestCase {
         XCTAssertEqual(mailboxes, ["Archive"])
     }
 
+    /// GKM-071: the replay moved hundreds; before it completed every row, the sync saw them
+    /// leave the inbox and superseded the rows still open. The provider then confirmed where
+    /// each went (COPYUID): it was this move, so the rows are done and one Undo covers them all.
+    func testAMoveTheSyncSawBeforeTheReplayCompletedItIsStillUndone() async throws {
+        let store = try await MailStore.open(locations)
+        let a = try await synced(store, "a", uid: 1)
+        let b = try await synced(store, "b", uid: 2)
+        let performed = try await store.perform([MailChange(a, .move(from: "INBOX", to: "Trash")),
+                                                 MailChange(b, .move(from: "INBOX", to: "Trash"))])
+        let batch = try XCTUnwrap(performed)
+        let rows = try await store.pendingActions(account: account)
+        // The MOVE went; the sync looks before the replay records it.
+        try await store.forget(location("INBOX", 1), account: account)
+        try await store.forget(location("INBOX", 2), account: account)
+        let open = try await store.pendingActions(account: account)
+        XCTAssertEqual(open, [], "the sync superseded both")
+        // The replay records what the provider reported: a with its new UID, b without one.
+        try await store.completeLocationActions(rows.filter { $0.message == a }, from: [location("INBOX", 1)],
+                                                to: [location("Trash", 11)], awaitingLocation: true, account: account)
+        try await store.completeLocationActions(rows.filter { $0.message == b }, from: [location("INBOX", 2)],
+                                                to: [], awaitingLocation: true, account: account)
+        let inverse = try await store.undo(batch)
+        XCTAssertEqual(inverse?.count, 1, "the confirmed move is undone; an unconfirmed one stays the provider's to say")
+        let back = try await store.pendingActions(account: account)
+        XCTAssertEqual(back.map(\.message), [a])
+        XCTAssertEqual(back.first?.source, "Trash")
+        XCTAssertEqual(back.first?.target, "INBOX")
+    }
+
     func testModSeqCheckpointResetsWithUIDValidity() async throws {
         let store = try await MailStore.open(locations)
         try await store.saveCursor(folder: "INBOX", uidValidity: 7, highestUID: 3, historyComplete: true, serverCount: 3, account: account)

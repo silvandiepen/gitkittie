@@ -275,6 +275,22 @@ public actor MailStore {
         try index.threads(matching: query, limit: limit, offset: offset)
     }
 
+    /// Every conversation in a view by id, newest activity first, without loading rows: what
+    /// Select All takes (GKM-071).
+    public func threadIDs(_ query: SearchQuery) throws -> [String] {
+        try index.threadIDs(matching: query)
+    }
+
+    /// Every message matching a search by id, in the list's order (GKM-071).
+    public func messageIDs(_ query: SearchQuery) throws -> [MailMessageID] {
+        try index.messageIDs(matching: query)
+    }
+
+    /// These messages as the list shows them; ids no longer stored are left out.
+    public func summaries(of ids: [MailMessageID]) throws -> [MessageSummary] {
+        try index.summaries(of: ids)
+    }
+
     /// Every message in a thread, oldest first.
     public func thread(_ threadID: String) throws -> [MessageSummary] {
         try index.thread(threadID)

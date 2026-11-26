@@ -27,6 +27,14 @@ enum MessageAction: Equatable {
         case .deletePermanently: "Delete"
         }
     }
+
+    /// Takes the messages out of the view they are in: the rows leave and the selection ends.
+    var changesLocation: Bool {
+        switch self {
+        case .archive, .moveToTrash, .move, .deletePermanently: true
+        case .markRead, .markUnread, .flag, .unflag: false
+        }
+    }
 }
 
 /// Turns an action on conversations or messages into journal rows, applies them through the
@@ -43,10 +51,12 @@ final class MailActions {
     var notice: String?
     /// Conversations waiting for the person to confirm Delete Permanently.
     var deletionToConfirm: DeletionRequest?
+    /// A Move to Trash of many, waiting for the person to confirm it once (GKM-071, MAIL-099).
+    var trashToConfirm: TrashRequest?
 
     struct DeletionRequest: Identifiable {
         let id = UUID()
-        var threads: [String]
+        var targets: ActionTargets
         var scope: MailScope
         var count: Int
     }
@@ -54,6 +64,18 @@ final class MailActions {
     /// Called after an action, its Undo or Redo changed mail: the counts, badge and spaces
     /// follow at once, like the list (GKM-075). Set by the app model.
     @ObservationIgnored var onMailChanged: (@MainActor () async -> Void)?
+
+    struct TrashRequest: Identifiable {
+        let id = UUID()
+        var targets: ActionTargets
+        var scope: MailScope
+        /// "Move 312 conversations to Trash?"
+        var question: String { SelectionText.trashQuestion(targets) }
+    }
+
+    /// From this many conversations (or messages), Move to Trash asks first (MAIL-099).
+    static let trashConfirmationThreshold = 50
+
     /// The window's undo manager (Edit ▸ Undo, ⌘Z). Set by the mail window; tests pass their own.
     @ObservationIgnored weak var undoManager: UndoManager?
     @ObservationIgnored private var store: MailStore?
@@ -69,16 +91,49 @@ final class MailActions {
 
     // MARK: Intents
 
-    /// Acts on whole conversations (the list's marked rows, or the selected one).
+    /// Acts on whole conversations.
     func perform(_ action: MessageAction, threads threadIDs: [String], in scope: MailScope) async {
-        guard let store, !threadIDs.isEmpty else { return }
+        await perform(action, targets: ActionTargets(threads: threadIDs), in: scope)
+    }
+
+    /// Acts on what the list's selection covers (``MailBrowser/targets(actingOn:)``): whole
+    /// conversations and single messages, in one step and one Undo, through the journal. A
+    /// deliberate selection is acted on as chosen: Clean Up's protections (MAIL-059) are for
+    /// what it suggests, not for this (MAIL-100).
+    func perform(_ action: MessageAction, targets: ActionTargets, in scope: MailScope) async {
+        guard let store, !targets.isEmpty else { return }
         do {
-            var messages: [MessageSummary] = []
-            for thread in threadIDs { messages += try await store.thread(thread) }
-            await perform(action, messages: messages, in: scope, wholeThreads: true)
+            var conversations: [MessageSummary] = []
+            for thread in targets.threads { conversations += try await store.thread(thread) }
+            let singles = try await store.summaries(of: targets.messages)
+            var changes = try await plan(action, messages: conversations, in: scope, wholeThreads: true, store: store)
+            changes += try await plan(action, messages: singles, in: scope, wholeThreads: false, store: store)
+            await apply(changes, action: action)
         } catch {
             notice = String(describing: error)
         }
+    }
+
+    /// Move to Trash for the list (⌫, the toolbar, the menus): in Trash it asks to delete
+    /// permanently; for many it asks once first ("Move 312 conversations to Trash?"); otherwise
+    /// it moves them at once.
+    func trash(_ targets: ActionTargets, in scope: MailScope) async {
+        guard !targets.isEmpty else { return }
+        if isTrash(scope) {
+            await requestDeletion(targets, in: scope)
+        } else if targets.count >= Self.trashConfirmationThreshold {
+            trashToConfirm = TrashRequest(targets: targets, scope: scope)
+        } else {
+            await perform(.moveToTrash, targets: targets, in: scope)
+        }
+    }
+
+    /// `request` is the one the dialog showed: a dialog clears ``trashToConfirm`` as it closes,
+    /// before its button's task runs.
+    func confirmTrash(_ shown: TrashRequest? = nil) async {
+        guard let request = shown ?? trashToConfirm else { return }
+        trashToConfirm = nil
+        await perform(.moveToTrash, targets: request.targets, in: request.scope)
     }
 
     /// Acts on single messages (the reader's focused message).
@@ -89,16 +144,22 @@ final class MailActions {
     /// Delete Permanently asks first: what it removes cannot come back from the provider's Trash
     /// (Undo can still put the copy kept on this Mac back).
     func requestDeletion(threads: [String], in scope: MailScope) async {
-        guard let store, isTrash(scope), !threads.isEmpty else { return }
-        var count = 0
-        for thread in threads { count += (try? await store.thread(thread).count) ?? 0 }
-        deletionToConfirm = DeletionRequest(threads: threads, scope: scope, count: count)
+        await requestDeletion(ActionTargets(threads: threads), in: scope)
     }
 
-    func confirmDeletion() async {
-        guard let request = deletionToConfirm else { return }
+    func requestDeletion(_ targets: ActionTargets, in scope: MailScope) async {
+        guard let store, isTrash(scope), !targets.isEmpty else { return }
+        var count = targets.messages.count
+        for thread in targets.threads { count += (try? await store.thread(thread).count) ?? 0 }
+        deletionToConfirm = DeletionRequest(targets: targets, scope: scope, count: count)
+    }
+
+    /// `request` is the one the dialog showed: a dialog clears ``deletionToConfirm`` as it
+    /// closes, before its button's task runs.
+    func confirmDeletion(_ shown: DeletionRequest? = nil) async {
+        guard let request = shown ?? deletionToConfirm else { return }
         deletionToConfirm = nil
-        await perform(.deletePermanently, threads: request.threads, in: request.scope)
+        await perform(.deletePermanently, targets: request.targets, in: request.scope)
     }
 
     /// Failed changes go back in the queue.
@@ -133,15 +194,27 @@ final class MailActions {
     private func perform(_ action: MessageAction, messages: [MessageSummary], in scope: MailScope, wholeThreads: Bool) async {
         guard let store, !messages.isEmpty else { return }
         do {
-            let changes = try await plan(action, messages: messages, in: scope, wholeThreads: wholeThreads, store: store)
-            guard !changes.isEmpty else {
-                notice = Self.nothingToDo(action)
-                return
-            }
+            await apply(try await plan(action, messages: messages, in: scope, wholeThreads: wholeThreads, store: store), action: action)
+        } catch {
+            notice = String(describing: error)
+        }
+    }
+
+    /// Writes the changes as one journal batch (one Undo), sends them, and shows the result:
+    /// what left the view leaves the list at once, the selection of many ends, and the list
+    /// stays where it was (GKM-071).
+    private func apply(_ changes: [MailChange], action: MessageAction) async {
+        guard let store else { return }
+        guard !changes.isEmpty else {
+            notice = Self.nothingToDo(action)
+            return
+        }
+        do {
             guard let batch = try await store.perform(changes) else { return }
             registerUndo(batch, name: action.undoName)
+            if action.changesLocation { browser.clearMarks() }
+            await browser.reload(keepingPlace: true)
             await sync.actionsQueued(for: batch.accounts)
-            await browser.reload()
             await onMailChanged?()
         } catch {
             notice = String(describing: error)
@@ -278,8 +351,8 @@ final class MailActions {
             guard let applied = await batch.value else { return nil }
             do {
                 let inverse = try await store.undo(applied)
+                await self?.browser.reload(keepingPlace: true)
                 if let inverse { await self?.sync.actionsQueued(for: inverse.accounts) }
-                await self?.browser.reload()
                 await self?.onMailChanged?()
                 return inverse
             } catch {

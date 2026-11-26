@@ -120,6 +120,9 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
     public var text: String
     /// Words that must match a sender or recipient (name or address).
     public var participant: String?
+    /// Exactly this From address, ignoring case: "See All Mail from…" (GKM-071, MAIL-098).
+    /// Unlike `participant`, never a recipient and never a word of a longer address.
+    public var sender: String?
     public var account: MailAccountID?
     /// A provider folder (IMAP mailbox) the message is in.
     public var mailbox: String?
@@ -143,8 +146,9 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
     public init(text: String = "", participant: String? = nil, account: MailAccountID? = nil, mailbox: String? = nil,
                 after: Date? = nil, before: Date? = nil, hasAttachment: Bool = false, unreadOnly: Bool = false,
                 flaggedOnly: Bool = false, space: MailSpaceID? = nil, category: MailCategory? = nil,
-                includesTrashAndJunk: Bool = false) {
+                includesTrashAndJunk: Bool = false, sender: String? = nil) {
         self.text = text
+        self.sender = sender
         self.participant = participant
         self.account = account
         self.mailbox = mailbox
@@ -247,7 +251,7 @@ public struct SearchQuery: Equatable, Hashable, Sendable {
 /// is the smallest local id in the group, so building the threads incrementally and rebuilding
 /// them from scratch give the same ids.
 final class MailIndex {
-    static let schemaVersion = 8
+    static let schemaVersion = 9
 
     let database: SQLiteDatabase
     /// True when the file was new, damaged, or from a version without a migration path; the
@@ -284,6 +288,7 @@ final class MailIndex {
     /// adds the copy of confirmed provider deletions (MAIL-075), filled from the sync state. 7 → 8
     /// marks mail that is only in Trash or Junk (MAIL-102); the store fills each account's Trash
     /// and Junk folders from the sync state when it opens, and the triggers mark the mail in them.
+    /// 8 → 9 indexes the From address, for "See All Mail from…" (GKM-071, MAIL-098).
     private func migrate(from version: Int) throws -> Bool {
         for step in version..<Self.schemaVersion {
             switch step {
@@ -292,6 +297,7 @@ final class MailIndex {
             case 5: try addPartialColumns()
             case 6: try database.execute(Self.providerDeletionsSQL)
             case 7: try addTrashAndJunk()
+            case 8: try database.execute(Self.senderIndexSQL)
             default: return false
             }
         }
@@ -730,6 +736,53 @@ final class MailIndex {
         }
     }
 
+    /// Every conversation in a view, newest activity first, by id only: what ⌘A selects
+    /// (GKM-071). Only ids, so selecting thousands loads no rows.
+    func threadIDs(matching query: SearchQuery) throws -> [String] {
+        let (clause, values) = Self.filterClause(query)
+        let statement = try database.prepare("""
+            SELECT m.thread_id FROM messages m WHERE \(clause) GROUP BY m.thread_id ORDER BY max(m.sort_date) DESC, m.thread_id
+            """).bind(values)
+        var ids: [String] = []
+        while try statement.step() { if let id = statement.text(0) { ids.append(id) } }
+        return ids
+    }
+
+    /// Every message matching a search, by id only, in the list's order (GKM-071).
+    func messageIDs(matching query: SearchQuery) throws -> [MailMessageID] {
+        let (clause, filterValues) = Self.filterClause(query)
+        let statement: SQLiteDatabase.Statement
+        if let match = Self.ftsQuery(query) {
+            statement = try database.prepare("""
+                SELECT m.local_id FROM message_text t CROSS JOIN messages m ON m.rowid = t.rowid
+                WHERE message_text MATCH ? AND \(clause)
+                ORDER BY bm25(message_text, 0.0, 4.0, 2.0, 1.0, 1.0, 0.5), m.sort_date DESC, m.local_id
+                """).bind([.text(match)] + filterValues)
+        } else {
+            statement = try database.prepare("SELECT m.local_id FROM messages m WHERE \(clause) ORDER BY m.sort_date DESC, m.local_id")
+                .bind(filterValues)
+        }
+        var ids: [MailMessageID] = []
+        while try statement.step() { if let id = statement.text(0).flatMap(MailMessageID.init) { ids.append(id) } }
+        return ids
+    }
+
+    /// The summaries of these messages, in no particular order; ids not stored are left out.
+    func summaries(of ids: [MailMessageID]) throws -> [MessageSummary] {
+        var result: [MessageSummary] = []
+        for start in stride(from: 0, to: ids.count, by: 500) {
+            let chunk = ids[start..<min(start + 500, ids.count)]
+            let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+            let statement = try database.prepare("SELECT \(Self.summaryColumns) FROM messages m WHERE m.local_id IN (\(placeholders))")
+                .bind(chunk.map { .text($0.rawValue) })
+            result += try readSummaries(statement)
+        }
+        return result
+    }
+
+    /// Schema 9 (GKM-071): the From address, for one sender's mail across every account.
+    static let senderIndexSQL = "CREATE INDEX IF NOT EXISTS messages_by_sender ON messages (from_address COLLATE NOCASE, sort_date DESC)"
+
     /// Every message of a thread, oldest first.
     func thread(_ threadID: String) throws -> [MessageSummary] {
         let statement = try database.prepare("SELECT \(Self.summaryColumns) FROM messages m WHERE m.thread_id = ? ORDER BY m.sort_date, m.local_id")
@@ -793,6 +846,10 @@ final class MailIndex {
         // Mail only in Trash or Junk shows in those folders alone (MAIL-102). A folder view
         // already narrows to its folder, so it needs no second condition.
         if query.mailbox == nil, !query.includesTrashAndJunk { clauses.append(Self.notTrashOrJunk) }
+        if let sender = query.sender {
+            clauses.append("m.from_address = ? COLLATE NOCASE")
+            values.append(.text(sender))
+        }
         if let space = query.space {
             clauses.append("EXISTS (SELECT 1 FROM space_members s WHERE s.local_id = m.local_id AND s.space_id = ?)")
             values.append(.text(space.rawValue))
@@ -878,6 +935,7 @@ final class MailIndex {
         );
         CREATE INDEX message_mailboxes_by_mailbox ON message_mailboxes (account_id, mailbox);
         CREATE INDEX messages_by_list ON messages (list_id);
+        CREATE INDEX messages_by_sender ON messages (from_address COLLATE NOCASE, sort_date DESC);
         CREATE TABLE message_blobs (
           local_id TEXT NOT NULL, blob TEXT NOT NULL, media_type TEXT NOT NULL,
           file_name TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0, inline INTEGER NOT NULL DEFAULT 0, content_id TEXT,
