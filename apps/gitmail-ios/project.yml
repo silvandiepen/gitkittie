@@ -14,6 +14,9 @@ settings:
     DEVELOPMENT_TEAM: "38MGF83L2L"
 
 packages:
+  # AppStoreUpdates only: the App Store lookup behind "Update available" (GITKITTIE-094).
+  GitKittieKit:
+    path: ../../swift/GitKittieKit
   # The UI-independent mail core, the same as the Mac app's (MAIL-050).
   GitKittieMailKit:
     path: ../../swift/GitKittieMailKit
@@ -29,9 +32,12 @@ targets:
       - path: GitMail
       # The UI-free app model the Mac app uses too (MAIL-067).
       - path: ../../swift/MailAppModel
-      # The colours every GitKittie app shares.
+      # The colours and the "Update available" notice every GitKittie app shares.
       - path: ../../swift/GitKittieUI
     dependencies:
+      # "Update available" (swift/GitKittieUI/UpdateNotice.swift, GITKITTIE-094).
+      - package: GitKittieKit
+        product: AppStoreUpdates
       - package: GitKittieMailKit
         product: MailCore
       - package: GitKittieMailKit

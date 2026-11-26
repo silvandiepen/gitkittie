@@ -8,6 +8,7 @@ struct SidebarView: View {
     @Environment(MailWindowRequests.self) private var requests
     @Environment(SettingsNavigation.self) private var settings
     @Environment(\.openSettings) private var openSettings
+    @State private var updates = AppUpdates()
 
     private var selection: Binding<SidebarSelection?> {
         Binding(
@@ -28,7 +29,16 @@ struct SidebarView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Theme.sidebar)
-        .safeAreaInset(edge: .bottom, spacing: 0) { footer }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                // A newer Mail in the App Store: Update opens its page there.
+                if updates.offer != nil {
+                    UpdateAvailableNotice(updates: updates).padding(.horizontal, 10).padding(.top, 6)
+                }
+                footer
+            }
+        }
+        .checksForAppUpdates(updates)
     }
 
     /// What to add on the left, the app's settings on the right — as in Tasks. The Mailbox menu

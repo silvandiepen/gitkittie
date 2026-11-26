@@ -28,9 +28,12 @@ targets:
     platform: iOS
     sources:
       - path: GitFolder
-      # The colours every GitKittie app shares.
+      # The colours and the "Update available" notice every GitKittie app shares.
       - path: ../../swift/GitKittieUI
     dependencies:
+      # "Update available" (swift/GitKittieUI/UpdateNotice.swift, GITKITTIE-094).
+      - package: GitKittieKit
+        product: AppStoreUpdates
       - package: git-pont
         product: GitPontCore
       - package: git-pont

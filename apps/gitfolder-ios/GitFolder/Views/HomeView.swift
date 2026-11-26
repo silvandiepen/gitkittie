@@ -3,6 +3,7 @@ import SwiftUI
 /// The home screen: repositories the user has added, shown like local folders. Tapping
 /// one opens its file browser; "Add Repository" picks another from the account.
 struct HomeView: View {
+    let updates: AppUpdates
     @Environment(AppModel.self) private var model
     @State private var showAdd = false
 
@@ -48,6 +49,12 @@ struct HomeView: View {
                     .listRowBackground(Theme.panel)
                 }
                 .themedList()
+            }
+        }
+        // A newer Folder in the App Store: Update opens its page there.
+        .safeAreaInset(edge: .bottom) {
+            if updates.offer != nil {
+                UpdateAvailableNotice(updates: updates).padding(.horizontal, 16).padding(.bottom, 8)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
