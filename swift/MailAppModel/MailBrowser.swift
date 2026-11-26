@@ -477,8 +477,24 @@ final class MailBrowser {
     /// Opens a message from its notification (GKM-037): its conversation, selected in the list
     /// when the list shows it, with that message expanded and read, as if it had been chosen.
     func reveal(_ message: MailMessageID, threadID: String) async {
+        await loadRows(upTo: threadID)
         selectedRowID = rows.first { $0.threadID == threadID }?.id
         await openThread(threadID, focus: message, rowID: selectedRowID)
+    }
+
+    /// Loads pages of the list until it has the conversation's row, when the view holds it below
+    /// the pages loaded so far (GKM-085). Without a row nothing is selected, and on iPhone the
+    /// reader is pushed by the list's selection: a notification for an older conversation opened
+    /// the list and not the conversation.
+    private func loadRows(upTo threadID: String) async {
+        guard let store, !isSearching, canLoadMore, !rows.contains(where: { $0.threadID == threadID }),
+              (try? await store.threadIDs(query))?.contains(threadID) == true else { return }
+        while canLoadMore, !rows.contains(where: { $0.threadID == threadID }) {
+            let loaded = rows.count
+            await loadMore()
+            // The view changed meanwhile, or a page failed: stop rather than ask again.
+            if rows.count == loaded { return }
+        }
     }
 
     private func open(_ row: ListRow) async {
