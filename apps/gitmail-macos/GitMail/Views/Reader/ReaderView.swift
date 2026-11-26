@@ -19,6 +19,7 @@ struct ReaderView: View {
                             .tracking(-0.3)
                             .textSelection(.enabled)
                             .padding(.bottom, 20)
+                            .accessibilityAddTraits(.isHeader)
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(thread.messages) { message in
                                 if message.isExpanded {

@@ -34,14 +34,13 @@ struct AttachmentsSidebarRow: View {
 /// edit, export or delete.
 struct SpacesSidebarSection: View {
     @Environment(AppModel.self) private var model
-    @Binding var sheet: SpaceSheet?
-    @State private var deleting: MailSpace?
+    @Environment(MailWindowRequests.self) private var requests
 
     var body: some View {
         Section("Spaces") {
             if model.spaces.spaces.isEmpty {
                 Button {
-                    sheet = .create
+                    requests.spaceSheet = .create
                 } label: {
                     Label("New Space…", systemImage: "plus.circle").font(.callout)
                 }
@@ -76,28 +75,11 @@ struct SpacesSidebarSection: View {
                     .selectionDisabled()
             }
         }
-        .confirmationDialog("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(
-            get: { deleting != nil }, set: { if !$0 { deleting = nil } }
-        ), presenting: deleting) { space in
-            Button("Delete Space", role: .destructive) {
-                Task {
-                    if model.selection == .space(space.id) { await model.select(.allMail) }
-                    await model.spaces.delete(space.id)
-                }
-            }
-        } message: { _ in
-            Text("Only the space goes. Its messages stay in your Mail folder and at your mail provider.")
-        }
     }
 
+    /// The Mailbox menu's space items, for this space; deleting asks on the mail window.
     @ViewBuilder private func menu(for space: MailSpace) -> some View {
-        Button("Edit Space…") { sheet = .edit(space) }
-        Button("Export Space…") { Task { await Platform.export(.space(space.id), what: space.name, model: model) } }
-        // Pin for offline (GKM-036): every message in the space downloaded whole and kept.
-        Button("Keep Offline") { Task { await model.pin(.space(space.id)) } }
-        Button("Don’t Keep Offline") { Task { await model.unpin(.space(space.id)) } }
-        Divider()
-        Button("Delete Space…", role: .destructive) { deleting = space }
+        SpaceMenuItems(model: model, requests: requests, space: space)
     }
 }
 

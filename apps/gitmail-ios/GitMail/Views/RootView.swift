@@ -148,6 +148,7 @@ private struct Splash: View {
             ProgressView()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Opening your mail")
     }
 }
@@ -160,7 +161,7 @@ struct QuietNote: View {
     var body: some View {
         Text(text)
             .font(.callout)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .padding(24)
     }

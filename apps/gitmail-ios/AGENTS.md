@@ -27,6 +27,7 @@ MAIL-050..053, MAIL-067..070, MAIL-072 and MAIL-073..080, ThreatModel.md) first.
   `swift/GitKittieMailProviders/scripts/test-mail-server.sh start` (the simulator reaches it on
   loopback). `SCREENSHOTS=<folder>` exports the UI test's screenshots.
 - CI: `.github/workflows/gitmail-ios.yml`.
+- Accessibility (GKM-061, MAIL-089..091): `MailFlowUITests` runs `performAccessibilityAudit` on every main screen, at the default size and at Accessibility XXXL (`testMainScreensAtLargestTextSize`), and fails with the full list. Skips live only in `UITests/AccessibilityAuditPolicy.swift`, each with its reason. At the accessibility sizes rows stack their date under the sender and lift one-line limits (`dynamicTypeSize.isAccessibilitySize`); text uses `Theme.accentText`, white text sits on `Theme.accentFill`.
 - Device: build Debug or Release with automatic signing (`-allowProvisioningUpdates`, team
   `38MGF83L2L`) and `xcrun devicectl device install app --device <id> Mail.app`. Only Sil's test
   iPhone 14 Pro; never the iPhone 18 Pro.

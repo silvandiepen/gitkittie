@@ -50,6 +50,9 @@ private struct ServerHitRow: View {
     let hit: ServerSearchHit
     let isOpening: Bool
     let accountName: String?
+    @Environment(\.dynamicTypeSize) private var typeSize
+    /// As the list's rows: at the accessibility sizes the date goes under the sender (GKM-061).
+    private var isLarge: Bool { typeSize.isAccessibilitySize }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -64,24 +67,28 @@ private struct ServerHitRow: View {
             .padding(.top, 4)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                let header = isLarge ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                                     : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
+                header {
                     Text(hit.senderLine)
                         .font(.body.weight(hit.isUnread ? .semibold : .regular))
-                        .lineLimit(1)
-                    Spacer(minLength: 6)
-                    if hit.isFlagged { Image(systemName: "flag.fill").font(.caption).foregroundStyle(.orange) }
-                    Text(hit.dateLine)
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .lineLimit(isLarge ? 3 : 1)
+                    if !isLarge { Spacer(minLength: 6) }
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if hit.isFlagged { Image(systemName: "flag.fill").font(.caption).foregroundStyle(.orange) }
+                        Text(hit.dateLine)
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Text(hit.subjectLine)
                     .font(.subheadline)
-                    .lineLimit(1)
+                    .lineLimit(isLarge ? 4 : 1)
                 Text(hit.whereLine)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let accountName {
-                    Text(accountName).font(.caption).foregroundStyle(.tertiary)
+                    Text(accountName).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

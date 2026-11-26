@@ -11,20 +11,24 @@ enum ComposeScene {
 struct DraftsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openWindow) private var openWindow
+    @State private var selection: DraftID?
 
     var body: some View {
         Group {
             if let sending = app.sending, !sending.drafts.isEmpty {
-                List {
+                // Return or a double-click opens the selected draft (GKM-061: the keyboard too).
+                List(selection: $selection) {
                     ForEach(sending.drafts) { draft in
-                        DraftRow(draft: draft)
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) { openWindow(id: ComposeScene.id, value: draft.id) }
-                            .contextMenu {
-                                Button("Open") { openWindow(id: ComposeScene.id, value: draft.id) }
-                                Button("Delete Draft", role: .destructive) { Task { await sending.discard(draft.id) } }
-                            }
+                        DraftRow(draft: draft).tag(draft.id)
                     }
+                }
+                .contextMenu(forSelectionType: DraftID.self) { ids in
+                    if let id = ids.first {
+                        Button("Open") { openWindow(id: ComposeScene.id, value: id) }
+                        Button("Delete Draft", role: .destructive) { Task { await sending.discard(id) } }
+                    }
+                } primaryAction: { ids in
+                    for id in ids { openWindow(id: ComposeScene.id, value: id) }
                 }
                 .themedList()
             } else {
@@ -62,6 +66,8 @@ private struct DraftRow: View {
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens the draft")
     }
 
     private var recipients: String {

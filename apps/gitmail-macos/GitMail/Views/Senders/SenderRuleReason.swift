@@ -16,7 +16,7 @@ struct SenderRuleReason: View {
                     Text("Your rule “\(SenderRuleText.title(explanation.winner.action))” for \(explanation.winner.scope.name) \(SenderRuleText.effect(explanation.effect)). It’s rule \(explanation.position) in your order and the first that matches.")
                     if !explanation.alsoMatched.isEmpty {
                         Text("Also matched, but later in your order: " + explanation.alsoMatched.map { "“\(SenderRuleText.title($0.action))” for \($0.scope.name)" }.joined(separator: ", ") + ".")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     }
                     Button("Show in Senders") { Task { await show(explanation.winner) } }
                         .buttonStyle(.link)

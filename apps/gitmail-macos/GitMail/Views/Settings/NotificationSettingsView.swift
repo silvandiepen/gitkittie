@@ -50,7 +50,7 @@ struct NotificationSettingsView: View {
                         }
                         Text("Always notifies for new mail in the space wherever it lives, except Quarantine. Never keeps it silent, even from a list set to Always.")
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -77,7 +77,7 @@ struct NotificationSettingsView: View {
                 }
                 Text("Choose a list’s notifications from any of its messages: Correct › Notifications for This List.")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
             .padding(24)
             .frame(maxWidth: 560, alignment: .leading)

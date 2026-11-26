@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 struct ComposeScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
     let draftID: DraftID
     @State private var compose: ComposeModel?
     @State private var confirmingClose = false
@@ -72,10 +73,14 @@ struct ComposeScreen: View {
                     if await compose?.send() == true { dismiss() }
                 }
             } label: {
-                if compose?.phase == .sending { ProgressView() } else { Image(systemName: "arrow.up.circle.fill").font(.title2) }
+                if compose?.phase == .sending { ProgressView() } else { Image(systemName: "arrow.up.circle.fill").font(.title2)
+                        // White on the darker fill: the arrow on the text accent was under 3:1.
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, compose?.phase == .editing ? Theme.accentFill : Color.secondary) }
             }
             .disabled(compose?.phase != .editing)
             .accessibilityLabel("Send")
+            .accessibilityValue(compose?.phase == .sending ? "Sending" : "")
             .accessibilityIdentifier("sendButton")
         }
     }
@@ -127,31 +132,43 @@ struct ComposeScreen: View {
 
     /// The address the message goes from; tapping it also opens Cc and Bcc.
     private func fromRow(_ compose: ComposeModel) -> some View {
-        HStack {
-            Text("From").foregroundStyle(.secondary)
-            Menu {
-                ForEach(compose.identities) { identity in
-                    Button(identity.address.address) { compose.selectedIdentity = identity }
+        // At the accessibility sizes Cc/Bcc goes under the address instead of squeezing it.
+        let row = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                                               : AnyLayout(HStackLayout())
+        return row {
+            HStack(alignment: .firstTextBaseline) {
+                Text("From").foregroundStyle(.secondary).accessibilityHidden(true)
+                Menu {
+                    ForEach(compose.identities) { identity in
+                        Button(identity.address.address) { compose.selectedIdentity = identity }
+                    }
+                } label: {
+                    Text(compose.selectedIdentity?.address.address ?? "Choose an account")
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
                 }
-            } label: {
-                Text(compose.selectedIdentity?.address.address ?? "Choose an account")
-                    .lineLimit(1)
+                .accessibilityLabel("From")
+                .accessibilityValue(compose.selectedIdentity?.address.address ?? "No account chosen")
             }
-            Spacer()
+            if !typeSize.isAccessibilitySize { Spacer() }
             if !compose.showsCcAndBcc {
                 Button("Cc/Bcc") { compose.showsCcAndBcc = true }
                     .font(.subheadline)
+                    // A 44-point target, not the size of its two words.
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel("Show Cc and Bcc")
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 12)
+        .padding(.horizontal, 16).padding(.vertical, typeSize.isAccessibilitySize ? 12 : 4)
     }
 
     private func attachments(_ compose: ComposeModel) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(compose.draft.attachments) { attachment in
                 HStack {
-                    Image(systemName: "doc").foregroundStyle(.secondary)
-                    Text(attachment.filename).lineLimit(1).truncationMode(.middle)
+                    Image(systemName: "doc").foregroundStyle(.secondary).accessibilityHidden(true)
+                    Text(attachment.filename).lineLimit(typeSize.isAccessibilitySize ? 3 : 1).truncationMode(.middle)
                     Text(MessageDate.byteCount(attachment.size)).font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     Button { compose.removeAttachment(attachment) } label: { Image(systemName: "xmark.circle.fill") }
@@ -173,7 +190,8 @@ struct ComposeScreen: View {
             }
         }
         .font(.caption)
-        .foregroundStyle(.tertiary)
+        // A fixed colour, not the hierarchical style, which measured under 4.5:1 here.
+        .foregroundStyle(Color(uiColor: .secondaryLabel))
         .padding(.horizontal, 16).padding(.bottom, 16)
         .accessibilityIdentifier("saveState")
     }
@@ -204,7 +222,7 @@ private struct RecipientRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label).foregroundStyle(.secondary)
+            Text(label).foregroundStyle(.secondary).accessibilityHidden(true)
             FlowRecipients(addresses: compose.recipients(field), valid: compose.isValid) { address in
                 compose.remove(address, from: field)
             } field: {
@@ -216,6 +234,8 @@ private struct RecipientRow: View {
                     .focused(focus, equals: focusValue)
                     .onSubmit { compose.commitPending(field) }
                     .frame(minWidth: 120)
+                    // The field has no placeholder; the row's label is its name.
+                    .accessibilityLabel(label)
                     .accessibilityIdentifier("\(label.lowercased())Field")
             }
         }
@@ -243,14 +263,22 @@ private struct FlowRecipients<Field: View>: View {
         RecipientFlow(spacing: 6) {
             ForEach(addresses, id: \.self) { address in
                 Button { remove(address) } label: {
-                    Text(address.name ?? address.address)
-                        .font(.subheadline)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .foregroundStyle(valid(address) ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.red))
-                        .background((valid(address) ? Theme.accent : .red).opacity(0.18), in: Capsule())
+                    // Primary text on the tint (the accent on its own tint is under 4.5:1); an
+                    // invalid address also carries a mark, not only a colour.
+                    HStack(spacing: 4) {
+                        if !valid(address) { Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red) }
+                        Text(address.name ?? address.address)
+                    }
+                    .font(.subheadline)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .foregroundStyle(.primary)
+                    .background((valid(address) ? Theme.accent : .red).opacity(0.18), in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(address.address), remove")
+                // An invalid address says so, not only in red; activating it removes it.
+                .accessibilityLabel("Recipient " + (address.name.map { "\($0), \(address.address)" } ?? address.address))
+                .accessibilityValue(valid(address) ? "" : "Not a valid address")
+                .accessibilityHint("Removes this recipient")
             }
             field()
         }
@@ -266,8 +294,11 @@ private struct RecipientFlow: Layout {
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        // Each child gets at most the row's width, so a long address at a large text size
+        // wraps inside its token instead of running off the screen.
         for (index, point) in arrange(width: bounds.width, subviews: subviews).points.enumerated() {
-            subviews[index].place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y), proposal: .unspecified)
+            subviews[index].place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y),
+                                  proposal: ProposedViewSize(width: min(subviews[index].sizeThatFits(.unspecified).width, bounds.width), height: nil))
         }
     }
 
@@ -276,7 +307,10 @@ private struct RecipientFlow: Layout {
         var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0, widest: CGFloat = 0
         for subview in subviews {
             var size = subview.sizeThatFits(.unspecified)
-            size.width = min(size.width, width)
+            if size.width > width {
+                size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+                size.width = min(size.width, width)
+            }
             if x > 0, x + size.width > width {
                 x = 0
                 y += line + spacing

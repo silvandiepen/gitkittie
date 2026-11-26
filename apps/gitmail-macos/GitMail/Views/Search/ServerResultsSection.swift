@@ -15,7 +15,7 @@ struct ServerResultsSection: View {
             if browser.rows.isEmpty {
                 Text("No downloaded messages match.")
                     .font(.callout)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
             }
@@ -43,6 +43,11 @@ struct ServerResultsSection: View {
                         Task { await browser.openServerHit(hit) }
                     }
                     .help("Download this message and open it")
+                    // VoiceOver: VO-Space does what a click does (GKM-061).
+                    .accessibilityAction {
+                        guard browser.openingServerHit == nil else { return }
+                        Task { await browser.openServerHit(hit) }
+                    }
             }
         }
     }
@@ -85,7 +90,7 @@ private struct ServerHitRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let accountName {
-                    Text(accountName).font(.caption).foregroundStyle(.tertiary)
+                    Text(accountName).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

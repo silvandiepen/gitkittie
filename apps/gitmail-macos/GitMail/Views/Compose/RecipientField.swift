@@ -60,6 +60,8 @@ private struct RecipientToken: View {
 
     var body: some View {
         HStack(spacing: 4) {
+            // Not a colour alone: an invalid address carries a mark too.
+            if !isValid { Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange) }
             Text(address.displayName)
                 .lineLimit(1)
             Button(action: remove) {
@@ -69,6 +71,11 @@ private struct RecipientToken: View {
             .foregroundStyle(.secondary)
             .accessibilityLabel("Remove \(address.address)")
         }
+        // One element with Remove as its action; an invalid address says so, not only in orange.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(address.name.map { "\($0), \(address.address)" } ?? address.address)
+        .accessibilityValue(isValid ? "" : "Not a valid address")
+        .accessibilityAction(named: "Remove", remove)
         .font(.callout)
         .padding(.leading, 9)
         .padding(.trailing, 6)

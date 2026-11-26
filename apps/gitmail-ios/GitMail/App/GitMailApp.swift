@@ -20,7 +20,8 @@ struct GitMailApp: App {
             RootView()
                 .environment(session)
                 .environment(session.model)
-                .tint(Theme.accent)
+                // The text-safe accent: buttons and links sit on raised dark rows too (GKM-061).
+                .tint(Theme.accentText)
                 // The GitKittie apps are navy: dark, like Tasks.
                 .preferredColorScheme(.dark)
         }

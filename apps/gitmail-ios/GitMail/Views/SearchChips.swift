@@ -32,6 +32,7 @@ struct SearchChips: View {
                 } label: {
                     Chip(title: filters.date == .any ? "Date" : filters.date.title, systemImage: "calendar", isOn: filters.date != .any)
                 }
+                .chipState(label: "Date", value: filters.date == .any ? "Any" : filters.date.title, isOn: filters.date != .any)
                 Menu {
                     Button("Every View") { change { $0.category = nil } }
                     ForEach(MailCategory.allCases, id: \.self) { category in
@@ -40,6 +41,7 @@ struct SearchChips: View {
                 } label: {
                     Chip(title: filters.category?.title ?? "View", systemImage: "tray", isOn: filters.category != nil)
                 }
+                .chipState(label: "View", value: filters.category?.title ?? "Every View", isOn: filters.category != nil)
                 if model.accounts.count > 1 {
                     Menu {
                         Button("Every Account") { change { $0.account = nil } }
@@ -47,9 +49,9 @@ struct SearchChips: View {
                             Button(account.displayName) { change { $0.account = account.id } }
                         }
                     } label: {
-                        Chip(title: filters.account.flatMap { id in model.accounts.first { $0.id == id }?.displayName } ?? "Account",
-                             systemImage: "person.crop.circle", isOn: filters.account != nil)
+                        Chip(title: accountName ?? "Account", systemImage: "person.crop.circle", isOn: filters.account != nil)
                     }
+                    .chipState(label: "Account", value: accountName ?? "Every Account", isOn: filters.account != nil)
                 }
                 if !filters.isEmpty {
                     Button("Clear") { Task { await model.browser.setFilters(SearchFilters()) } }
@@ -60,6 +62,10 @@ struct SearchChips: View {
             .padding(.horizontal, 16)
         }
         .accessibilityIdentifier("searchChips")
+    }
+
+    private var accountName: String? {
+        filters.account.flatMap { id in model.accounts.first { $0.id == id }?.displayName }
     }
 
     private func toggle(_ title: String, systemImage: String, isOn: Bool, _ apply: @escaping (inout SearchFilters) -> Void) -> some View {
@@ -83,9 +89,19 @@ private struct Chip: View {
     var body: some View {
         Label(title, systemImage: systemImage)
             .font(.subheadline.weight(isOn ? .semibold : .regular))
-            .foregroundStyle(isOn ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.primary))
+            // The text stays primary: the accent on its own tint is under 4.5:1 (GKM-061).
+            .foregroundStyle(.primary)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(isOn ? Theme.accent.opacity(0.2) : Theme.panel, in: Capsule())
+    }
+}
+
+private extension View {
+    /// A menu chip says what it filters and what it is set to, and is selected when it narrows.
+    func chipState(label: String, value: String, isOn: Bool) -> some View {
+        accessibilityLabel(label)
+            .accessibilityValue(value)
+            .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }

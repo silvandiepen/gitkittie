@@ -64,7 +64,7 @@ private struct GroupHeader: View {
             if let detail = group.detail {
                 Text(detail).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             }
-            Text(CleanupText.stats(group)).font(.callout.monospacedDigit()).foregroundStyle(.tertiary)
+            Text(CleanupText.stats(group)).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
         }
     }
 }
@@ -155,7 +155,7 @@ private struct PreviewSection: View {
             VStack(alignment: .leading, spacing: 2) {
                 Heading("Will change (\(preview.included.count.formatted()))")
                 if preview.included.isEmpty {
-                    Text("Nothing in this group can be changed this way.").font(.callout).foregroundStyle(.tertiary)
+                    Text("Nothing in this group can be changed this way.").font(.callout).foregroundStyle(.secondary)
                 }
                 ForEach(preview.included) { item in
                     HStack(spacing: 8) {
@@ -269,7 +269,7 @@ private struct MessageLine: View {
                     if let note { Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                 }
                 Spacer(minLength: 8)
-                Text(MessageDate.short(message.date)).font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
+                Text(MessageDate.short(message.date)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
             .padding(.vertical, 3)
             .contentShape(Rectangle())

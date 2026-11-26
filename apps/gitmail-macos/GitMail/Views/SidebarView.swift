@@ -5,10 +5,9 @@ import SwiftUI
 /// from the provider and appear after a sync.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
+    @Environment(MailWindowRequests.self) private var requests
     @Environment(SettingsNavigation.self) private var settings
     @Environment(\.openSettings) private var openSettings
-    @State private var sheet: AccountSheet?
-    @State private var spaceSheet: SpaceSheet?
 
     private var selection: Binding<SidebarSelection?> {
         Binding(
@@ -23,28 +22,22 @@ struct SidebarView: View {
 
             SendingSidebarSection()
 
-            SpacesSidebarSection(sheet: $spaceSheet)
+            SpacesSidebarSection()
 
-            AccountsSidebarSection(sheet: $sheet)
+            AccountsSidebarSection()
         }
         .scrollContentBackground(.hidden)
         .background(Theme.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) { footer }
-        .sheet(item: $sheet) { $0.view }
-        .sheet(item: $spaceSheet) { sheet in
-            switch sheet {
-            case .create: SpaceEditorSheet(space: nil)
-            case .edit(let space): SpaceEditorSheet(space: space)
-            }
-        }
     }
 
-    /// What to add on the left, the app's settings on the right — as in Tasks.
+    /// What to add on the left, the app's settings on the right — as in Tasks. The Mailbox menu
+    /// has every item too, for the keyboard.
     private var footer: some View {
         HStack {
             Menu {
-                Button("Add Account…", systemImage: "at") { sheet = .add }
-                Button("New Space…", systemImage: "square.stack.3d.up") { spaceSheet = .create }
+                Button("Add Account…", systemImage: "at") { requests.accountSheet = .add }
+                Button("New Space…", systemImage: "square.stack.3d.up") { requests.spaceSheet = .create }
             } label: {
                 Label("Add", systemImage: "plus").font(.callout)
             }
@@ -59,7 +52,7 @@ struct SidebarView: View {
                 if let folder = model.mailFolder {
                     Button("Show Mail Folder in Finder", systemImage: "folder") { Platform.reveal(folder) }
                 }
-                Button("Use Another Mail Folder…", systemImage: "folder.badge.gearshape") { chooseMailFolder() }
+                Button("Use Another Mail Folder…", systemImage: "folder.badge.gearshape") { Task { await MailFolderChoice.chooseAnother(model) } }
                 if !model.usesDefaultMailFolder {
                     Button("Use the Default Mail Folder", systemImage: "arrow.uturn.backward") { Task { await model.useMailFolder(nil) } }
                 }
@@ -84,15 +77,5 @@ struct SidebarView: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-    }
-
-    /// Shows another folder's mail. The current folder stays as it is.
-    private func chooseMailFolder() {
-        Task {
-            guard let url = await Platform.chooseFolder(
-                title: "Use Another Mail Folder", prompt: "Use Folder",
-                message: "GitKittie Mail shows the accounts and mail in the folder you choose. The current folder stays as it is.") else { return }
-            await model.useMailFolder(url)
-        }
     }
 }

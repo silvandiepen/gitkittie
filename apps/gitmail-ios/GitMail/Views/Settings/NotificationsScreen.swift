@@ -7,6 +7,7 @@ import UIKit
 /// as on the Mac, and as honest about timing as the rest of Settings (MAIL-053).
 struct NotificationsScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private var attention: MailAttention { model.attention }
 
@@ -63,7 +64,7 @@ struct NotificationsScreen: View {
                         LabeledContent {
                             Text(entry.level == .always ? "Always" : "Never")
                         } label: {
-                            Text(entry.key.list).lineLimit(1).truncationMode(.middle)
+                            Text(entry.key.list).lineLimit(typeSize.isAccessibilitySize ? 3 : 1).truncationMode(.middle)
                             Text(model.accounts.first { $0.id == entry.key.account }?.displayName ?? "")
                         }
                         .swipeActions {
