@@ -234,6 +234,10 @@ final class MailFlowUITests: XCTestCase {
         XCTAssertTrue(added, "the account was not added: \(errorText())")
     }
 
+    private func hasKeyboardFocus(_ field: XCUIElement) -> Bool {
+        (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
+    }
+
     private func hideKeyboard() {
         let done = app.buttons["keyboardDone"]
         if app.keyboards.firstMatch.exists, done.exists, done.isHittable { done.tap() }
@@ -274,23 +278,26 @@ final class MailFlowUITests: XCTestCase {
     }
 
     private func replace(_ field: XCUIElement, with text: String) {
-        // Put the keyboard away first (the number pad has no Return): at the largest text sizes
-        // it covers the next field.
-        let done = app.buttons["keyboardDone"]
-        if app.keyboards.firstMatch.exists, done.exists, done.isHittable { done.tap() }
         for _ in 0..<4 where !field.exists { app.swipeUp(velocity: .slow) }
         XCTAssertTrue(field.waitForExistence(timeout: 5))
-        if !field.isHittable { app.swipeUp() }
-        if field.frame.height > 60 {
-            // At the largest text sizes the field wraps and its text sits at the bottom right:
-            // focus it first (iOS lifts it above the keyboard), then tap the end of the text.
-            field.tap()
-            field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.85)).tap()
-        } else {
-            // The fields are trailing-aligned: tap the right end so the cursor lands after the
-            // old text (a plain tap can put it at the start on iPad, and the deletes then remove
-            // nothing).
-            field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        // At the largest text sizes the keyboard of the field before, or the sheet's bar, can
+        // cover this one: put the keyboard away (the number pad has no Return), tap, and try
+        // again from a new scroll position until the field has the keyboard.
+        for _ in 0..<4 {
+            hideKeyboard()
+            if !field.isHittable { app.swipeUp(velocity: .slow) }
+            if field.frame.height > 60 {
+                // Wrapped: the text sits at the bottom right. Focus first, then tap its end.
+                field.tap()
+                field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.85)).tap()
+            } else {
+                // The fields are trailing-aligned: tap the right end so the cursor lands after
+                // the old text (a plain tap can put it at the start on iPad, and the deletes then
+                // remove nothing).
+                field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+            }
+            if hasKeyboardFocus(field) { break }
+            app.swipeDown(velocity: .slow)
         }
         let current = field.value as? String ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
