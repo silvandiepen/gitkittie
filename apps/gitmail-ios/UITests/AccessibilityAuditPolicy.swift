@@ -75,9 +75,11 @@ enum AccessibilityAuditPolicy {
         // system's size.
         let bars = app.navigationBars.allElementsBoundByIndex + app.toolbars.allElementsBoundByIndex
             + app.searchFields.allElementsBoundByIndex
-        // Text that runs on under the bottom toolbar is measured through its glass.
+        // Text that runs on below the screen, under the bottom toolbar, is measured through the
+        // toolbar's glass.
         if finding.type == .contrast,
-           app.toolbars.allElementsBoundByIndex.contains(where: { $0.frame.intersects(element.frame) }) {
+           app.toolbars.allElementsBoundByIndex.contains(where: { $0.frame.intersects(element.frame) })
+            || element.frame.maxY > app.windows.firstMatch.frame.maxY {
             return "partly under the system's bottom toolbar"
         }
         if bars.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(element.frame) }) {

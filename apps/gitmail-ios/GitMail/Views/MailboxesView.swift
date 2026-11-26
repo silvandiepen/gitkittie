@@ -178,7 +178,7 @@ struct MailboxRow: View {
                 .frame(width: iconWidth)
                 .accessibilityHidden(true)
             // A long folder or space name wraps at the accessibility sizes instead of vanishing.
-            Text(title).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+            Text(title).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             if let count {
                 Text("\(count.value)")
