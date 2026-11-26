@@ -528,6 +528,113 @@ final class MailSyncIntegrationTests: XCTestCase {
         XCTAssertEqual(removed.deletedAtProvider, 0)
     }
 
+    // MARK: - Deleted at the provider, without a Message-ID (GKM-043, MAIL-104)
+
+    /// A message as some senders write it: no Message-ID header, dated when it was received.
+    private func messageWithoutMessageID(_ subject: String, receivedDaysAgo age: Int) -> (raw: Data, received: Date) {
+        let me = MailAddress(name: "Ada Example", address: user.address)
+        let received = Date().addingTimeInterval(-Double(age) * 86_400)
+        let built = String(decoding: MIMEBuilder(from: me, to: [me], subject: subject, date: received,
+                                                 textBody: "Body of \(subject)\n").build(), as: UTF8.self)
+        let raw = Data(built.components(separatedBy: "\r\n").filter { !$0.hasPrefix("Message-ID:") }.joined(separator: "\r\n").utf8)
+        return (raw, received)
+    }
+
+    private func appendRaw(_ raw: Data, receivedAt: Date, to folder: String) async throws {
+        try await imap().withSession { session in
+            if folder != "INBOX", !(try await session.listFolders().contains { $0.id == folder }) {
+                try await session.createFolder(folder)
+            }
+            _ = try await session.append(raw, to: folder, flags: MailProvider.MessageFlags(), receivedAt: receivedAt)
+        }
+    }
+
+    private func storedID(subject: String) async throws -> MailMessageID {
+        let id = try await store.summaries(account: account, limit: 1_000).first { $0.subject == subject }?.id
+        return try XCTUnwrap(id, subject)
+    }
+
+    /// The iPhone's window leaves older mail at the provider, so a message without a Message-ID
+    /// that is deleted elsewhere is looked for by sender and day in the folders with mail not
+    /// downloaded here; none of the hits there is it, so it is marked.
+    func testMailWithoutAMessageIDDeletedElsewhereIsMarkedOnAWindowedAccount() async throws {
+        // Older mail from the same sender, dated today (the Date header the sent-day search sees),
+        // stays at the provider: the inbox is never complete here.
+        try await append(receivedDaysAgo: [60, 90], prefix: "older")
+        let receipt = messageWithoutMessageID("receipt without a message id", receivedDaysAgo: 0)
+        try await appendRaw(receipt.raw, receivedAt: receipt.received, to: "INBOX")
+        let windowed = SyncOptions(recentPerFolder: 10, historyDays: 30, reconnect: Self.fast)
+        try await coordinator(windowed).syncOnce()
+        let stored = try await storedSubjects()
+        XCTAssertEqual(stored, ["receipt without a message id"], "only the recent message is downloaded")
+        let id = try await storedID(subject: "receipt without a message id")
+        let messageID = try await store.message(id).front.messageId
+        XCTAssertNil(messageID)
+        let validity = try await XCTUnwrapAsync(await store.syncedFolders(account: account).first { $0.name == "INBOX" }?.uidValidity)
+        let location = try await XCTUnwrapAsync(await store.remoteLocations(of: id, account: account).first)
+
+        // Another client deletes it for good.
+        try await imap().withSession { session in
+            try await session.expunge([RemoteMessageID(folder: "INBOX", uidValidity: validity, uid: location.uid)])
+        }
+        let sync = coordinator(windowed)
+        try await sync.syncOnce()
+
+        let marked = try await store.summaries(ids: [id]).first?.deletedAtProvider
+        XCTAssertNotNil(marked, "searched for at the provider and not found: deleted there")
+        XCTAssertTrue(captured.lines.contains { $0.contains("UID SEARCH (0 words, 0 people) in INBOX") },
+                      "the inbox, with mail not downloaded here, was searched")
+        XCTAssertTrue(captured.lines.contains { $0.contains("sections) in INBOX") },
+                      "the older mail dated the same day was compared by header")
+        let progress = await sync.progress
+        XCTAssertEqual(progress.deletedAtProvider, 1)
+        XCTAssertGreaterThan(progress.olderNotDownloaded, 0, "a windowed account with mail left at the provider")
+        let kept = try await store.originalData(of: id)
+        XCTAssertEqual(kept, receipt.raw, "kept here, byte for byte")
+    }
+
+    /// The same message moved elsewhere into a folder whose mail the window leaves at the
+    /// provider: it is not downloaded from there, but the provider has it, so it is not marked.
+    func testMailWithoutAMessageIDMovedIntoAFolderWithMailNotDownloadedIsNotMarked() async throws {
+        // Downloaded while the window was off (the Mac, or "Download Older Mail"), then the window
+        // is set: the iPhone's 30 days.
+        let invoice = messageWithoutMessageID("invoice without a message id", receivedDaysAgo: 60)
+        try await appendRaw(invoice.raw, receivedAt: invoice.received, to: "INBOX")
+        try await append(1, prefix: "today")
+        try await coordinator(SyncOptions(reconnect: Self.fast)).syncOnce()
+        let id = try await storedID(subject: "invoice without a message id")
+        let validity = try await XCTUnwrapAsync(await store.syncedFolders(account: account).first { $0.name == "INBOX" }?.uidValidity)
+        let location = try await XCTUnwrapAsync(await store.remoteLocations(of: id, account: account).first)
+
+        // Another client files it in Archive, beside older mail.
+        try await append(receivedDaysAgo: [90], to: "Archive", prefix: "archived")
+        try await imap().withSession { session in
+            _ = try await session.move([RemoteMessageID(folder: "INBOX", uidValidity: validity, uid: location.uid)], to: "Archive")
+        }
+        let windowed = SyncOptions(recentPerFolder: 10, historyDays: 30, reconnect: Self.fast)
+        let sync = coordinator(windowed)
+        try await sync.syncOnce()
+
+        let unmapped = try await store.remoteLocations(of: id, account: account)
+        XCTAssertEqual(unmapped, [], "older than the window: not downloaded from Archive")
+        let progress = await sync.progress
+        XCTAssertEqual(progress.olderNotDownloaded, 2)
+        let marked = try await store.summaries(ids: [id]).first?.deletedAtProvider
+        XCTAssertNil(marked, "moved, not deleted: found in Archive by sender, day and header")
+        XCTAssertEqual(progress.deletedAtProvider, 0)
+        XCTAssertTrue(captured.lines.contains { $0.contains("UID SEARCH (0 words, 0 people) in Archive") })
+
+        // A later pass does not mark it either; without the window it comes in and is matched.
+        try await sync.syncOnce()
+        let still = try await store.summaries(ids: [id]).first?.deletedAtProvider
+        XCTAssertNil(still)
+        try await coordinator(SyncOptions(reconnect: Self.fast)).syncOnce()
+        let mapped = try await store.remoteLocations(of: id, account: account)
+        XCTAssertEqual(mapped.map(\.mailbox), ["Archive"])
+        let count = try await storedCount()
+        XCTAssertEqual(count, 3, "the moved message is the stored one, not a copy")
+    }
+
     func testARefusedPasswordStopsTheSyncAndSaysSo() async throws {
         let wrong = IMAPConnector(endpoint: server.imaps, credential: .password(username: user.address, password: Secret("revoked-\(UUID())")),
                                   log: captured.log)

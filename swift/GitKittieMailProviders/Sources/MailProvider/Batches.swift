@@ -28,16 +28,23 @@ public struct RemoteSearchCriteria: Sendable, Hashable {
     public var receivedOnOrAfter: Date?
     /// Received before the calendar day of this instant (IMAP `BEFORE`).
     public var receivedBefore: Date?
+    /// Dated (the Date header) on or after the calendar day of this instant (IMAP `SENTSINCE`).
+    public var sentOnOrAfter: Date?
+    /// Dated before the calendar day of this instant (IMAP `SENTBEFORE`).
+    public var sentBefore: Date?
     public var unreadOnly: Bool
     public var flaggedOnly: Bool
 
     public init(terms: [String] = [], participants: [String] = [], receivedOnOrAfter: Date? = nil,
-                receivedBefore: Date? = nil, unreadOnly: Bool = false, flaggedOnly: Bool = false, senders: [String] = []) {
+                receivedBefore: Date? = nil, unreadOnly: Bool = false, flaggedOnly: Bool = false, senders: [String] = [],
+                sentOnOrAfter: Date? = nil, sentBefore: Date? = nil) {
         self.terms = terms
         self.participants = participants
         self.senders = senders
         self.receivedOnOrAfter = receivedOnOrAfter
         self.receivedBefore = receivedBefore
+        self.sentOnOrAfter = sentOnOrAfter
+        self.sentBefore = sentBefore
         self.unreadOnly = unreadOnly
         self.flaggedOnly = flaggedOnly
     }

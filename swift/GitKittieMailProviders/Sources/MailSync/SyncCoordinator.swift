@@ -202,8 +202,9 @@ public actor SyncCoordinator {
     /// After a pass over every folder: a message noticed leaving its last folder that no folder
     /// listing brought back is deleted at the provider, unless a folder with mail this device has
     /// not downloaded (history left out by the window or the budget, too large, not reached yet)
-    /// has it: those folders are searched for its Message-ID first. One without a Message-ID
-    /// cannot be searched for, so it waits until every folder is downloaded. Then, with
+    /// has it: those folders are searched for its Message-ID first, or, without one, for its
+    /// sender and day, compared by size and header (``DeletionProbe``, MAIL-104); when that cannot
+    /// tell, it waits for the next pass. Then, with
     /// ``SyncOptions/removesMailDeletedElsewhere``, the local copies go.
     private func reviewDeletions(_ session: any MailboxSession) async throws {
         guard unlistedFolders.isEmpty else { return }
@@ -219,16 +220,28 @@ public actor SyncCoordinator {
             for candidate in candidates {
                 try Task.checkCancellation()
                 guard !incomplete.isEmpty else { confirmed.append(candidate); continue }
-                guard let messageID = candidate.messageID, checks > 0 else { continue }
+                guard checks > 0 else { continue }
                 checks -= 1
-                var found = false
-                for folder in incomplete where !found {
-                    found = !(try await session.search(messageIDHeader: messageID, in: folder)).isEmpty
-                }
-                if found {
-                    try await store.dismissDeletion(of: candidate.id, account: account)
+                var found: Bool? = false
+                if let messageID = candidate.messageID {
+                    for folder in incomplete where found == false {
+                        found = !(try await session.search(messageIDHeader: messageID, in: folder)).isEmpty
+                    }
                 } else {
-                    confirmed.append(candidate)
+                    let probe: DeletionProbe
+                    do {
+                        probe = try await DeletionProbe(store.message(candidate.id))
+                    } catch {
+                        // Not readable here now: nothing to look for it by, so it is not marked.
+                        log.warning("sync", "could not read a message that left its last folder (\(error)); not marking it")
+                        continue
+                    }
+                    found = try await probe.find(in: incomplete, session)
+                }
+                switch found {
+                case true?: try await store.dismissDeletion(of: candidate.id, account: account)
+                case false?: confirmed.append(candidate)
+                case nil: log.info("sync", "a message without a Message-ID left its last folder; not sure it is gone, checking again next pass")
                 }
             }
             if !confirmed.isEmpty {
