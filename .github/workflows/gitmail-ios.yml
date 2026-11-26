@@ -27,6 +27,10 @@ on:
       - .github/workflows/gitmail-ios.yml
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-test:
     name: Build and test (iOS Simulator, with the test mail server)
