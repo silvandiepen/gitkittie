@@ -28,7 +28,7 @@ extension IMAPSession {
 
     /// Every condition of `criteria`, ANDed: a word in the subject, the sender or the text; a
     /// person in From, To or Cc (envelope or header text); a sender in From; the received day;
-    /// unread; flagged. Never empty (`ALL`).
+    /// the sent day (Date header); unread; flagged. Never empty (`ALL`).
     static func searchKey(_ criteria: RemoteSearchCriteria) -> SearchKey {
         var keys: [SearchKey] = []
         for term in criteria.terms {
@@ -49,6 +49,8 @@ extension IMAPSession {
         }
         if let since = criteria.receivedOnOrAfter { keys.append(.since(calendarDay(since))) }
         if let before = criteria.receivedBefore { keys.append(.before(calendarDay(before))) }
+        if let since = criteria.sentOnOrAfter { keys.append(.sentSince(calendarDay(since))) }
+        if let before = criteria.sentBefore { keys.append(.sentBefore(calendarDay(before))) }
         if criteria.unreadOnly { keys.append(.unseen) }
         if criteria.flaggedOnly { keys.append(.flagged) }
         switch keys.count {
