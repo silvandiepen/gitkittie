@@ -35,7 +35,8 @@ extension MailStore {
     /// An account's Trash and Junk, by folder name, from its folders' roles: the folders whose
     /// mail shows only there. Without a `trash` folder, the `Trash` folder an action creates on
     /// first use counts (MAIL-036), so mail moved there leaves the other views before the next
-    /// folder list names it.
+    /// folder list names it; likewise without a `junk` folder, the `Junk` folder an Always Junk
+    /// rule creates on first use (GKM-072, MAIL-110).
     public static func trashAndJunkFolders(_ folders: [SyncedFolder]) -> [String: String] {
         var result: [String: String] = [:]
         for folder in folders {
@@ -43,6 +44,9 @@ extension MailStore {
         }
         if !folders.isEmpty, !result.values.contains("trash"), folders.first(where: { $0.name == "Trash" })?.role == nil {
             result["Trash"] = "trash"
+        }
+        if !folders.isEmpty, !result.values.contains("junk"), folders.first(where: { $0.name == "Junk" })?.role == nil {
+            result["Junk"] = "junk"
         }
         return result
     }

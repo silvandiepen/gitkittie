@@ -148,7 +148,8 @@ final class TrashAndJunkTests: XCTestCase {
 
     func testWithoutATrashFolderTheTrashCreatedOnFirstUseCounts() async throws {
         let (store, ids) = try await seeded(folders: [SyncedFolder(name: "INBOX", path: ["INBOX"], role: "inbox")])
-        XCTAssertEqual(MailStore.trashAndJunkFolders([SyncedFolder(name: "INBOX", path: ["INBOX"], role: "inbox")]), ["Trash": "trash"])
+        XCTAssertEqual(MailStore.trashAndJunkFolders([SyncedFolder(name: "INBOX", path: ["INBOX"], role: "inbox")]), ["Trash": "trash", "Junk": "junk"],
+                       "the Trash and Junk folders an action creates on first use")
         XCTAssertEqual(MailStore.trashAndJunkFolders(Self.folders), ["Deleted Messages": "trash", "Spam": "junk"])
         XCTAssertEqual(MailStore.trashAndJunkFolders([]), [:], "nothing known about the account yet")
         let garden = try XCTUnwrap(ids["Garden"])
