@@ -203,14 +203,29 @@ final class MailFlowUITests: XCTestCase {
     /// `AccessibilityAuditPolicy` names each system control that is skipped, and why.
     private func audit(_ screen: String) {
         var found: [AuditFinding] = []
-        do {
-            // The handler only copies the issue; the app is looked at after the audit.
-            try app.performAccessibilityAudit(for: .all) { issue in
-                found.append(AuditFinding(issue))
-                return true
+        var attempt = 1
+        while true {
+            do {
+                // The handler only copies the issue; the app is looked at after the audit.
+                try app.performAccessibilityAudit(for: .all) { issue in
+                    found.append(AuditFinding(issue))
+                    return true
+                }
+                if attempt > 1 { print("audit [\(screen)] completed on attempt \(attempt)") }
+            } catch {
+                // On a busy CI runner the audit sometimes gives up before it is done (GKM-113): it
+                // found nothing, it just didn't finish. Only that is tried again, a few times, once
+                // the app is idle; any other error, and anything it found, fails as before.
+                if Self.auditTimedOut(error), found.isEmpty, attempt <= Self.auditRetries {
+                    print("audit [\(screen)] timed out (attempt \(attempt) of \(Self.auditRetries + 1)); retrying once the app is idle: \(error)")
+                    attempt += 1
+                    // A snapshot waits for the app to be idle (no animations, no busy main thread).
+                    _ = try? app.snapshot()
+                    continue
+                }
+                auditFindings.append("[\(screen)] the audit could not run (attempt \(attempt)): \(error)")
             }
-        } catch {
-            auditFindings.append("[\(screen)] the audit could not run: \(error)")
+            break
         }
         for finding in found {
             if let reason = AccessibilityAuditPolicy.skipReason(finding, in: app) {
@@ -219,6 +234,15 @@ final class MailFlowUITests: XCTestCase {
                 auditFindings.append("[\(screen)] \(finding.description)")
             }
         }
+    }
+
+    /// How many times a timed-out audit is tried again (GKM-113).
+    private static let auditRetries = 2
+
+    /// XCTest's "Audit failed to complete in time" (com.apple.xcode.xctest.accessibilityAudit -56).
+    private static func auditTimedOut(_ error: Error) -> Bool {
+        let error = error as NSError
+        return error.domain == "com.apple.xcode.xctest.accessibilityAudit" && error.code == -56
     }
 
     private func assertNoAccessibilityIssues() {
