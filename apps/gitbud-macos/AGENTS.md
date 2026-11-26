@@ -50,6 +50,16 @@ Phase 1 is macOS-first and supports:
 - Full-history purge is a dangerous workflow, not a normal delete action. It must
   create backup refs and use explicit confirmation language.
 
+## Menu commands
+
+- Menu items with a keyboard shortcut (`GitBudCommands` in `GitBud/App/GitBudApp.swift`) have no
+  `.disabled(…)` and capture no model state. SwiftUI syncs a menu item only at launch and when
+  that menu is opened, so a shortcut keeps the state it had then (GITKITTIE-099). They check
+  `AppModel.canRun(_:)` (`GitBud/Core/AppModel+MenuCommands.swift`, tested in `AppModelTests`)
+  as they run, and the reason shows in the main window's alert. Items without a shortcut may
+  keep `.disabled`. Don't use `@FocusedValue` in commands; look up `NSApp.keyWindow` when the
+  action runs.
+
 ## Platform rule
 
 iOS and iPadOS GitKittie Bud are remote-only through GitPont. Do not design shared
