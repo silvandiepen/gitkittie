@@ -146,6 +146,12 @@ public final class AppModel {
     /// ⌘N while the board on screen ("repoID|folder") was still being read: the new task
     /// starts there once it is (see `requestNewTask`).
     @ObservationIgnored var newTaskAwaitsBoard: String?
+    /// Images opened in Tasks (dropped on the Dock icon, Open With) that wait for the board
+    /// their new task goes on: the board being read, or the one picked in the chooser.
+    @ObservationIgnored var imagesAwaitingBoard: [TaskImage] = []
+    /// Images opened in Tasks before it had restored — a drop on the Dock icon that launched
+    /// it. They start their task once `restore()` has reopened the last board.
+    @ObservationIgnored var imagesAwaitingRestore: [TaskImage] = []
     public var boardViewMode: BoardViewMode = .lanes
     public var showQuickCreate = false
 
@@ -325,6 +331,8 @@ public final class AppModel {
         await refreshSyncItems()
         Task { await flushOutbox() }
         await reopenLastBoard()
+        isRestoring = false
+        startImagesOpenedBeforeRestore()
     }
 
     /// Restore just enough to write a card from outside the app (the share extension):

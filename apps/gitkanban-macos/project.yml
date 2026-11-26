@@ -89,3 +89,15 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         LSMinimumSystemVersion: "14.0"
         NSHumanReadableCopyright: "Copyright © Sil van Diepen"
+        # Images dragged onto the Dock icon (or Open With) become a new task (GITKITTIE-105).
+        # Viewer + Alternate: Tasks accepts them but never becomes the default image app.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Image
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.png
+              - public.jpeg
+              - public.heic
+              - public.tiff
+              - public.image

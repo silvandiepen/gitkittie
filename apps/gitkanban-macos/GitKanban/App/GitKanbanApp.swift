@@ -3,7 +3,9 @@ import GitKanbanKit
 
 @main
 struct GitKanbanApp: App {
-    @State private var model = AppModel()
+    /// Owns the model, and takes the images dropped on the Dock icon (`AppDelegate.swift`).
+    @NSApplicationDelegateAdaptor(TasksAppDelegate.self) private var appDelegate
+    private var model: AppModel { appDelegate.model }
 
     init() {
         // Thin overlay scrollbars that only show while scrolling, whatever System Settings says
@@ -13,9 +15,10 @@ struct GitKanbanApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: TasksAppDelegate.mainWindowID) {
             RootView()
                 .environment(model)
+                .modifier(RegistersMainWindowOpener(delegate: appDelegate))
                 .frame(minWidth: 900, minHeight: 600)
                 .background(SolidWindow())
                 .tint(Theme.accent)
