@@ -55,6 +55,14 @@ enum AccessibilityAuditPolicy {
         if keyboard.exists, element.frame.maxY > keyboard.frame.minY - 48 {
             return "behind or inside the system keyboard"
         }
+        // A message row's subject over several lines at Accessibility XXXL is reported clipped
+        // while every line shows (GKM-061 screenshot, run 21); the row reads it whole to
+        // VoiceOver too. Only when the row's label carries the whole text.
+        if finding.type == .textClipped, element.type == .staticText,
+           app.descendants(matching: .any).matching(identifier: "messageRow").allElementsBoundByIndex
+               .contains(where: { $0.frame.contains(element.frame) && $0.label.contains(element.label) }) {
+            return "a message row's text, shown whole and read whole"
+        }
         // A one-line SwiftUI TextField (the subject, the account name) is reported clipped while
         // it shows all its text and its placeholder whole (GKM-061 screenshots); the field's text
         // layout is the system's.
