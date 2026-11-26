@@ -251,20 +251,21 @@ final class MailFlowUITests: XCTestCase {
     }
 
     private func replace(_ field: XCUIElement, with text: String) {
-        // At the largest text sizes the field may be further down than one swipe, or under the
-        // keyboard.
-        for _ in 0..<6 {
-            let keyboard = app.keyboards.firstMatch
-            let covered = keyboard.exists && field.exists && field.frame.midY > keyboard.frame.minY - 20
-            if field.exists && field.isHittable && !covered { break }
-            app.swipeUp()
-        }
+        for _ in 0..<4 where !field.exists { app.swipeUp(velocity: .slow) }
         XCTAssertTrue(field.waitForExistence(timeout: 5))
-        // The fields are trailing-aligned: tap the right end so the cursor lands after the old
-        // text (a plain tap can put it at the start on iPad, and the deletes then remove nothing).
-        // At the largest text sizes the field wraps and its text sits at the bottom.
-        let tall = field.frame.height > 60
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: tall ? 0.85 : 0.5)).tap()
+        if !field.isHittable { app.swipeUp() }
+        if field.frame.height > 60 {
+            // At the largest text sizes the field wraps and its text sits at the bottom right:
+            // focus it first (XCUITest scrolls it into view, iOS lifts it above the keyboard),
+            // then tap the end of the text.
+            field.tap()
+            field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.85)).tap()
+        } else {
+            // The fields are trailing-aligned: tap the right end so the cursor lands after the
+            // old text (a plain tap can put it at the start on iPad, and the deletes then remove
+            // nothing).
+            field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        }
         let current = field.value as? String ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
         field.typeText(text)

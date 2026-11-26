@@ -140,7 +140,6 @@ private struct AccountHeader: View {
         VStack(alignment: .leading, spacing: 2) {
             // An address would wrap mid-domain ("example.-com"): one line, shortened in the middle.
             Text(account.displayName)
-                .accessibilityLabel("Account \(account.displayName)")
                 .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
                 .truncationMode(.middle)
             if let status = model.syncStatus(account.id) {
@@ -153,6 +152,8 @@ private struct AccountHeader: View {
                     .accessibilityIdentifier("syncStatus.\(account.address)")
             }
         }
+        // The account and how its sync is doing, read together.
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -52,7 +52,6 @@ struct AddAccountScreen: View {
                         .accessibilityIdentifier("senderNameField")
                     // A fixed prompt: the address as a placeholder was cut off (GKM-061).
                     TextField("Account name (optional)", text: $draft.name)
-                        .accessibilityLabel("Account name, optional")
                         .accessibilityIdentifier("nameField")
                 } footer: {
                     Text(draft.displayName.isEmpty ? "Your name is what people see on mail you send."

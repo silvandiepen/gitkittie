@@ -55,30 +55,32 @@ struct MessageCard: View {
         let sender = message.content?.sender
         let front = message.stored?.front
         return VStack(alignment: .leading, spacing: 4) {
-            // At the accessibility sizes the date goes under the name (GKM-061).
-            let line = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-                                                    : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
-            line {
-                // The name the sender wrote, and always the address under it (ThreatModel §3).
-                Text(sender?.name ?? sender?.address ?? message.summary.from?.displayName ?? "Unknown sender")
-                    .font(.body.weight(.semibold))
-                    .accessibilityLabel(senderLabel)
-                    .accessibilityAddTraits(.isHeader)
-                if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    if message.summary.isFlagged {
-                        Image(systemName: "flag.fill").foregroundStyle(.orange).accessibilityLabel("Flagged")
+            // Name, date and address are one element: the name the sender wrote and, always,
+            // the address, with one target instead of a small selectable address (GKM-061).
+            VStack(alignment: .leading, spacing: 4) {
+                // At the accessibility sizes the date goes under the name (GKM-061).
+                let line = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+                line {
+                    // The name the sender wrote, and always the address under it (ThreatModel §3).
+                    Text(sender?.name ?? sender?.address ?? message.summary.from?.displayName ?? "Unknown sender")
+                        .font(.body.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
+                    if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if message.summary.isFlagged {
+                            Image(systemName: "flag.fill").foregroundStyle(.orange).accessibilityLabel("Flagged")
+                        }
+                        Text(MessageDate.short(message.summary.date))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    Text(MessageDate.short(message.summary.date))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                }
+                if sender?.name != nil, let address = sender?.address {
+                    Text(address).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
                 }
             }
-            if sender?.name != nil, let address = sender?.address {
-                Text(address).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
-                    // Read as part of the sender line above, one element with one large target.
-                    .accessibilityHidden(true)
-            }
+            .accessibilityElement(children: .combine)
             if let front {
                 if !front.to.isEmpty { Text("To \(people(front.to))").font(.subheadline).foregroundStyle(.secondary).lineLimit(typeSize.isAccessibilitySize ? nil : 3) }
                 if !front.cc.isEmpty { Text("Cc \(people(front.cc))").font(.subheadline).foregroundStyle(.secondary).lineLimit(typeSize.isAccessibilitySize ? nil : 3) }
@@ -181,14 +183,6 @@ struct MessageCard: View {
         case .empty:
             Text("This message has no text.").font(.subheadline).foregroundStyle(.secondary)
         }
-    }
-
-    /// The name and, always, the address: VoiceOver gets what the screen shows (ThreatModel §3).
-    private var senderLabel: String {
-        let sender = message.content?.sender
-        let name = sender?.name ?? sender?.address ?? message.summary.from?.displayName ?? "Unknown sender"
-        guard sender?.name != nil, let address = sender?.address else { return "From \(name)" }
-        return "From \(name), address \(address)"
     }
 
     private func people(_ addresses: [MailAddress]) -> String {

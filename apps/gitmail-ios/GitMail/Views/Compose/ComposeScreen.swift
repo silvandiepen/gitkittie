@@ -106,7 +106,6 @@ struct ComposeScreen: View {
                 TextField("Subject", text: $compose.subject)
                     .font(.body)
                     .focused($focus, equals: .subject)
-                    .accessibilityLabel("Subject")
                     .padding(.horizontal, 16).padding(.vertical, 12)
                     .accessibilityIdentifier("subjectField")
                 Divider()
@@ -191,7 +190,8 @@ struct ComposeScreen: View {
             }
         }
         .font(.caption)
-        .foregroundStyle(.secondary)
+        // A fixed colour, not the hierarchical style, which measured under 4.5:1 here.
+        .foregroundStyle(Color(uiColor: .secondaryLabel))
         .padding(.horizontal, 16).padding(.bottom, 16)
         .accessibilityIdentifier("saveState")
     }
