@@ -19,21 +19,24 @@ struct RulePreviewSheet: View {
                     Notice(systemImage: "arrow.up.bin", tint: .orange,
                            text: "This rule also archives the mail it silences at your mail provider. You can undo it from Edit ▸ Undo.")
                 }
+                ForEach(pending.notes, id: \.self) { note in
+                    Notice(systemImage: "xmark.bin", tint: .orange, text: note)
+                }
                 List {
                     Section(preview.changed.isEmpty ? "Nothing moves" : "Moves (\(preview.changed.count))") {
-                        ForEach(preview.changed) { item in PreviewRow(item: item, canExclude: rule != nil) }
+                        ForEach(preview.changed) { item in PreviewRow(item: item, rules: pending.rules, canExclude: rule != nil) }
                     }
                     let kept = preview.items.filter { !$0.changes && ($0.protection != nil || $0.isExcluded) }
                     if !kept.isEmpty {
                         Section("Stays where it is (\(kept.count))") {
-                            ForEach(kept) { item in PreviewRow(item: item, canExclude: rule != nil && item.isExcluded) }
+                            ForEach(kept) { item in PreviewRow(item: item, rules: pending.rules, canExclude: rule != nil && item.isExcluded) }
                         }
                     }
                     let unchanged = preview.items.filter { !$0.changes && $0.protection == nil && !$0.isExcluded }
                     if !unchanged.isEmpty {
                         Section {
                             if showsUnchanged {
-                                ForEach(unchanged) { item in PreviewRow(item: item, canExclude: false) }
+                                ForEach(unchanged) { item in PreviewRow(item: item, rules: pending.rules, canExclude: false) }
                             }
                         } header: {
                             Button(showsUnchanged ? "Hide \(unchanged.count) unchanged" : "Show \(unchanged.count) unchanged") {
@@ -73,7 +76,9 @@ struct RulePreviewSheet: View {
         if let rule { parts.append(SenderRuleText.explanation(rule.action)) }
         let count = preview.changed.count
         parts.append(count == 0 ? "No message moves." : count == 1 ? "1 message moves." : "\(count) messages move.")
-        parts.append("New mail is sorted the same way. Your mail provider isn’t changed\(rule?.archiveAtProvider == true ? " except for the archive" : "").")
+        if rule?.action.blocks != true {
+            parts.append("New mail is sorted the same way. Your mail provider isn’t changed\(rule?.archiveAtProvider == true ? " except for the archive" : "").")
+        }
         return parts.joined(separator: " ")
     }
 }
@@ -81,6 +86,7 @@ struct RulePreviewSheet: View {
 private struct PreviewRow: View {
     @Environment(AppModel.self) private var model
     let item: SenderRulePreview.Item
+    let rules: [SenderRule]
     let canExclude: Bool
 
     var body: some View {
@@ -98,7 +104,7 @@ private struct PreviewRow: View {
                     Text(SenderRuleText.placement(item.before))
                     if item.changes {
                         Image(systemName: "arrow.right").accessibilityLabel("becomes")
-                        Text(SenderRuleText.placement(item.after)).foregroundStyle(Theme.accent)
+                        Text(SenderRuleText.placement(item.after, rules: rules)).foregroundStyle(Theme.accent)
                     }
                 }
                 .font(.caption)
