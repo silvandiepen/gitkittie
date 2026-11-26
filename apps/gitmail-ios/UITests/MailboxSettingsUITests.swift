@@ -74,7 +74,8 @@ final class MailboxSettingsUITests: XCTestCase {
 
         // Delete asks first, then the folder is gone at the provider.
         app.buttons["deleteFolderButton"].tap()
-        let confirm = app.buttons["confirmDeleteFolder"]
+        // iOS 26 nests the dialog's button in a second element with the same identifier.
+        let confirm = app.buttons.matching(identifier: "confirmDeleteFolder").firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "deleting asks first")
         snapshot("settings-delete")
         confirm.tap()
