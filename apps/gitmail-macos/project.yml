@@ -158,6 +158,9 @@ targets:
       - path: ../../swift/MailAppTestSupport
       # The recording HTTP server the unsubscribe tests share with the mail core's.
       - path: ../../swift/GitKittieMailKit/Tests/MailUnsubscribeTests/RecordingHTTPServer.swift
+      # The shared theme and its Increase Contrast tests (GKM-063), compiled here as the app does.
+      - path: ../../swift/GitKittieUI/Theme.swift
+      - path: ../../swift/GitKittieUITests
     dependencies:
       - package: GitKittieMailKit
         product: MailCore
