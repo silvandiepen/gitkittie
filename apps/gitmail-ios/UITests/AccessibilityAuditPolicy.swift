@@ -2,6 +2,7 @@ import XCTest
 
 /// One issue an accessibility audit reported, copied out of the audit's handler: the handler
 /// only records, and the policy below looks at the app after the audit has finished.
+@MainActor
 struct AuditFinding {
     var type: XCUIAccessibilityAuditType
     var summary: String
