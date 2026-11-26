@@ -21,7 +21,7 @@ final class MailboxNavigationUITests: XCTestCase {
         app.launchArguments = ["-uiTestFreshStore"]
         app.launchEnvironment["GKM_TEST_CA_PEM_BASE64"] = server.caPEM.base64EncodedString()
         app.launch()
-        addAccount(user)
+        AddAccountForm(app: app, test: self).add(user, on: server)
 
         let account = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH 'mailbox.All of '")).firstMatch
@@ -100,73 +100,6 @@ final class MailboxNavigationUITests: XCTestCase {
         }
         return app.navigationBars["Mailboxes"].waitForExistence(timeout: 10)
             && waitFor(timeout: 5) { focused.isHittable }
-    }
-
-    private func addAccount(_ user: LocalMailServer.User) {
-        let add = app.buttons.matching(identifier: "addAccountButton").firstMatch
-        XCTAssertTrue(add.waitForExistence(timeout: 20))
-        add.tap()
-        let picker = app.segmentedControls["providerPicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        picker.buttons["Other IMAP"].tap()
-        type(user.address, into: app.textFields["addressField"])
-        type(user.password, into: app.secureTextFields["passwordField"])
-        replace(app.textFields["imapHostField"], with: "localhost")
-        replace(app.textFields["imapPortField"], with: "3993")
-        replace(app.textFields["smtpHostField"], with: "localhost")
-        replace(app.textFields["smtpPortField"], with: "3465")
-        hideKeyboard()
-        let security = app.buttons["smtpSecurityPicker"]
-        for _ in 0..<6 where !(security.exists && security.isHittable) { app.swipeUp() }
-        security.tap()
-        let tls = app.buttons["TLS"]
-        XCTAssertTrue(tls.waitForExistence(timeout: 5))
-        tls.tap()
-        app.buttons["addAccountConfirm"].tap()
-        let added = waitFor(timeout: 60) {
-            self.declineSavePassword()
-            return !self.app.textFields["addressField"].exists
-        }
-        XCTAssertTrue(added, "the account was not added")
-    }
-
-    /// iOS may offer to save the test password in Passwords; the test never does.
-    private func declineSavePassword() {
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        for owner in [app!, springboard] where owner.buttons["Not Now"].exists {
-            owner.buttons["Not Now"].tap()
-            return
-        }
-    }
-
-    private func hideKeyboard() {
-        let done = app.buttons["keyboardDone"]
-        if app.keyboards.firstMatch.exists, done.exists, done.isHittable { done.tap() }
-    }
-
-    private func type(_ text: String, into field: XCUIElement) {
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        hideKeyboard()
-        field.tap()
-        field.typeText(text)
-    }
-
-    private func replace(_ field: XCUIElement, with text: String) {
-        // On iPad the server fields start below the sheet's fold: scroll until the field is there.
-        for _ in 0..<4 where !field.exists { app.swipeUp(velocity: .slow) }
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        // The number pad has no Return: put it away (Done above it), or it covers the next field.
-        for _ in 0..<4 {
-            hideKeyboard()
-            if !field.isHittable { app.swipeUp(velocity: .slow) }
-            // Trailing-aligned: tap the right end so the cursor lands after the old text.
-            field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
-            if (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false { break }
-            app.swipeDown(velocity: .slow)
-        }
-        let current = field.value as? String ?? ""
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
-        field.typeText(text)
     }
 
     private func snapshot(_ name: String) {
