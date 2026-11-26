@@ -328,6 +328,8 @@ final class MailFlowUITests: XCTestCase {
         if !row.waitForExistence(timeout: 10) {
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
+        // At the largest text sizes the account's folders are further down the list.
+        for _ in 0..<6 where !(row.waitForExistence(timeout: 3) && row.isHittable) { app.swipeUp(velocity: .slow) }
         XCTAssertTrue(row.waitForExistence(timeout: 20))
         row.tap()
     }

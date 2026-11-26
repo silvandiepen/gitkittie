@@ -165,13 +165,14 @@ struct AddAccountScreen: View {
             }
             .accessibilityIdentifier("smtpSecurityPicker")
             LabeledContent("User name") {
-                serverField(draft.trimmedAddress.isEmpty ? "Your email address" : draft.trimmedAddress, text: $draft.username)
+                // A short prompt: the address as a placeholder was cut off at the large sizes.
+                serverField("Optional", text: $draft.username)
                     .accessibilityLabel("User name")
             }
         } header: {
             Text("Servers")
         } footer: {
-            Text("Connections are always encrypted, and the certificate is checked. Plain-text connections aren’t offered.")
+            Text("Without a user name, Mail signs in with your email address. Connections are always encrypted, and the certificate is checked. Plain-text connections aren’t offered.")
         }
     }
 
