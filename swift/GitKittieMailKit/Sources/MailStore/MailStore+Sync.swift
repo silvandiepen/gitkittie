@@ -61,6 +61,34 @@ extension MailStore {
         try index.isTrashOrJunk(id)
     }
 
+    /// Applies an account's folder choices (MAIL-094) to the folders on record at once, without
+    /// waiting for the next sync: each folder's role in use is worked out again from its detected
+    /// role. Returns the folders as they are now.
+    @discardableResult
+    public func applyMailboxSettings(_ settings: MailboxSettings, account: MailAccountID) throws -> [SyncedFolder] {
+        let mapping = try mapping(for: SafePath.component(account.rawValue))
+        let folders = try mapping.folders()
+        let roles = settings.effectiveRoles(detected: folders.map { ($0.name, $0.detectedRole) })
+        try mapping.setRoles(roles)
+        // A chosen Trash or Junk leaves the other views at once (MAIL-102).
+        try refreshTrashAndJunk(account: account)
+        return try mapping.folders()
+    }
+
+    /// Follows a folder renamed at the provider (GKM-066), with the folders inside it: the sync
+    /// state, the locations, the action journal and the index's folder memberships move to the
+    /// new name, so the mail in it is not downloaded again. Call it only after the provider
+    /// renamed the folder, and while the account's sync is stopped.
+    public func renameSyncedFolder(_ old: String, to new: String, delimiter: Character?, account: MailAccountID) throws {
+        let mapping = try mapping(for: SafePath.component(account.rawValue))
+        let renamed = try mapping.renameFolder(old, to: new, delimiter: delimiter)
+        for pair in renamed {
+            try index.renameMailbox(pair.old, to: pair.new, account: account)
+        }
+        // A renamed Trash or Junk keeps its mail out of the other views (MAIL-102).
+        try refreshTrashAndJunk(account: account)
+    }
+
     /// Checkpoints a folder's cursor. Call it only after the messages it covers are stored:
     /// `ingest` returns once the `.eml` and the mapping are durable, so after it is safe.
     public func saveCursor(folder: String, uidValidity: UInt32, highestUID: UInt32, historyComplete: Bool,

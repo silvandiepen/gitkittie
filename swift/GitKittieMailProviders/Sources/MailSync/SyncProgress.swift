@@ -1,4 +1,5 @@
 import Foundation
+import MailCore
 import MailProvider
 import MailStore
 
@@ -58,6 +59,9 @@ public struct SyncOptions: Sendable {
     /// Backoff between reconnects. Its `maxAttempts` is not used: the sync keeps trying at the
     /// longest delay until it is stopped.
     public var reconnect: ReconnectPolicy
+    /// The account's folder choices (GKM-066, MAIL-093, MAIL-094): folders that don't sync are
+    /// listed but never opened, and the special folders chosen by hand are the roles on record.
+    public var mailboxes = MailboxSettings()
 
     public init(recentPerFolder: Int = 200, historyBudgetBytes: Int64? = nil, historyDays: Int? = nil, historyPerPass: Int = 10_000,
                 historySlice: Duration = .seconds(20), onDemandThreshold: Int? = 1_000_000, pinnedPerPass: Int = 50,

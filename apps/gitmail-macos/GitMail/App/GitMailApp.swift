@@ -6,6 +6,8 @@ import SwiftUI
 @main
 struct GitMailApp: App {
     @State private var model: AppModel
+    /// Which tab Settings opens on (GKM-066).
+    @State private var settings = SettingsNavigation()
 
     init() {
         // Thin overlay scrollbars that only show while scrolling, whatever System Settings says
@@ -24,6 +26,7 @@ struct GitMailApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                .environment(settings)
                 .frame(minWidth: 960, minHeight: 600)
                 .background(SolidWindow())
                 .tint(Theme.accent)
@@ -93,21 +96,19 @@ struct GitMailApp: App {
             CommandGroup(after: .toolbar) {
                 Button("Rebuild Search Index") { Task { await model.rebuildIndex() } }
                     .disabled(model.phase != .ready || model.isRebuildingIndex)
-                OfflineStorageCommand()
+                OfflineStorageCommand(navigation: settings)
                     .disabled(model.phase != .ready)
             }
         }
 
-        // What is kept offline and what the cache may give back (GKM-036).
-        Window("Offline Storage", id: OfflineStorageView.windowID) {
-            OfflineStorageView()
+        // Mail ▸ Settings… (⌘,): accounts and their mailboxes, notifications, storage (GKM-066).
+        Settings {
+            SettingsView()
                 .environment(model)
-                .background(SolidWindow())
+                .environment(settings)
                 .tint(Theme.accent)
                 .preferredColorScheme(.dark)
         }
-        .windowResizability(.contentSize)
-        .commandsRemoved()
 
         // One window per draft; restored with its draft after a relaunch (GKM-013).
         WindowGroup("New Message", id: ComposeScene.id, for: DraftID.self) { $draftID in

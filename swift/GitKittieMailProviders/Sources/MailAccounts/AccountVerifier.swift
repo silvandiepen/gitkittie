@@ -87,7 +87,7 @@ public enum AccountSetupError: Error, Sendable, Equatable, CustomStringConvertib
             return .timedOut(role, host: server.host)
         case .unsupported(let detail):
             return .notSecure(role, host: server.host, detail: detail)
-        case .commandFailed(let detail), .protocolViolation(let detail), .folderNotFound(let detail):
+        case .commandFailed(let detail), .protocolViolation(let detail), .folderNotFound(let detail), .invalidName(let detail):
             return .refused(role, host: server.host, detail: detail)
         case .messageNotFound(let id):
             return .refused(role, host: server.host, detail: id.description)

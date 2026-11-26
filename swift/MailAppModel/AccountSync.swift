@@ -23,7 +23,7 @@ struct AccountServices {
         var options = SyncOptions()
         // Attachments above this stay at the provider until opened or pinned (GKM-036); 1 MB
         // unless set (`defaults write app.hakobs.gitmail onDemandThresholdBytes <bytes>`, 0 = off).
-        if let threshold = UserDefaults.standard.object(forKey: "onDemandThresholdBytes") as? Int {
+        if let threshold = UserDefaults.standard.object(forKey: AppModel.onDemandThresholdKey) as? Int {
             options.onDemandThreshold = threshold > 0 ? threshold : nil
         }
         // How far back a folder's history goes (MAIL-072): the Mac's Offline Storage window
@@ -111,6 +111,7 @@ final class AccountSync {
         let connector = services.connections.imap(connection, password: secret)
         var options = services.syncOptions
         options.removesMailDeletedElsewhere = account.removesDeletedMail
+        options.mailboxes = account.mailboxSettings
         let coordinator = SyncCoordinator(account: account.id, connector: connector,
                                           store: store, options: options, log: services.connections.log)
         coordinators[account.id] = coordinator
@@ -142,8 +143,10 @@ final class AccountSync {
 
     /// Stops one account's sync and waits for its connection to close.
     func stop(_ account: MailAccountID) async {
-        if let coordinator = coordinators.removeValue(forKey: account) { await coordinator.stop() }
+        // Stop listening first: the coordinator's last update (stopped) still carries the folders
+        // as it last recorded them, which must not overwrite folders changed meanwhile (GKM-066).
         listeners.removeValue(forKey: account)?.cancel()
+        if let coordinator = coordinators.removeValue(forKey: account) { await coordinator.stop() }
         if let replayer = replayers.removeValue(forKey: account) { await replayer.stop() }
         fetchers[account] = nil
         searchers[account] = nil
@@ -159,6 +162,24 @@ final class AccountSync {
             await replayer.refreshStatus()
             await replayer.kick()
         }
+    }
+
+    /// Folders on record changed outside a sync pass (settings, a folder edit): show them now.
+    func setFolders(_ folders: [SyncedFolder], for account: MailAccountID) {
+        self.folders[account] = folders
+    }
+
+    /// Edits the account's folders at the provider (GKM-066), over a connection of its own with
+    /// the password in the Keychain. The caller stops the account's sync first.
+    func folderEditor(for account: MailAccount, store: MailStore) throws -> FolderEditor {
+        guard let connection = account.connection else {
+            throw MailProviderError.unsupported("this account isn’t connected")
+        }
+        guard let secret = try services.credentials.secret(for: account.id) else {
+            throw MailProviderError.authenticationFailed("\(DeviceWords.thisAtStart) has no password for this account yet.")
+        }
+        return FolderEditor(account: account.id, connector: services.connections.imap(connection, password: secret), store: store,
+                            log: services.connections.log)
     }
 
     /// The on-demand fetcher of a syncing account; nil when it does not sync on this Mac.

@@ -13,6 +13,16 @@ public protocol MailboxSession: AnyObject {
     func status(of folder: String) async throws -> FolderStatus
     func createFolder(_ folder: String) async throws
     func deleteFolder(_ folder: String) async throws
+    /// Renames a folder, with the folders inside it (IMAP RENAME). The new name is a provider
+    /// id, as ``folderID(for:)`` makes it.
+    func renameFolder(_ folder: String, to newName: String) async throws
+    /// What separates the levels of a folder's id (IMAP: the hierarchy delimiter, `/` or `.`);
+    /// nil when the provider has no folders inside folders.
+    func hierarchyDelimiter() async throws -> Character?
+    /// The provider's id for a new folder at this readable path, e.g. ["Projects", "Café"]
+    /// (GKM-066). Throws ``MailProviderError/invalidName(_:)`` for an empty part, a part that holds
+    /// the delimiter, or a path inside another folder where the provider has no levels.
+    func folderID(for path: [String]) async throws -> String
 
     /// Incremental sync: everything new since `cursor`, or the whole folder when `cursor` is nil
     /// or its UIDVALIDITY no longer matches (then ``FolderChanges/isReset`` is true).
@@ -107,6 +117,8 @@ public enum MailProviderError: Error, Sendable, Equatable, CustomStringConvertib
     /// The server answered NO or BAD.
     case commandFailed(String)
     case folderNotFound(String)
+    /// A folder name the provider can't take (empty, holds its delimiter, too long).
+    case invalidName(String)
     case messageNotFound(RemoteMessageID)
     /// The server sent something this client could not make sense of.
     case protocolViolation(String)
@@ -127,6 +139,7 @@ public enum MailProviderError: Error, Sendable, Equatable, CustomStringConvertib
         case .unsupported(let s): "unsupported: \(s)"
         case .commandFailed(let s): "command failed: \(s)"
         case .folderNotFound(let s): "folder not found: \(s)"
+        case .invalidName(let s): "invalid folder name: \(s)"
         case .messageNotFound(let id): "message not found: \(id)"
         case .protocolViolation(let s): "protocol violation: \(s)"
         case .timedOut(let s): "timed out: \(s)"

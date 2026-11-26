@@ -2,8 +2,9 @@ import MailAccounts
 import MailCore
 import SwiftUI
 
-/// One account: how its sync is doing, a new password when the provider refused the old one,
-/// and removing it from this device. Nothing here changes anything at the provider.
+/// One account: how its sync is doing, its names, its mailboxes and servers (GKM-066), a new
+/// password when the provider refused the old one, and removing it from this device. Only the
+/// mailboxes screen changes anything at the provider (folders made, renamed or deleted).
 struct AccountScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -13,6 +14,7 @@ struct AccountScreen: View {
     @State private var isSaving = false
     @State private var confirmingRemoval = false
     @State private var senderName = ""
+    @State private var accountName = ""
     @State private var settingsError: String?
 
     private var account: MailAccount? { model.accounts.first { $0.id == accountID } }
@@ -31,6 +33,12 @@ struct AccountScreen: View {
                     }
                 }
                 Section {
+                    LabeledContent("Account name") {
+                        TextField("Account name", text: $accountName, prompt: Text(account.displayName))
+                            .multilineTextAlignment(.trailing)
+                            .onSubmit { saveSettings(account, removes: account.removesDeletedMail) }
+                            .accessibilityIdentifier("accountNameField")
+                    }
                     TextField("Your name", text: $senderName)
                         .textContentType(.name)
                         .onSubmit { saveSettings(account, removes: account.removesDeletedMail) }
@@ -45,8 +53,18 @@ struct AccountScreen: View {
                     Text("Sending and Syncing")
                 } footer: {
                     Text(account.removesDeletedMail
-                         ? "Your name is what people see on mail you send. Mail deleted in another app or on the web is removed from \(DeviceWords.this) on the next sync; pinned mail and mail in a space stay."
-                         : "Your name is what people see on mail you send. Mail deleted in another app or on the web stays on \(DeviceWords.this), marked “Deleted at \(ProviderDeletionText.providerName(of: account))” with the time.")
+                         ? "The account name is only for the mailbox list; your name is what people see on mail you send. Mail deleted in another app or on the web is removed from \(DeviceWords.this) on the next sync; pinned mail and mail in a space stay."
+                         : "The account name is only for the mailbox list; your name is what people see on mail you send. Mail deleted in another app or on the web stays on \(DeviceWords.this), marked “Deleted at \(ProviderDeletionText.providerName(of: account))” with the time.")
+                }
+                Section {
+                    NavigationLink("Mailboxes") { AccountMailboxesScreen(accountID: accountID) }
+                        .accessibilityIdentifier("accountMailboxesLink")
+                    if account.connection != nil {
+                        NavigationLink("Servers") { AccountServersScreen(accountID: accountID) }
+                            .accessibilityIdentifier("accountServersLink")
+                    }
+                } footer: {
+                    Text("Which folders sync and show, their order, the special folders, and the incoming and outgoing servers.")
                 }
                 if account.connection != nil {
                     Section {
@@ -79,10 +97,14 @@ struct AccountScreen: View {
         .scrollContentBackground(.hidden)
         .background(Theme.window.ignoresSafeArea())
         .navigationTitle(account?.displayName ?? "Account")
-        .onAppear { senderName = account?.senderName ?? "" }
+        .onAppear {
+            senderName = account?.senderName ?? ""
+            accountName = account?.displayName ?? ""
+        }
         .onDisappear {
-            // A name typed without pressing Return is kept too.
-            if let account, (account.senderName ?? "") != senderName.trimmingCharacters(in: .whitespacesAndNewlines) {
+            // Names typed without pressing Return are kept too.
+            if let account, (account.senderName ?? "") != senderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                || account.displayName != accountName.trimmingCharacters(in: .whitespacesAndNewlines) {
                 saveSettings(account, removes: account.removesDeletedMail)
             }
         }
@@ -112,7 +134,7 @@ struct AccountScreen: View {
         settingsError = nil
         Task {
             do {
-                try await model.updateAccountSettings(account.id, displayName: account.displayName, senderName: senderName,
+                try await model.updateAccountSettings(account.id, displayName: accountName, senderName: senderName,
                                                       removesMailDeletedElsewhere: removes)
             } catch {
                 settingsError = "The settings couldn’t be saved: \(error.localizedDescription)"

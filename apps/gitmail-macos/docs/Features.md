@@ -17,6 +17,7 @@ Freelancers, independent businesses, developers, knowledge-management users, pri
 - Subscription manager identifies legitimate lists, suggests review, supports confirmed unsubscribe and reports outcomes. Never open suspicious unsubscribe links automatically.
 - Cleanup onboarding: progressive import, mailbox breakdown, top noisy senders, samples, suggested actions, correction and optional reversible cleanup. No destructive initial import.
 - Spaces: virtual collections by project, topic, person, company or life area, across accounts; an email may belong to multiple spaces without duplication. Rules populate spaces. Linked tasks, notes and attachments appear in context.
+- Settings (⌘, on the Mac; Settings ▸ an account on iPhone and iPad): accounts and their order; per account its names, password and servers, and its mailboxes: which sync, which show and in what order, which folder is Sent, Drafts, Archive, Trash and Junk, and folders made, renamed and deleted at the provider (GKM-066, MAIL-093..097).
 - Local search with account, participant, category, date, attachment, space, status and subject filters; extract supported attachment text. Later optional local semantic search.
 - Waiting for reply, follow-up views, contact timelines, attachment library, stable links, Markdown composer delivering ordinary MIME. GitKittie Tasks integration through stable identifiers and explicit export, not cross-app imports.
 

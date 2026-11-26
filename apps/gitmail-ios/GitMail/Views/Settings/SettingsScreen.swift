@@ -9,6 +9,7 @@ struct SettingsScreen: View {
     @Environment(MobileSession.self) private var session
     @Environment(MailRouter.self) private var router
     @Environment(\.dismiss) private var dismiss
+    @State private var orderError: String?
 
     var body: some View {
         NavigationStack {
@@ -25,7 +26,17 @@ struct SettingsScreen: View {
                                 }
                             }
                         }
+                        .accessibilityIdentifier("settingsAccountRow")
                     }
+                    // The order of the accounts in the mailbox list (GKM-066): Edit, then drag.
+                    .onMove { source, destination in
+                        Task {
+                            do { try await model.moveAccounts(fromOffsets: source, toOffset: destination) } catch {
+                                orderError = "The order couldn’t be saved: \(error.localizedDescription)"
+                            }
+                        }
+                    }
+                    if let orderError { NoticeLine(systemImage: "exclamationmark.triangle", tint: .orange, text: orderError) }
                     Button("Add Account") {
                         dismiss()
                         router.showsAddAccount = true
@@ -43,6 +54,7 @@ struct SettingsScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                if model.accounts.count > 1 { ToolbarItem(placement: .topBarLeading) { EditButton() } }
             }
         }
     }

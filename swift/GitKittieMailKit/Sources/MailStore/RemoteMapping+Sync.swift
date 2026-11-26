@@ -9,8 +9,12 @@ public struct SyncedFolder: Sendable, Hashable, Codable {
     public var name: String
     /// The readable path, decoded, e.g. ["Projects", "Café"].
     public var path: [String]
-    /// What the folder is for (`inbox`, `sent`, …), when the provider says.
+    /// What the folder is for (`inbox`, `sent`, …): the provider's own marking, or the folder
+    /// the account chose for the role instead (MAIL-094).
     public var role: String?
+    /// What the provider says the folder is for (IMAP SPECIAL-USE or a well-known name), before
+    /// the account's choices apply.
+    public var detectedRole: String?
     /// The UIDVALIDITY the cursor below belongs to; `nil` before the first sync.
     public var uidValidity: UInt32?
     /// Every message with a UID up to and including this one has been imported or is waiting
@@ -21,11 +25,13 @@ public struct SyncedFolder: Sendable, Hashable, Codable {
     /// How many messages the provider reported at the last sync.
     public var serverCount: Int
 
-    public init(name: String, path: [String], role: String? = nil, uidValidity: UInt32? = nil,
+    public init(name: String, path: [String], role: String? = nil, detectedRole: String?? = nil, uidValidity: UInt32? = nil,
                 highestUID: UInt32 = 0, historyComplete: Bool = false, serverCount: Int = 0) {
         self.name = name
         self.path = path
         self.role = role
+        // Unless said otherwise, the role in use is the detected one.
+        self.detectedRole = detectedRole ?? role
         self.uidValidity = uidValidity
         self.highestUID = highestUID
         self.historyComplete = historyComplete
@@ -73,11 +79,22 @@ extension RemoteMapping {
             """)
     }
 
+    /// Schema 5 → 6 (GKM-066): the detected role beside the one in use. Every role so far was
+    /// the detected one.
+    func migrateToDetectedRoles() throws {
+        if try !columnExists("detected_role", in: "folder_state") {
+            try database.execute("""
+                ALTER TABLE folder_state ADD COLUMN detected_role TEXT;
+                UPDATE folder_state SET detected_role = role;
+                """)
+        }
+    }
+
     // MARK: Folders and cursors
 
     func folders() throws -> [SyncedFolder] {
         let statement = try database.prepare("""
-            SELECT name, path, role, uid_validity, highest_uid, history_complete, server_count
+            SELECT name, path, role, uid_validity, highest_uid, history_complete, server_count, detected_role
             FROM folder_state ORDER BY position, name
             """)
         var result: [SyncedFolder] = []
@@ -85,7 +102,7 @@ extension RemoteMapping {
             guard let name = statement.text(0) else { continue }
             let path = statement.text(1).flatMap { try? JSONDecoder().decode([String].self, from: Data($0.utf8)) } ?? [name]
             result.append(SyncedFolder(
-                name: name, path: path, role: statement.text(2),
+                name: name, path: path, role: statement.text(2), detectedRole: .some(statement.text(7)),
                 uidValidity: statement.isNull(3) ? nil : UInt32(statement.int(3)),
                 highestUID: UInt32(statement.int(4)), historyComplete: statement.int(5) != 0,
                 serverCount: statement.int(6)))
@@ -112,11 +129,47 @@ extension RemoteMapping {
             for (position, folder) in folders.enumerated() {
                 let path = String(decoding: try JSONEncoder().encode(folder.path), as: UTF8.self)
                 try database.prepare("""
-                    INSERT INTO folder_state (name, path, role, position) VALUES (?, ?, ?, ?)
-                    ON CONFLICT(name) DO UPDATE SET path = excluded.path, role = excluded.role, position = excluded.position
-                    """).run([.text(folder.name), .text(path), .optional(folder.role), .int(Int64(position))])
+                    INSERT INTO folder_state (name, path, role, detected_role, position) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(name) DO UPDATE SET path = excluded.path, role = excluded.role,
+                      detected_role = excluded.detected_role, position = excluded.position
+                    """).run([.text(folder.name), .text(path), .optional(folder.role), .optional(folder.detectedRole),
+                             .int(Int64(position))])
             }
             return removed
+        }
+    }
+
+    /// Sets the role in use of each folder named in `roles`; the detected roles stay.
+    func setRoles(_ roles: [String: String?]) throws {
+        try database.transaction {
+            let statement = try database.prepare("UPDATE folder_state SET role = ? WHERE name = ?")
+            for (name, role) in roles.sorted(by: { $0.key < $1.key }) {
+                try statement.run([.optional(role), .text(name)])
+            }
+        }
+    }
+
+    /// Follows a folder renamed at the provider, with the folders inside it (ids that start with
+    /// the old id and `delimiter`): its row and cursor, the UIDVALIDITY on record, every location
+    /// in it and the journal's changes that name it, so nothing is downloaded again and open
+    /// changes go to the new name. Returns the old and new name of every folder renamed.
+    func renameFolder(_ old: String, to new: String, delimiter: Character?) throws -> [(old: String, new: String)] {
+        try database.transaction {
+            var names = Set(try folders().map(\.name))
+            let statement = try database.prepare("SELECT name FROM mailboxes")
+            while try statement.step() { if let name = statement.text(0) { names.insert(name) } }
+            let renamed: [(old: String, new: String)] = names.sorted().compactMap { name in
+                if name == old { return (name, new) }
+                if let delimiter, name.hasPrefix(old + String(delimiter)) { return (name, new + name.dropFirst(old.count)) }
+                return nil
+            }
+            for pair in renamed {
+                for (table, column) in [("folder_state", "name"), ("mailboxes", "name"), ("locations", "mailbox"),
+                                        ("actions", "source"), ("actions", "target")] {
+                    try database.prepare("UPDATE \(table) SET \(column) = ? WHERE \(column) = ?").run([.text(pair.new), .text(pair.old)])
+                }
+            }
+            return renamed
         }
     }
 
