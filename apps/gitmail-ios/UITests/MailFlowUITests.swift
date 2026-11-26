@@ -29,14 +29,13 @@ final class MailFlowUITests: XCTestCase {
         audit("first run")
         add.tap()
 
-        fillInAccount(user)
-        hideKeyboard()
+        let form = AddAccountForm(app: app, test: self)
+        form.fillIn(user, on: server)
+        form.hideKeyboard()
         snapshot("2-add-account")
         audit("add account")
-        app.buttons["addAccountConfirm"].tap()
-
         // Verified against both servers, saved, syncing: the sheet goes away.
-        waitForAccountAdded()
+        form.confirm()
 
         // The account's inbox fills.
         openMailbox("Inbox")
@@ -150,12 +149,7 @@ final class MailFlowUITests: XCTestCase {
         // The account is added at the default size: at this one iOS's Save Password offer is
         // taller than the screen and its Not Now can't be reached, so it would hold the sheet.
         launch(server, arguments: store)
-        let addAgain = app.buttons.matching(identifier: "addAccountButton").firstMatch
-        XCTAssertTrue(addAgain.waitForExistence(timeout: 20))
-        addAgain.tap()
-        fillInAccount(user)
-        app.buttons["addAccountConfirm"].tap()
-        waitForAccountAdded()
+        AddAccountForm(app: app, test: self).add(user, on: server)
         app.terminate()
 
         // Everything else at the largest size, with the account.
@@ -240,92 +234,6 @@ final class MailFlowUITests: XCTestCase {
         app.launch()
     }
 
-    /// Verified against both servers, saved, syncing: the sheet goes away. iOS may offer to
-    /// save the password meanwhile, over the sheet; the test declines.
-    private func waitForAccountAdded() {
-        let added = waitFor(timeout: 60) {
-            self.declineSavePassword(wait: 0.5)
-            return !self.app.textFields["addressField"].exists
-        }
-        if !added { snapshot("account-not-added") }
-        XCTAssertTrue(added, "the account was not added: \(errorText())")
-    }
-
-    private func hasKeyboardFocus(_ field: XCUIElement) -> Bool {
-        (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
-    }
-
-    private func hideKeyboard() {
-        let done = app.buttons["keyboardDone"]
-        if app.keyboards.firstMatch.exists, done.exists, done.isHittable { done.tap() }
-    }
-
-    /// iOS may offer to save the test password in Passwords; the test never does.
-    private func declineSavePassword(wait: TimeInterval = 3) {
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        for owner in [app!, springboard] {
-            let notNow = owner.buttons["Not Now"]
-            guard notNow.waitForExistence(timeout: wait) else { continue }
-            // At the largest text sizes the offer is taller than the screen and Not Now starts
-            // below it: scroll the offer up first.
-            for _ in 0..<3 where !notNow.isHittable { owner.staticTexts["Save Password?"].firstMatch.swipeUp() }
-            notNow.tap()
-            return
-        }
-    }
-
-    /// Other IMAP, pointed at the local server.
-    private func fillInAccount(_ user: LocalMailServer.User) {
-        let picker = app.segmentedControls["providerPicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        picker.buttons["Other IMAP"].tap()
-        type(user.address, into: app.textFields["addressField"])
-        type(user.password, into: app.secureTextFields["passwordField"])
-        // When the password field scrolls away (the large sizes), iOS may offer to save it.
-        for (field, value) in [("imapHostField", "localhost"), ("imapPortField", "3993"),
-                               ("smtpHostField", "localhost"), ("smtpPortField", "3465")] {
-            declineSavePassword(wait: 1)
-            replace(app.textFields[field], with: value)
-        }
-        declineSavePassword(wait: 1)
-        chooseTLS()
-    }
-
-    private func type(_ text: String, into field: XCUIElement) {
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        // At the largest text sizes the keyboard of the field before can cover this one.
-        hideKeyboard()
-        field.tap()
-        field.typeText(text)
-    }
-
-    private func replace(_ field: XCUIElement, with text: String) {
-        for _ in 0..<4 where !field.exists { app.swipeUp(velocity: .slow) }
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        // At the largest text sizes the keyboard of the field before, or the sheet's bar, can
-        // cover this one: put the keyboard away (the number pad has no Return), tap, and try
-        // again from a new scroll position until the field has the keyboard.
-        for _ in 0..<4 {
-            hideKeyboard()
-            if !field.isHittable { app.swipeUp(velocity: .slow) }
-            if field.frame.height > 60 {
-                // Wrapped: the text sits at the bottom right. Focus first, then tap its end.
-                field.tap()
-                field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.85)).tap()
-            } else {
-                // The fields are trailing-aligned: tap the right end so the cursor lands after
-                // the old text (a plain tap can put it at the start on iPad, and the deletes then
-                // remove nothing).
-                field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
-            }
-            if hasKeyboardFocus(field) { break }
-            app.swipeDown(velocity: .slow)
-        }
-        let current = field.value as? String ?? ""
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
-        field.typeText(text)
-    }
-
     /// On iPhone the search field is in the navigation bar's drawer, hidden until the list is
     /// pulled down at its top. Pull the way a person does: from the first row, slowly, holding
     /// at the end so the drawer settles open before the finger lifts. `app.swipeDown()` was a
@@ -356,21 +264,6 @@ final class MailFlowUITests: XCTestCase {
             app.swipeDown()
         }
         XCTAssertTrue(waitFor(timeout: 5) { !self.app.keyboards.firstMatch.exists }, "the keyboard stays up after search")
-    }
-
-    private func chooseTLS() {
-        hideKeyboard()
-        let picker = app.buttons["smtpSecurityPicker"]
-        for _ in 0..<6 where !(picker.exists && picker.isHittable) { app.swipeUp() }
-        picker.tap()
-        let tls = app.buttons["TLS"]
-        XCTAssertTrue(tls.waitForExistence(timeout: 5))
-        tls.tap()
-    }
-
-    private func errorText() -> String {
-        let error = app.descendants(matching: .any).matching(identifier: "accountError").firstMatch
-        return error.exists ? error.label : "no error shown"
     }
 
     /// On iPhone the mailboxes are a pushed column; on iPad they are on screen.
