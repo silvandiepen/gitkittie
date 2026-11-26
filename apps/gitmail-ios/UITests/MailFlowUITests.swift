@@ -191,17 +191,22 @@ final class MailFlowUITests: XCTestCase {
     /// Runs every audit type on what is on screen (GKM-061). Nothing is excluded wholesale:
     /// `AccessibilityAuditPolicy` names each system control that is skipped, and why.
     private func audit(_ screen: String) {
+        var found: [AuditFinding] = []
         do {
+            // The handler only copies the issue; the app is looked at after the audit.
             try app.performAccessibilityAudit(for: .all) { issue in
-                if let reason = AccessibilityAuditPolicy.systemIssue(issue, in: self.app) {
-                    print("audit [\(screen)] skipped (\(reason)): \(AccessibilityAuditPolicy.describe(issue))")
-                    return true
-                }
-                self.auditFindings.append("[\(screen)] \(AccessibilityAuditPolicy.describe(issue))")
+                found.append(AuditFinding(issue))
                 return true
             }
         } catch {
             auditFindings.append("[\(screen)] the audit could not run: \(error)")
+        }
+        for finding in found {
+            if let reason = AccessibilityAuditPolicy.skipReason(finding, in: app) {
+                print("audit [\(screen)] skipped (\(reason)): \(finding.description)")
+            } else {
+                auditFindings.append("[\(screen)] \(finding.description)")
+            }
         }
     }
 
