@@ -82,7 +82,7 @@ final class MailFlowUITests: XCTestCase {
 
         // Search with a chip.
         let search = app.searchFields.firstMatch
-        if !search.exists { app.swipeDown() }
+        revealSearch(search, pullingFrom: rows.element(boundBy: 0))
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("garden")
@@ -133,10 +133,34 @@ final class MailFlowUITests: XCTestCase {
         if !field.isHittable { app.swipeUp() }
         // The fields are trailing-aligned: tap the right end so the cursor lands after the old
         // text (a plain tap can put it at the start on iPad, and the deletes then remove nothing).
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
-        let current = field.value as? String ?? ""
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
+        // Even then the cursor can land inside the text ("993" became "93993" on the iPhone
+        // simulator, GKM-079), so when the deletes leave text behind, tap the end and delete
+        // again. An empty field reports its placeholder as its value, and the host fields can
+        // hold text equal to their placeholder, so only a change in value counts.
+        let end = field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5))
+        end.tap()
+        var current = field.value as? String ?? ""
+        for _ in 0..<3 {
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
+            let after = field.value as? String ?? ""
+            if after.isEmpty || (after == field.placeholderValue && after != current) { break }
+            current = after
+            end.tap()
+        }
         field.typeText(text)
+    }
+
+    /// On iPhone the search field is in the navigation bar's drawer, hidden until the list is
+    /// pulled down at its top. Pull the way a person does: from the first row, slowly, holding
+    /// at the end so the drawer settles open before the finger lifts. `app.swipeDown()` was a
+    /// 0.2 s flick from the middle of the screen with no hold; there it started on the row just
+    /// swiped and flagged, and on CI it once did not move the list at all (GKM-079).
+    private func revealSearch(_ search: XCUIElement, pullingFrom row: XCUIElement) {
+        guard !search.exists else { return }
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 240)),
+                    withVelocity: .slow, thenHoldForDuration: 0.3)
     }
 
     /// Leaves search the way each system offers it: iOS 26 on iPhone has a round Close button
