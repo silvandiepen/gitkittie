@@ -38,6 +38,11 @@ public struct SyncOptions: Sendable {
     /// Most noticed deletions a pass checks at the provider (a search per folder whose mail is
     /// not all downloaded here) before confirming them; the rest wait for the next pass.
     public var deletionChecksPerPass: Int
+    /// How long a noticed deletion whose check could not tell (MAIL-104) waits before it is
+    /// checked again: the lower bound after the first such check, doubling with each one after,
+    /// up to the upper bound (MAIL-105). It is never confirmed for that; while it waits it costs
+    /// no search, and newer ones are checked first.
+    public var undecidedDeletionBackoff: ClosedRange<Duration>
     /// Download the next batch while the store writes this one (GKM-038, MAIL-066). Off only to
     /// measure what it gains.
     public var pipelineStores: Bool
@@ -66,6 +71,7 @@ public struct SyncOptions: Sendable {
     public init(recentPerFolder: Int = 200, historyBudgetBytes: Int64? = nil, historyDays: Int? = nil, historyPerPass: Int = 10_000,
                 historySlice: Duration = .seconds(20), onDemandThreshold: Int? = 1_000_000, pinnedPerPass: Int = 50,
                 removesMailDeletedElsewhere: Bool = false, deletionChecksPerPass: Int = 50,
+                undecidedDeletionBackoff: ClosedRange<Duration> = .seconds(15 * 60) ... .seconds(24 * 60 * 60),
                 pipelineStores: Bool = true,
                 summaryBatch: Int = 500, bodyBatchMessages: Int = 100, bodyBatchBytes: Int = 8 * 1024 * 1024,
                 idleTimeout: Duration = .seconds(9 * 60), flagCheckInterval: Duration = .seconds(120),
@@ -79,6 +85,7 @@ public struct SyncOptions: Sendable {
         self.pinnedPerPass = pinnedPerPass
         self.removesMailDeletedElsewhere = removesMailDeletedElsewhere
         self.deletionChecksPerPass = deletionChecksPerPass
+        self.undecidedDeletionBackoff = undecidedDeletionBackoff
         self.pipelineStores = pipelineStores
         self.summaryBatch = summaryBatch
         self.bodyBatchMessages = bodyBatchMessages

@@ -8,11 +8,24 @@ import MailCore
 // in a space, or still in the action journal (an open change, or Undo's seven days).
 
 /// A noticed deletion the sync is to check: its stored Message-ID, to search the folders whose
-/// mail is not all downloaded here.
+/// mail is not all downloaded here, and how its earlier checks went (MAIL-105).
 public struct DeletionCandidate: Equatable, Sendable {
     public var id: MailMessageID
     public var messageID: String?
     public var noticedAt: Date
+    /// When a check at the provider last could not tell whether it is gone; `nil` when none
+    /// has failed to.
+    public var checkedAt: Date?
+    /// Checks in a row that could not tell.
+    public var undecidedChecks: Int
+
+    public init(id: MailMessageID, messageID: String?, noticedAt: Date, checkedAt: Date? = nil, undecidedChecks: Int = 0) {
+        self.id = id
+        self.messageID = messageID
+        self.noticedAt = noticedAt
+        self.checkedAt = checkedAt
+        self.undecidedChecks = undecidedChecks
+    }
 }
 
 /// Why a local copy of mail deleted at the provider stays even with removal turned on.
@@ -21,8 +34,10 @@ public enum DeletionKeep: Equatable, Sendable {
 }
 
 extension MailStore {
-    /// Messages that left their last folder at the provider and are not confirmed yet, oldest
-    /// first. Ones that have a location again or are no longer stored here are dropped.
+    /// Messages that left their last folder at the provider and are not confirmed yet, in the
+    /// order to check them: those no check has failed to decide first, oldest first, then the
+    /// least recently checked (MAIL-105). Ones that have a location again or are no longer
+    /// stored here are dropped.
     public func deletionCandidates(account: MailAccountID) throws -> [DeletionCandidate] {
         let mapping = try mapping(for: SafePath.component(account.rawValue))
         var result: [DeletionCandidate] = []
@@ -35,9 +50,16 @@ extension MailStore {
                 try mapping.clearDeletion(of: notice.id) // not stored here any more
                 continue
             }
-            result.append(DeletionCandidate(id: notice.id, messageID: try index.messageIDHeader(of: notice.id), noticedAt: notice.noticedAt))
+            result.append(DeletionCandidate(id: notice.id, messageID: try index.messageIDHeader(of: notice.id), noticedAt: notice.noticedAt,
+                                            checkedAt: notice.checkedAt, undecidedChecks: notice.undecidedChecks))
         }
         return result
+    }
+
+    /// A check at the provider could not tell whether the message is gone (MAIL-104): it is not
+    /// marked, and it goes behind the candidates that have not been checked since (MAIL-105).
+    public func recordUndecidedDeletionCheck(of id: MailMessageID, account: MailAccountID, now: Date = Date()) throws {
+        try mapping(for: SafePath.component(account.rawValue)).recordUndecidedCheck(of: id, at: now)
     }
 
     /// The provider has the message after all, in a folder whose mail this device has not all

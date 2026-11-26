@@ -531,11 +531,11 @@ final class MailSyncIntegrationTests: XCTestCase {
     // MARK: - Deleted at the provider, without a Message-ID (GKM-043, MAIL-104)
 
     /// A message as some senders write it: no Message-ID header, dated when it was received.
-    private func messageWithoutMessageID(_ subject: String, receivedDaysAgo age: Int) -> (raw: Data, received: Date) {
+    private func messageWithoutMessageID(_ subject: String, receivedDaysAgo age: Int, body: String? = nil) -> (raw: Data, received: Date) {
         let me = MailAddress(name: "Ada Example", address: user.address)
         let received = Date().addingTimeInterval(-Double(age) * 86_400)
         let built = String(decoding: MIMEBuilder(from: me, to: [me], subject: subject, date: received,
-                                                 textBody: "Body of \(subject)\n").build(), as: UTF8.self)
+                                                 textBody: body ?? "Body of \(subject)\n").build(), as: UTF8.self)
         let raw = Data(built.components(separatedBy: "\r\n").filter { !$0.hasPrefix("Message-ID:") }.joined(separator: "\r\n").utf8)
         return (raw, received)
     }
@@ -552,6 +552,12 @@ final class MailSyncIntegrationTests: XCTestCase {
     private func storedID(subject: String) async throws -> MailMessageID {
         let id = try await store.summaries(account: account, limit: 1_000).first { $0.subject == subject }?.id
         return try XCTUnwrap(id, subject)
+    }
+
+    /// Where a stored message is in the inbox at the provider.
+    private func inboxMessage(_ id: MailMessageID, validity: UInt32) async throws -> RemoteMessageID {
+        let location = try await XCTUnwrapAsync(await store.remoteLocations(of: id, account: account).first)
+        return RemoteMessageID(folder: "INBOX", uidValidity: validity, uid: location.uid)
     }
 
     /// The iPhone's window leaves older mail at the provider, so a message without a Message-ID
@@ -633,6 +639,80 @@ final class MailSyncIntegrationTests: XCTestCase {
         XCTAssertEqual(mapped.map(\.mailbox), ["Archive"])
         let count = try await storedCount()
         XCTAssertEqual(count, 3, "the moved message is the stored one, not a copy")
+    }
+
+    /// More candidates the check can't decide than a pass checks (`deletionChecksPerPass`) must
+    /// not hold up a newer one (GKM-076, MAIL-105): a candidate that could not be decided goes
+    /// behind the others and waits out a back-off, and is never marked for it.
+    func testCandidatesThatCannotBeDecidedDoNotHoldUpANewerOne() async throws {
+        // More older messages from the same sender, dated today, than the check compares by
+        // header stay at the provider: every search for that sender and day can't tell.
+        try await append(receivedDaysAgo: Array(repeating: 60, count: 25), prefix: "older")
+        // 55 receipts without a Message-ID, each larger than any of those hits so none matches
+        // by size, and a newer message with a Message-ID.
+        let undecidable = 55
+        let padding = String(repeating: "receipt line\n", count: 150)
+        let receiptsSent = (1...undecidable).map { messageWithoutMessageID("receipt \($0)", receivedDaysAgo: 0, body: padding) }
+        let newerSent = message("newer")
+        try await imap().withSession { session in
+            for receipt in receiptsSent {
+                _ = try await session.append(receipt.raw, to: "INBOX", flags: MailProvider.MessageFlags(), receivedAt: receipt.received)
+            }
+            _ = try await session.append(newerSent, to: "INBOX", flags: MailProvider.MessageFlags())
+        }
+        let windowed = SyncOptions(recentPerFolder: 100, historyDays: 30, reconnect: Self.fast)
+        XCTAssertGreaterThan(undecidable, windowed.deletionChecksPerPass)
+        try await coordinator(windowed).syncOnce()
+        let stored = try await storedCount()
+        XCTAssertEqual(stored, undecidable + 1, "only the recent mail is downloaded")
+        let validity = try await XCTUnwrapAsync(await store.syncedFolders(account: account).first { $0.name == "INBOX" }?.uidValidity)
+        var receipts: [MailMessageID] = []
+        for index in 1...undecidable { receipts.append(try await storedID(subject: "receipt \(index)")) }
+        let newer = try await storedID(subject: "newer")
+
+        // Another client deletes the receipts for good. None of them can be decided.
+        var expunged: [RemoteMessageID] = []
+        for id in receipts { expunged.append(try await inboxMessage(id, validity: validity)) }
+        try await imap().withSession { session in try await session.expunge(expunged) }
+        let sync = coordinator(windowed)
+        try await sync.syncOnce()
+        let afterFirst = try await store.deletionCandidates(account: account)
+        XCTAssertEqual(afterFirst.count, undecidable)
+        XCTAssertEqual(afterFirst.filter { $0.undecidedChecks == 1 }.count, windowed.deletionChecksPerPass,
+                       "a pass checks at most deletionChecksPerPass, and none could tell")
+        XCTAssertTrue(captured.lines.contains { $0.contains("not sure it is gone") })
+
+        // Then it deletes the newer one: the next passes reach it although the undecided ones
+        // were noticed first.
+        let newerRemote = try await inboxMessage(newer, validity: validity)
+        try await imap().withSession { session in try await session.expunge([newerRemote]) }
+        var passes = 0
+        var marked: Date?
+        while marked == nil, passes < 3 {
+            try await sync.syncOnce()
+            passes += 1
+            marked = try await store.summaries(ids: [newer]).first?.deletedAtProvider
+        }
+        XCTAssertNotNil(marked, "searched for by its Message-ID within \(passes) passes and not found: deleted there")
+        XCTAssertEqual(passes, 1, "never undecided goes first")
+        let afterSecond = try await store.deletionCandidates(account: account)
+        XCTAssertEqual(afterSecond.map(\.undecidedChecks), Array(repeating: 1, count: undecidable),
+                       "the ones left over were checked too; those that could not tell waited out the back-off, no search again")
+        XCTAssertEqual(Set(afterSecond.map(\.id)), Set(receipts))
+
+        // Without a back-off, every pass checks the least recently checked: each of them is
+        // checked again within two passes, and none is marked for having failed to decide.
+        let eager = SyncOptions(recentPerFolder: 100, historyDays: 30, undecidedDeletionBackoff: .zero ... .zero, reconnect: Self.fast)
+        let eagerSync = coordinator(eager)
+        try await eagerSync.syncOnce()
+        try await eagerSync.syncOnce()
+        let afterFourth = try await store.deletionCandidates(account: account)
+        XCTAssertEqual(afterFourth.count, undecidable)
+        XCTAssertTrue(afterFourth.allSatisfy { $0.undecidedChecks >= 2 }, "every undecided one was checked again")
+        let marks = try await store.deletedAtProvider(account: account)
+        XCTAssertEqual(Array(marks.keys), [newer], "a check that can't tell never marks a message (MAIL-075)")
+        let progress = await eagerSync.progress
+        XCTAssertEqual(progress.deletedAtProvider, 1)
     }
 
     func testARefusedPasswordStopsTheSyncAndSaysSo() async throws {

@@ -86,6 +86,69 @@ final class ProviderDeletionTests: XCTestCase {
         XCTAssertNil(candidates.first?.messageID, "stored without a Message-ID: the sync cannot search for it")
     }
 
+    /// A check that could not tell (MAIL-104) sends the candidate behind the others: never
+    /// undecided first, oldest first, then the least recently checked (GKM-076, MAIL-105). It is
+    /// never confirmed for that, and the record survives reopening the store.
+    func testACandidateThatCouldNotBeDecidedGoesBehindTheOthers() async throws {
+        let store = try await MailStore.open(locations)
+        var ids: [MailMessageID] = []
+        for uid: UInt32 in 1...4 {
+            ids.append(try await store.ingest(SyntheticMail.plain(subject: "Receipt \(uid)", body: "\(uid)"), account: account,
+                                              remote: location("INBOX", uid)).id)
+        }
+        let noticed = Date(timeIntervalSince1970: 1_800_000_000)
+        for (offset, uid) in [UInt32(1), 2, 3, 4].enumerated() {
+            try await store.forget(location("INBOX", uid), account: account, now: noticed.addingTimeInterval(Double(offset)))
+        }
+        let first = try await store.deletionCandidates(account: account)
+        XCTAssertEqual(first.map(\.id), ids, "oldest first")
+        XCTAssertEqual(first.map(\.undecidedChecks), [0, 0, 0, 0])
+
+        let earlier = noticed.addingTimeInterval(60)
+        let later = noticed.addingTimeInterval(120)
+        try await store.recordUndecidedDeletionCheck(of: ids[1], account: account, now: later)
+        try await store.recordUndecidedDeletionCheck(of: ids[0], account: account, now: earlier)
+        try await store.recordUndecidedDeletionCheck(of: ids[0], account: account, now: later.addingTimeInterval(60))
+        let reordered = try await MailStore.open(locations).deletionCandidates(account: account)
+        XCTAssertEqual(reordered.map(\.id), [ids[2], ids[3], ids[1], ids[0]],
+                       "never undecided first, then the least recently checked")
+        XCTAssertEqual(reordered.map(\.undecidedChecks), [0, 0, 1, 2])
+        XCTAssertEqual(reordered.map(\.checkedAt), [nil, nil, later, later.addingTimeInterval(60)])
+        XCTAssertEqual(reordered.map(\.noticedAt), [2, 3, 1, 0].map { noticed.addingTimeInterval(Double($0)) })
+        let marks = try await store.deletedAtProvider(account: account)
+        XCTAssertEqual(marks, [:], "a check that could not tell confirms nothing")
+
+        // Confirmed, it takes no more checks on record.
+        try await store.confirmDeletions(reordered, account: account)
+        try await store.recordUndecidedDeletionCheck(of: ids[2], account: account, now: later)
+        let left = try await store.deletionCandidates(account: account)
+        XCTAssertEqual(left, [])
+    }
+
+    /// sync.sqlite 6 → 7: a notice from before keeps its place and has no check on record.
+    func testANoticeFromSchema6HasNoCheckOnRecordAfterTheMigration() throws {
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("sync.sqlite")
+        let noticed = Date(timeIntervalSince1970: 1_800_000_000)
+        let id = MailMessageID()
+        do {
+            let mapping = try RemoteMapping(url: url)
+            try mapping.noticeDeletion(of: id, at: noticed)
+            // As schema 6 wrote it.
+            try mapping.database.execute("""
+                ALTER TABLE provider_deletions DROP COLUMN checked_at;
+                ALTER TABLE provider_deletions DROP COLUMN undecided_checks;
+                """)
+            try mapping.database.setUserVersion(6)
+        }
+        let migrated = try RemoteMapping(url: url)
+        XCTAssertEqual(try migrated.database.userVersion, RemoteMapping.schemaVersion)
+        XCTAssertEqual(try migrated.unconfirmedDeletions(), [NoticedDeletion(id: id, noticedAt: noticed)])
+        try migrated.recordUndecidedCheck(of: id, at: noticed.addingTimeInterval(60))
+        XCTAssertEqual(try migrated.unconfirmedDeletions(),
+                       [NoticedDeletion(id: id, noticedAt: noticed, checkedAt: noticed.addingTimeInterval(60), undecidedChecks: 1)])
+    }
+
     /// "Remove mail deleted elsewhere": the copy goes, files and all, unless it is pinned, in a
     /// space, or in the action journal (an open change or Undo's seven days).
     func testRemovalDeletesTheLocalCopyUnlessSomethingKeepsIt() async throws {
