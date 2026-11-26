@@ -20,20 +20,22 @@ struct AccountServersScreen: View {
         Form {
             if let connection = account?.connection {
                 let fixed = connection.kind == .iCloud
+                // Each field keeps its name beside it once it has a value (a placeholder alone
+                // disappears), and VoiceOver hears which server it belongs to (GKM-061).
                 Section("Incoming (IMAP)") {
-                    TextField("Server", text: $imap.host).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    TextField("Port", value: $imap.port, format: .number.grouping(.never)).keyboardType(.numberPad)
-                    TextField("User name", text: $imap.username).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    field("Server", "Incoming server", text: $imap.host)
+                    portField("Incoming port", value: $imap.port)
+                    field("User name", "Incoming user name", text: $imap.username)
                 }
                 .disabled(fixed)
                 Section("Outgoing (SMTP)") {
-                    TextField("Server", text: $smtp.host).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    TextField("Port", value: $smtp.port, format: .number.grouping(.never)).keyboardType(.numberPad)
+                    field("Server", "Outgoing server", text: $smtp.host)
+                    portField("Outgoing port", value: $smtp.port)
                     Picker("Security", selection: $smtp.security) {
                         Text("TLS").tag(MailServerSecurity.implicitTLS)
                         Text("STARTTLS").tag(MailServerSecurity.startTLS)
                     }
-                    TextField("User name", text: $smtp.username).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    field("User name", "Outgoing user name", text: $smtp.username)
                 }
                 .disabled(fixed)
                 if fixed {
@@ -44,7 +46,7 @@ struct AccountServersScreen: View {
                         Button {
                             save()
                         } label: {
-                            if isChecking { ProgressView() } else { Text("Check and Save") }
+                            if isChecking { ProgressView().accessibilityLabel("Checking") } else { Text("Check and Save") }
                         }
                         .disabled(isChecking || (imap == connection.imap && smtp == connection.smtp && password.isEmpty))
                         if let error { NoticeLine(systemImage: "exclamationmark.triangle", tint: .orange, text: error) }
@@ -64,6 +66,24 @@ struct AccountServersScreen: View {
             guard let connection = account?.connection else { return }
             imap = connection.imap
             smtp = connection.smtp
+        }
+    }
+
+    private func field(_ title: String, _ spoken: String, text: Binding<String>) -> some View {
+        LabeledContent(title) {
+            TextField(title, text: text)
+                .multilineTextAlignment(.trailing)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                .accessibilityLabel(spoken)
+        }
+    }
+
+    private func portField(_ spoken: String, value: Binding<Int>) -> some View {
+        LabeledContent("Port") {
+            TextField("Port", value: value, format: .number.grouping(.never))
+                .multilineTextAlignment(.trailing)
+                .keyboardType(.numberPad)
+                .accessibilityLabel(spoken)
         }
     }
 

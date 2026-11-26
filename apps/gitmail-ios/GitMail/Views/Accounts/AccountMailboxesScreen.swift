@@ -65,7 +65,7 @@ struct AccountMailboxesScreen: View {
         .background(Theme.window.ignoresSafeArea())
         .navigationTitle("Mailboxes")
         .toolbar {
-            if isWorking { ToolbarItem(placement: .topBarTrailing) { ProgressView() } }
+            if isWorking { ToolbarItem(placement: .topBarTrailing) { ProgressView().accessibilityLabel("Working") } }
             ToolbarItem(placement: .topBarTrailing) { EditButton() }
         }
         .alert("New Folder", isPresented: $creating) {
@@ -115,6 +115,9 @@ private struct FolderSettingsRow: View {
             }
             .padding(.leading, CGFloat(max(0, folder.path.count - 1)) * 14)
         }
+        // The indent shows a folder inside another; VoiceOver says which (GKM-061).
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(folder.path.count > 1 ? "Inside \(folder.path.dropLast().joined(separator: " / "))" : "")
     }
 
     private var notes: [String] {
@@ -243,7 +246,7 @@ struct FolderSettingsScreen: View {
         .scrollContentBackground(.hidden)
         .background(Theme.window.ignoresSafeArea())
         .navigationTitle(folder.map { $0.role == "inbox" ? "Inbox" : $0.displayName } ?? "Folder")
-        .toolbar { if isWorking { ToolbarItem(placement: .topBarTrailing) { ProgressView() } } }
+        .toolbar { if isWorking { ToolbarItem(placement: .topBarTrailing) { ProgressView().accessibilityLabel("Working") } } }
         .alert("Rename Folder", isPresented: $renaming) {
             TextField("Name", text: $name)
             Button("Cancel", role: .cancel) {}
