@@ -258,6 +258,8 @@ final class MailFlowUITests: XCTestCase {
 
     private func type(_ text: String, into field: XCUIElement) {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
+        // At the largest text sizes the keyboard of the field before can cover this one.
+        hideKeyboard()
         field.tap()
         field.typeText(text)
     }
@@ -306,6 +308,7 @@ final class MailFlowUITests: XCTestCase {
     }
 
     private func chooseTLS() {
+        hideKeyboard()
         let picker = app.buttons["smtpSecurityPicker"]
         for _ in 0..<6 where !(picker.exists && picker.isHittable) { app.swipeUp() }
         picker.tap()
