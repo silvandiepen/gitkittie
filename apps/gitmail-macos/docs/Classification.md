@@ -98,4 +98,14 @@ Accuracy: 63/63 on the corpus (56 GKM-003 fixtures plus 7 for the weaknesses), b
 
 **Unsubscribe** (MAIL-056, MAIL-057): in the sender's page. One-click after a sheet that names the host and says what is sent; mailto as a previewed message through the outbox; anything else opens the list's page only after a warning. Spam, phishing and doubtful senders get Report as Junk and Mute instead. Each request shows Requested, Pending, Unsubscribed or Didn't Work, with "It Stopped" and "Still Getting Mail". Proven by `UnsubscribeTests` and `SendersAppTests` against a local HTTP server that records every request.
 
-**Not yet:** rules by sender domain or company (deliberately not offered: a domain is no proof of one company); retention per sender (GKM-031); the cleanup dashboard's batch view of these rules (GKM-021); DKIM-verified list identity (needs verified Authentication-Results, GKM-004/GKM-029).
+**Not yet:** rules by sender domain or company (deliberately not offered: a domain is no proof of one company); retention per sender; the cleanup dashboard's batch view of these rules (GKM-021); DKIM-verified list identity (needs verified Authentication-Results, GKM-004/GKM-029).
+
+## What exists (GKM-031)
+
+**Active organisation** (MAIL-116, MAIL-117). Per account, "Organise mail at your provider" in Settings ▸ Organisation (Mac, iPhone, iPad), off by default. With it on, retention policies and sender rules set to archive at the provider may move mail; nothing moves before. One device runs the automatic work per account (the one that turned it on, or the one you choose with "Run on this Mac instead"); it waits while it is offline, catching up or has changes still on the way, and says so.
+
+**Retention** (MAIL-115). One policy per account and category: newsletters and subscriptions (90 days), promotions (30), routine updates (30), then Archive or Move to Trash. Each policy shows a dry run first (what would move now, what stays and why, with Clean Up's protections) and is turned on from it; that run is exactly the dry run. Then it runs after each sync on the coordinating device.
+
+**History** (MAIL-118). Every run, with when, which account, which policy or rule, which device and how many messages, without mail content; Undo on the device that made it.
+
+**Not yet:** retention per sender (a sender rule's archive at the provider is the closest); retention of verification codes and spam (MAIL-115); active mode for Block (MAIL-119); sharing the settings between devices (GKM-026).

@@ -173,6 +173,13 @@ extension MailStore {
                 m.account_id = ? AND (SELECT COALESCE(sum(b.size), 0) FROM message_blobs b WHERE b.local_id = m.local_id) >= ?
                 """, [account, .int(options.largeMessageBytes)])
                 .map { CleanupMember(row: $0, note: ByteCountFormatter.string(fromByteCount: $0.bytes, countStyle: .file)) }
+        case .olderThan(let category, let days):
+            // Mail without a verdict reads as Focused (`cleanupRows`), so it is never in a
+            // retention category; it would be protected as uncertain anyway.
+            let cutoff = Self.days(-days, from: now)
+            return try index.cleanupRows(where: "m.account_id = ? AND c.home = ? AND m.sort_date < ?",
+                                         [account, .text(category.rawValue), .double(cutoff.timeIntervalSince1970)])
+                .map { CleanupMember(row: $0, note: "Older than \(days) days") }
         }
     }
 
@@ -216,6 +223,8 @@ extension MailStore {
             detail = newest.summary.from?.name ?? newest.summary.from?.address
         case .largeMessages:
             title = "Large attachments"
+        case .olderThan(let category, let days):
+            title = "\(category.rawValue.capitalized) older than \(days) days"
         }
         return CleanupGroup(id: id, title: title, detail: detail, count: rows.count, unread: rows.filter(\.summary.isUnread).count,
                             lastSeen: newest.summary.date, bytes: rows.reduce(0) { $0 + $1.bytes }, category: category,

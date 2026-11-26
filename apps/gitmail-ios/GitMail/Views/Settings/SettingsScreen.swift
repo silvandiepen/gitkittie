@@ -47,6 +47,7 @@ struct SettingsScreen: View {
                 }
                 Section {
                     NavigationLink("Notifications") { NotificationsScreen() }
+                    NavigationLink("Organisation") { OrganisationScreen() }
                 }
                 StorageSection()
                 BackgroundSection()

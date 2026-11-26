@@ -327,6 +327,14 @@ final class MailActions {
         await onMailChanged?()
     }
 
+    /// Journal rows written elsewhere without a step in Edit ▸ Undo (active organisation,
+    /// GKM-031: undone from its history instead): sent and shown like any action.
+    func didWrite(accounts: [MailAccountID]) async {
+        await browser.reload(keepingPlace: true)
+        await sync.actionsQueued(for: accounts)
+        await onMailChanged?()
+    }
+
     // MARK: Undo (MAIL-037)
 
     private func registerUndo(_ batch: MailActionBatch, name: String) {

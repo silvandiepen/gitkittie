@@ -10,7 +10,8 @@ import Observation
 ///
 /// Rules are virtual (MAIL-054): muting or silently archiving changes where a message shows here,
 /// never its folders or flags at the provider. Only a rule you set to "also archive at your
-/// provider" moves mail, and that goes through the action journal like any Archive, with Undo.
+/// provider" moves mail, and only while active mode is on for its account (GKM-031, MAIL-116):
+/// through the action journal, as an audited run of active organisation, undone from its history.
 @MainActor
 @Observable
 final class SendersModel {
@@ -58,6 +59,8 @@ final class SendersModel {
     @ObservationIgnored private var arrivalCursor: Int64 = 0
     /// The last provider archive started by a rule, for tests.
     @ObservationIgnored private(set) var lastProviderArchive: Task<Void, Never>?
+    /// Active organisation (GKM-031): whether a rule may archive at the provider, and the audit.
+    @ObservationIgnored weak var organisation: OrganisationModel?
 
     init(actions: MailActions, browser: MailBrowser, unsubscribe: UnsubscribeModel) {
         self.actions = actions
@@ -253,48 +256,47 @@ final class SendersModel {
     @ObservationIgnored private(set) var pendingUndo: Task<Void, Never>?
     func waitForUndo() async { await pendingUndo?.value }
 
-    // MARK: Provider archive (only for rules that ask for it)
+    // MARK: Provider archive (only for rules that ask for it, with active mode on)
 
-    /// Archives, at the provider, the mail a rule silenced: only rules set to archive there,
-    /// only what they silenced, through the action journal (Undo, offline queue, MAIL-034).
+    /// Archives, at the provider, the mail a rule silenced: only rules set to archive there, only
+    /// what they silenced, only while active mode is on for the rule's account (GKM-031), as an
+    /// audited run through the action journal (offline queue, MAIL-034; Undo from the history).
     private func archiveAtProvider(rules: [SenderRule]) {
-        guard let store, !rules.isEmpty else { return }
-        lastProviderArchive = Task { [weak self] in
-            guard let self else { return }
+        guard let store, let organisation, !rules.isEmpty else { return }
+        lastProviderArchive = Task {
             do {
-                var ids: [MailMessageID] = []
-                for rule in rules { ids += try await store.messagesSilenced(by: rule.id) }
-                try await self.archive(ids, store: store)
+                for rule in rules where rule.isEnabled {
+                    await organisation.archive(try await store.messagesSilenced(by: rule.id), silencedBy: rule, trigger: .confirmed)
+                }
             } catch {
                 self.notice = String(describing: error)
             }
         }
     }
 
-    /// After a sync: new mail that a provider-archiving rule silenced is archived too.
+    /// After a sync: new mail that a provider-archiving rule silenced is archived too, on the
+    /// device that coordinates its account (it waits while that device is paused, MAIL-117).
     func afterSync() async {
         guard let store else { return }
-        let archiving = Set(rules.filter(\.archiveAtProvider).map(\.id))
+        let archiving = Dictionary(rules.filter { $0.archiveAtProvider && $0.isEnabled }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         do {
-            var ids: [MailMessageID] = []
+            var silenced: [String: [MailMessageID]] = [:]
             while true {
                 let arrivals = try await store.arrivals(after: arrivalCursor, limit: 200)
                 guard let last = arrivals.last else { break }
                 arrivalCursor = last.sequence
-                ids += arrivals.filter { $0.isSilenced && $0.senderRule.map(archiving.contains) == true }.map(\.id)
+                for arrival in arrivals where arrival.isSilenced {
+                    if let rule = arrival.senderRule, archiving[rule] != nil { silenced[rule, default: []].append(arrival.id) }
+                }
             }
-            if !ids.isEmpty { try await archive(ids, store: store) }
+            for (id, ids) in silenced {
+                guard let rule = archiving[id] else { continue }
+                await organisation?.archive(ids, silencedBy: rule, trigger: .automatic)
+            }
         } catch {
             notice = String(describing: error)
         }
         await refresh()
-    }
-
-    private func archive(_ ids: [MailMessageID], store: MailStore) async throws {
-        var messages: [MessageSummary] = []
-        for id in ids { if let summary = try await store.summary(of: id) { messages.append(summary) } }
-        guard !messages.isEmpty else { return }
-        await actions.perform(.archive, messages: messages, in: .allMail)
     }
 }
 

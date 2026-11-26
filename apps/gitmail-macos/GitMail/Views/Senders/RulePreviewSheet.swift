@@ -16,8 +16,7 @@ struct RulePreviewSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 SheetHeader(title: pending.title, detail: detail(preview, rule: rule))
                 if let rule, rule.archiveAtProvider {
-                    Notice(systemImage: "arrow.up.bin", tint: .orange,
-                           text: "This rule also archives the mail it silences at your mail provider. You can undo it from Edit ▸ Undo.")
+                    Notice(systemImage: "arrow.up.bin", tint: .orange, text: providerNote(preview, rule: rule))
                 }
                 List {
                     Section(preview.changed.isEmpty ? "Nothing moves" : "Moves (\(preview.changed.count))") {
@@ -66,6 +65,16 @@ struct RulePreviewSheet: View {
             .frame(maxHeight: 720)
             .background(Theme.window)
         }
+    }
+
+    /// What the rule's archive at the provider does (GKM-031): only with active mode on.
+    private func providerNote(_ preview: SenderRulePreview, rule: SenderRule) -> String {
+        guard model.organisation.isActive(rule.account) else {
+            return "Active organisation is off for this account, so nothing is archived at your mail provider until you turn it on in Settings ▸ Organisation."
+        }
+        let silenced = preview.items.filter { $0.after.rule == rule.id && ($0.after.disposition == .archived || $0.after.disposition == .muted) && !$0.isExcluded }.count
+        let count = silenced == 1 ? "1 message" : "\(silenced) messages"
+        return "This rule also archives the mail it silences at your mail provider: up to \(count) now (those in the inbox), and new mail after each check. It’s listed in Settings ▸ Organisation ▸ History, where you can undo it."
     }
 
     private func detail(_ preview: SenderRulePreview, rule: SenderRule?) -> String {

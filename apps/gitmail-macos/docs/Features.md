@@ -23,7 +23,7 @@ Freelancers, independent businesses, developers, knowledge-management users, pri
 
 ## Organisation modes
 
-Virtual mode is default: classification does not change provider folders or flags. Explicit normal mail actions still work. Active mode is opt-in per account and rule, previews scope, respects provider capabilities and uses reversible moves before optional retention deletion. Apple Mail and other clients continue to work. Automatic rules run only when a capable device or optional service is active.
+Virtual mode is default: classification does not change provider folders or flags. Explicit normal mail actions still work. Active mode is opt-in per account and rule, previews scope, respects provider capabilities and uses reversible moves before optional retention deletion. Apple Mail and other clients continue to work. Automatic rules run only when a capable device or optional service is active. Built (GKM-031, MAIL-115..119): Settings ▸ Organisation turns active mode on per account; retention policies per category and sender rules' archive at the provider move mail only then, each previewed as a dry run first, run by one coordinating device that pauses while offline, logged in a History without mail content and undone from there.
 
 ## Onboarding and marketing
 
