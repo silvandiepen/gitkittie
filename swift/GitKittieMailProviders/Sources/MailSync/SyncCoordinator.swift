@@ -48,6 +48,8 @@ public actor SyncCoordinator {
     /// Folders this pass could not list (no permission, removed meanwhile): a deletion is not
     /// confirmed while one is unlisted, since the message may be there.
     private var unlistedFolders: Set<String> = []
+    /// Folders the account chose not to sync (MAIL-093), as of the last listing.
+    private var notSyncedFolders: Set<String> = []
 
     public private(set) var progress = SyncProgress() {
         didSet { if progress != oldValue { continuation.yield(progress) } }
@@ -143,7 +145,8 @@ public actor SyncCoordinator {
                 try await pass(session, continuingHistory: true)
                 continue
             }
-            let folder = activeFolder ?? inboxName()
+            // A folder that doesn't sync is never waited on.
+            let folder = activeFolder.flatMap { notSyncedFolders.contains($0) ? nil : $0 } ?? inboxName()
             progress.activity = .watching(folder: displayName(folder))
             let event = try await session.waitForChanges(in: folder, timeout: options.idleTimeout)
             try Task.checkCancellation()
@@ -169,8 +172,7 @@ public actor SyncCoordinator {
     private func pass(_ session: any MailboxSession, continuingHistory: Bool = false) async throws {
         let remote = try await session.listFolders().filter(\.isSelectable)
         let ordered = SyncPlanner.order(remote)
-        let removed = try await store.replaceSyncedFolders(
-            ordered.map { SyncedFolder(name: $0.id, path: $0.path, role: $0.role?.rawValue) }, account: account)
+        let removed = try await store.replaceSyncedFolders(FolderEditor.recorded(ordered, settings: options.mailboxes), account: account)
         for name in removed {
             log.info("sync", "folder \(name) is gone at the provider; its messages stay stored")
             missingByFolder[name] = nil
@@ -181,7 +183,15 @@ public actor SyncCoordinator {
         progress.folders = try await store.syncedFolders(account: account)
         let flagsDue = lastFlagCheck.map { ContinuousClock.now - $0 >= options.flagCheckInterval } ?? true
         unlistedFolders = []
-        try await syncFolders(ordered.map(\.id), session, includeHistory: true, checkFlags: !continuingHistory || flagsDue)
+        // Every folder is on record; only those the account syncs are opened (MAIL-093).
+        let synced = ordered.filter { options.mailboxes.syncs($0.id, detectedRole: $0.role?.rawValue) }
+        notSyncedFolders = Set(ordered.map(\.id)).subtracting(synced.map(\.id))
+        for name in notSyncedFolders.sorted() {
+            // A move this device made into a folder that doesn't sync is never listed there, so it
+            // settles now instead of waiting for a listing.
+            try await store.settleAwaitingActions(mailbox: name, listedAt: Date(), account: account)
+        }
+        try await syncFolders(synced.map(\.id), session, includeHistory: true, checkFlags: !continuingHistory || flagsDue)
         try await completePinned(session)
         try await reviewDeletions(session)
         progress.lastCompletedPass = Date()
@@ -200,8 +210,10 @@ public actor SyncCoordinator {
         guard unlistedFolders.isEmpty else { return }
         let candidates = try await store.deletionCandidates(account: account)
         if !candidates.isEmpty {
+            // A folder that doesn't sync may have the message: it is searched like one whose mail
+            // is not all here.
             let incomplete = progress.folders.map(\.name).filter { name in
-                (missingByFolder[name] ?? 0) > 0 || (olderByFolder[name] ?? 0) > 0 || !(tooLargeByFolder[name]?.isEmpty ?? true)
+                notSyncedFolders.contains(name) || (missingByFolder[name] ?? 0) > 0 || (olderByFolder[name] ?? 0) > 0 || !(tooLargeByFolder[name]?.isEmpty ?? true)
             }
             var confirmed: [DeletionCandidate] = []
             var checks = options.deletionChecksPerPass

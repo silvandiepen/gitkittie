@@ -7,14 +7,12 @@ enum AccountSheet: Identifiable {
     case add
     case remove(MailAccount)
     case signIn(MailAccount)
-    case settings(MailAccount)
 
     var id: String {
         switch self {
         case .add: "add"
         case .remove(let account): "remove-\(account.id.rawValue)"
         case .signIn(let account): "sign-in-\(account.id.rawValue)"
-        case .settings(let account): "settings-\(account.id.rawValue)"
         }
     }
 
@@ -23,7 +21,6 @@ enum AccountSheet: Identifiable {
         case .add: AddAccountSheet()
         case .remove(let account): RemoveAccountSheet(account: account)
         case .signIn(let account): UpdatePasswordSheet(account: account)
-        case .settings(let account): AccountSettingsSheet(account: account)
         }
     }
 }
@@ -31,6 +28,8 @@ enum AccountSheet: Identifiable {
 /// Each account with its sync status, then its folders at the provider (GKM-010, GKM-011).
 struct AccountsSidebarSection: View {
     @Environment(AppModel.self) private var model
+    @Environment(SettingsNavigation.self) private var settings
+    @Environment(\.openSettings) private var openSettings
     @Binding var sheet: AccountSheet?
 
     var body: some View {
@@ -70,13 +69,9 @@ struct AccountsSidebarSection: View {
         }
     }
 
-    /// The provider's folders once the sync has listed them; before that (or for an account
-    /// that no longer syncs) the folders that hold stored mail.
+    /// The folders the account shows, in its order (Settings ▸ Accounts ▸ Mailboxes, MAIL-093).
     @MainActor static func folders(of account: MailAccount, model: AppModel) -> [SyncedFolder] {
-        if let synced = model.sync.folders[account.id], !synced.isEmpty { return synced }
-        return (model.folders[account.id] ?? []).map { name in
-            SyncedFolder(name: name, path: [name], role: name.caseInsensitiveCompare("INBOX") == .orderedSame ? "inbox" : nil)
-        }
+        model.sidebarFolders(of: account)
     }
 
     @ViewBuilder private func menu(for account: MailAccount) -> some View {
@@ -86,7 +81,10 @@ struct AccountsSidebarSection: View {
         if account.connection != nil {
             Button("Sync Now") { Task { await model.sync.syncNow() } }
         }
-        Button("Account Settings…") { sheet = .settings(account) }
+        Button("Account Settings…") { settings.show(.accounts, account: account.id, pane: .information, with: openSettings) }
+        if account.connection != nil {
+            Button("Mailboxes…") { settings.show(.accounts, account: account.id, pane: .mailboxes, with: openSettings) }
+        }
         Button("Export Account…") { Task { await Platform.export(.account(account.id), what: account.displayName, model: model) } }
         if (model.sync.replay[account.id]?.status.failed ?? 0) > 0 {
             Button("Try Failed Changes Again") { Task { await model.actions.retryFailed(account: account.id) } }
@@ -145,17 +143,5 @@ private struct FolderRow: View {
         .padding(.vertical, 1)
     }
 
-    private var icon: String {
-        switch folder.role {
-        case "inbox": "tray"
-        case "sent": "paperplane"
-        case "drafts": "doc"
-        case "archive": "archivebox"
-        case "trash": "trash"
-        case "junk": "xmark.bin"
-        case "flagged": "flag"
-        case "all": "tray.2"
-        default: "folder"
-        }
-    }
+    private var icon: String { FolderLook.icon(folder.role) }
 }

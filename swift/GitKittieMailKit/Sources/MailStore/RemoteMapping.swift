@@ -13,8 +13,9 @@ final class RemoteMapping {
     /// (answered, draft, keywords) and counters (GKM-011; RemoteMapping+Sync.swift). 4: the
     /// offline action journal and a CONDSTORE checkpoint per folder (GKM-015;
     /// RemoteMapping+Actions.swift). 5: messages deleted at the provider, noticed and confirmed
-    /// (GKM-042, MAIL-075; RemoteMapping+Deletions.swift).
-    static let schemaVersion = 5
+    /// (GKM-042, MAIL-075; RemoteMapping+Deletions.swift). 6: each folder's role as the provider
+    /// detected it, beside the role in use once the account's choices apply (GKM-066, MAIL-094).
+    static let schemaVersion = 6
     let database: SQLiteDatabase
 
     init(url: URL) throws {
@@ -54,6 +55,10 @@ final class RemoteMapping {
                 // 4 → 5: deletions at the provider (MAIL-075). Nothing to fill in: what left the
                 // provider before this was kept without a mark, as MAIL-029 said.
                 try migrateToProviderDeletions()
+            }
+            if version < 6 {
+                // 5 → 6: the detected role (MAIL-094). Until now every role was the detected one.
+                try migrateToDetectedRoles()
             }
             try database.setUserVersion(Self.schemaVersion)
         }

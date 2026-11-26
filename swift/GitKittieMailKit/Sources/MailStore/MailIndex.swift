@@ -585,6 +585,13 @@ final class MailIndex {
         }
     }
 
+    /// A folder renamed at the provider: its members keep their membership under the new name.
+    func renameMailbox(_ old: String, to new: String, account: MailAccountID) throws {
+        try database.prepare("UPDATE OR IGNORE message_mailboxes SET mailbox = ? WHERE account_id = ? AND mailbox = ?")
+            .run([.text(new), .text(account.rawValue), .text(old)])
+        try database.prepare("DELETE FROM message_mailboxes WHERE account_id = ? AND mailbox = ?").run([.text(account.rawValue), .text(old)])
+    }
+
     /// Bulk restore of device state after a rebuild.
     func restore(flags: [MailMessageID: MessageFlags], locations: [(MailMessageID, String)], account: MailAccountID) throws {
         try database.transaction {
