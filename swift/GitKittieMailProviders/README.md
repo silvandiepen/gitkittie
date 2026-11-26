@@ -30,7 +30,11 @@ The server script downloads GreenMail 2.1.3 once (checksum-pinned) into
 `~/Library/Caches/GitKittieMail/test-mail-server`, makes a throwaway CA and a `localhost`
 certificate there, and listens on loopback only: IMAPS 3993, SMTPS 3465, IMAP 3143, SMTP 3025,
 admin API 3080. Nothing is added to the system keychain; tests trust that CA explicitly and still
-check host names. Each integration test creates its own synthetic `@example.com` account and
+check host names. `start` is done when the admin API answers (GreenMail starts it only after every
+mail service is up); a failed start is retried once with a fresh JVM, and a final failure prints
+GreenMail's own reason and keeps each attempt's log. A second, separate server can run with
+`GKM_TEST_MAIL_SERVER_DIR` and `GKM_TEST_MAIL_SERVER_{SMTP,SMTPS,IMAP,IMAPS,API}_PORT` (the tests
+use the default ports). Each integration test creates its own synthetic `@example.com` account and
 asserts that its password never appears in the captured log.
 
 Network faults are real, not simulated: `FaultProxy` (Tests/MailIntegrationTests/Support) cuts TCP

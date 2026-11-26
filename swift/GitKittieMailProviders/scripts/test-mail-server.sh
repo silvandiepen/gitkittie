@@ -7,7 +7,9 @@
 #   scripts/test-mail-server.sh status
 #   scripts/test-mail-server.sh clean    stop and delete everything this script created
 #
-# Ports (127.0.0.1 only): IMAP 3143, IMAPS 3993, SMTP 3025, SMTPS 3465, admin API 3080.
+# Ports (127.0.0.1 only): IMAP 3143, IMAPS 3993, SMTP 3025, SMTPS 3465, admin API 3080
+# (GKM_TEST_MAIL_SERVER_{IMAP,IMAPS,SMTP,SMTPS,API}_PORT override them; the tests use the defaults).
+# Ready means the admin API answers, which GreenMail starts only after every mail service is up.
 # TLS uses a throwaway CA made here (valid 30 days, renewed on start); the tests trust only that
 # CA, with full host name checks for "localhost". Nothing is added to the system keychain.
 # All accounts are synthetic (example.com); the passwords below are not secrets.
@@ -27,6 +29,15 @@ PID_FILE="$STATE_DIR/greenmail.pid"
 LOG_FILE="$STATE_DIR/greenmail.log"
 TLS_DIR="$STATE_DIR/tls"
 KEYSTORE_PASSWORD="gkm-test-keystore"
+
+# Ports, overridable to run a second, separate server (with its own GKM_TEST_MAIL_SERVER_DIR).
+# The tests expect the defaults.
+SMTP_PORT="${GKM_TEST_MAIL_SERVER_SMTP_PORT:-3025}"
+SMTPS_PORT="${GKM_TEST_MAIL_SERVER_SMTPS_PORT:-3465}"
+IMAP_PORT="${GKM_TEST_MAIL_SERVER_IMAP_PORT:-3143}"
+IMAPS_PORT="${GKM_TEST_MAIL_SERVER_IMAPS_PORT:-3993}"
+API_PORT="${GKM_TEST_MAIL_SERVER_API_PORT:-3080}"
+ALL_PORTS=("$SMTP_PORT" "$SMTPS_PORT" "$IMAP_PORT" "$IMAPS_PORT" "$API_PORT")
 
 # The default synthetic account. Integration tests create their own per-test users via the API.
 DEFAULT_USER="spike@example.com"
@@ -86,64 +97,111 @@ make_tls() {
   )
 }
 
-# Seconds to wait for each port. A cold CI runner can need longer than a warm Mac
-# (GKM_TEST_MAIL_SERVER_START_TIMEOUT, default 30).
+# Seconds one start attempt may take, for GreenMail's own per-service start-up wait and for the
+# admin API to answer. A cold CI runner can need far longer than a warm Mac
+# (GKM_TEST_MAIL_SERVER_START_TIMEOUT, default 30). A failed attempt is retried once.
 START_TIMEOUT="${GKM_TEST_MAIL_SERVER_START_TIMEOUT:-30}"
+START_ATTEMPTS=2
 
-wait_for_port() {
-  local port=$1
-  for _ in $(seq 1 $(( START_TIMEOUT * 2 ))); do
-    nc -z 127.0.0.1 "$port" 2>/dev/null && return 0
-    is_running || { tail -20 "$LOG_FILE" >&2; die "GreenMail exited during startup"; }
-    sleep 0.5
-  done
-  # Say why: GreenMail's own log, and whether something else already holds the port.
-  echo "--- start-up and API lines of $LOG_FILE ---" >&2
-  grep -iE "api|rest|jetty|jersey|undertow|bind|address|started|starting|error|severe" "$LOG_FILE" | grep -v "SSL peer shut down" | head -40 >&2 || true
-  echo "--- last lines of $LOG_FILE ---" >&2; tail -15 "$LOG_FILE" >&2 || true
-  echo "--- listeners on port $port ---" >&2; lsof -nP -iTCP:"$port" -sTCP:LISTEN >&2 || true
-  die "port $port did not open within ${START_TIMEOUT} s (log: $LOG_FILE)"
+# GreenMail starts every mail service, waits for each one's socket with its own start-up timeout
+# (2 s by default), and only then starts the admin API. A service that misses the 2 s (TLS set-up
+# on a busy runner) makes the main thread throw, while the service threads keep the JVM alive:
+# the mail ports open and the API never does. Hence the explicit greenmail.startup.timeout, the
+# API as the only readiness signal, and the main-thread check below.
+api_ready() {
+  curl -fsS -m 2 -o /dev/null "http://127.0.0.1:$API_PORT/api/service/readiness" 2>/dev/null
 }
 
-start() {
-  mkdir -p "$STATE_DIR"
-  if is_running; then echo "Already running (pid $(cat "$PID_FILE"))."; return; fi
-  for port in 3025 3465 3143 3993 3080; do
-    nc -z 127.0.0.1 "$port" 2>/dev/null && die "port $port is already in use by another process"
-  done
-  local java
-  java="$(find_java)"
-  fetch_jar
-  make_tls
+# GreenMail's start failed but the JVM lives on (see above): the failure is in the log.
+start_failed_in_log() {
+  grep -qE 'Exception in thread "main"|Can not open server socket' "$LOG_FILE" 2>/dev/null
+}
+
+# The lines that say why a start failed, then where the full log is.
+explain_failure() {
+  local log=$1
+  echo "--- why GreenMail did not start ($log) ---" >&2
+  if grep -qE 'Exception in thread "main"|Can not open server socket|BindException|Address already in use|SEVERE|ERROR' "$log" 2>/dev/null; then
+    grep -E -A3 'Exception in thread "main"|Can not open server socket|BindException|Address already in use|SEVERE|ERROR' "$log" | head -30 >&2 || true
+  else
+    echo "(no error in the log; GreenMail was still starting)" >&2
+    tail -10 "$log" >&2 || true
+  fi
+  echo "--- other listeners on the test ports (none is fine) ---" >&2
+  for port in "${ALL_PORTS[@]}"; do lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | tail -n +2 >&2 || true; done
+}
+
+kill_server() {
+  [[ -f "$PID_FILE" ]] || return 0
+  local pid
+  pid="$(cat "$PID_FILE")"
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
+    kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+  fi
+  rm -f "$PID_FILE"
+}
+
+# One attempt: launch the JVM, wait for the API. Returns 1 with $FAIL_REASON set.
+start_attempt() {
+  local java=$1
   local local_part="${DEFAULT_USER%@*}"
   nohup "$java" \
-    -Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.smtps \
-    -Dgreenmail.setup.test.imap -Dgreenmail.setup.test.imaps \
-    -Dgreenmail.setup.test.api -Dgreenmail.api.port=3080 \
     -Dgreenmail.hostname=127.0.0.1 \
+    -Dgreenmail.smtp.port="$SMTP_PORT" -Dgreenmail.smtps.port="$SMTPS_PORT" \
+    -Dgreenmail.imap.port="$IMAP_PORT" -Dgreenmail.imaps.port="$IMAPS_PORT" \
+    -Dgreenmail.api.port="$API_PORT" \
+    -Dgreenmail.startup.timeout="$(( START_TIMEOUT * 1000 ))" \
     -Dgreenmail.users.login=email \
     -Dgreenmail.users="${local_part}:${DEFAULT_PASSWORD}@${DEFAULT_USER#*@}" \
     -Dgreenmail.tls.keystore.file="$TLS_DIR/server.p12" \
     -Dgreenmail.tls.keystore.password="$KEYSTORE_PASSWORD" \
     -jar "$JAR" >"$LOG_FILE" 2>&1 &
   echo $! >"$PID_FILE"
-  for port in 3025 3465 3143 3993 3080; do wait_for_port "$port"; done
-  echo "GreenMail ${GREENMAIL_VERSION} running (pid $(cat "$PID_FILE"))."
-  echo "  IMAPS localhost:3993, SMTPS localhost:3465, IMAP :3143, SMTP :3025, API :3080"
-  echo "  CA: $TLS_DIR/ca.pem   user: $DEFAULT_USER / $DEFAULT_PASSWORD"
+  local deadline=$(( SECONDS + START_TIMEOUT ))
+  while (( SECONDS < deadline )); do
+    api_ready && return 0
+    if ! is_running; then FAIL_REASON="GreenMail exited during start-up"; return 1; fi
+    if start_failed_in_log; then FAIL_REASON="GreenMail could not start its mail services"; return 1; fi
+    sleep 0.5
+  done
+  api_ready && return 0
+  FAIL_REASON="the admin API on port $API_PORT did not answer within ${START_TIMEOUT} s"
+  return 1
+}
+
+start() {
+  mkdir -p "$STATE_DIR"
+  if is_running; then echo "Already running (pid $(cat "$PID_FILE"))."; return; fi
+  for port in "${ALL_PORTS[@]}"; do
+    nc -z 127.0.0.1 "$port" 2>/dev/null && die "port $port is already in use by another process"
+  done
+  local java
+  java="$(find_java)"
+  fetch_jar
+  make_tls
+  rm -f "$STATE_DIR"/greenmail.attempt-*.log
+  local attempt
+  for attempt in $(seq 1 "$START_ATTEMPTS"); do
+    if start_attempt "$java"; then
+      echo "GreenMail ${GREENMAIL_VERSION} running (pid $(cat "$PID_FILE"))."
+      echo "  IMAPS localhost:$IMAPS_PORT, SMTPS localhost:$SMTPS_PORT, IMAP :$IMAP_PORT, SMTP :$SMTP_PORT, API :$API_PORT"
+      echo "  CA: $TLS_DIR/ca.pem   user: $DEFAULT_USER / $DEFAULT_PASSWORD"
+      (( attempt > 1 )) && echo "  (attempt $attempt; the failed attempt's log: $STATE_DIR/greenmail.attempt-1.log)"
+      return 0
+    fi
+    kill_server
+    cp "$LOG_FILE" "$STATE_DIR/greenmail.attempt-$attempt.log"
+    echo "test-mail-server: attempt $attempt of $START_ATTEMPTS failed: $FAIL_REASON" >&2
+    explain_failure "$STATE_DIR/greenmail.attempt-$attempt.log"
+    (( attempt < START_ATTEMPTS )) && echo "test-mail-server: restarting the JVM…" >&2
+  done
+  die "GreenMail did not start: $FAIL_REASON (logs: $STATE_DIR/greenmail.attempt-*.log)"
 }
 
 stop() {
-  if is_running; then
-    local pid
-    pid="$(cat "$PID_FILE")"
-    kill "$pid"
-    for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
-    kill -0 "$pid" 2>/dev/null && kill -9 "$pid"
-    echo "Stopped."
-  else
-    echo "Not running."
-  fi
+  if is_running; then kill_server; echo "Stopped."; else echo "Not running."; fi
   rm -f "$PID_FILE"
 }
 
