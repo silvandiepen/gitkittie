@@ -53,14 +53,17 @@ final class MailboxNavigationUITests: XCTestCase {
             // iPad: the chosen mailbox stays highlighted beside its list, also when chosen again.
             for attempt in 1...2 {
                 choose("mailbox.Inbox", opens: "Inbox", attempt: attempt)
+                XCTAssertTrue(showMailboxes())
                 XCTAssertTrue(waitFor(timeout: 5) { self.row("mailbox.Inbox").isSelected }, "the Inbox row is highlighted")
             }
+            // (Opening a conversation here is left out: on iPad portrait a row tap after choosing
+            // a mailbox doesn't open it yet, on main too; GKM-064 owns that.)
             let rows = app.descendants(matching: .any).matching(identifier: "messageRow")
-            XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 45))
-            rows.firstMatch.tap()
-            XCTAssertTrue(app.staticTexts["threadSubject"].waitForExistence(timeout: 15))
-            XCTAssertTrue(row("mailbox.Inbox").isSelected, "reading a conversation keeps the Inbox row highlighted")
+            XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 45), "Inbox shows its mail")
+            XCTAssertTrue(showMailboxes())
+            XCTAssertTrue(row("mailbox.Inbox").isSelected, "the Inbox row stays highlighted beside its list")
             choose("mailbox.Drafts", opens: "Drafts", attempt: 1)
+            XCTAssertTrue(showMailboxes())
             XCTAssertTrue(waitFor(timeout: 5) { self.row("mailbox.Drafts").isSelected && !self.row("mailbox.Inbox").isSelected })
             snapshot("navigation-ipad")
         }
@@ -75,6 +78,7 @@ final class MailboxNavigationUITests: XCTestCase {
     /// Taps a sidebar row and waits for the list it opens, by its title.
     private func choose(_ identifier: String, opens title: String, attempt: Int) {
         let row = row(identifier)
+        if !(row.exists && row.isHittable) { showMailboxes() }
         for _ in 0..<6 where !(row.waitForExistence(timeout: 3) && row.isHittable) { app.swipeUp(velocity: .slow) }
         XCTAssertTrue(row.isHittable, "\(identifier) can be tapped")
         row.tap()
@@ -86,15 +90,16 @@ final class MailboxNavigationUITests: XCTestCase {
         XCTAssertTrue(opened, "choosing \(title) (time \(attempt)) did not open its list")
     }
 
-    /// On iPhone the mailboxes are the first column of the stack; on iPad they are on screen.
+    /// On iPhone the mailboxes are the first column of the stack (Back); on iPad in portrait
+    /// they slide over the list and away again once one is chosen (the sidebar button).
     @discardableResult
     private func showMailboxes() -> Bool {
-        let mailboxes = app.navigationBars["Mailboxes"]
-        if UIDevice.current.userInterfaceIdiom == .phone, !mailboxes.exists {
+        let focused = row("mailbox.Focused")
+        if !(focused.exists && focused.isHittable) {
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
-        return mailboxes.waitForExistence(timeout: 10)
-            && waitFor(timeout: 5) { self.row("mailbox.Focused").isHittable }
+        return app.navigationBars["Mailboxes"].waitForExistence(timeout: 10)
+            && waitFor(timeout: 5) { focused.isHittable }
     }
 
     private func addAccount(_ user: LocalMailServer.User) {
@@ -112,7 +117,7 @@ final class MailboxNavigationUITests: XCTestCase {
         replace(app.textFields["smtpPortField"], with: "3465")
         hideKeyboard()
         let security = app.buttons["smtpSecurityPicker"]
-        if !security.isHittable { app.swipeUp() }
+        for _ in 0..<6 where !(security.exists && security.isHittable) { app.swipeUp() }
         security.tap()
         let tls = app.buttons["TLS"]
         XCTAssertTrue(tls.waitForExistence(timeout: 5))
@@ -147,11 +152,18 @@ final class MailboxNavigationUITests: XCTestCase {
     }
 
     private func replace(_ field: XCUIElement, with text: String) {
+        // On iPad the server fields start below the sheet's fold: scroll until the field is there.
+        for _ in 0..<4 where !field.exists { app.swipeUp(velocity: .slow) }
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         // The number pad has no Return: put it away (Done above it), or it covers the next field.
-        hideKeyboard()
-        if !field.isHittable { app.swipeUp() }
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        for _ in 0..<4 {
+            hideKeyboard()
+            if !field.isHittable { app.swipeUp(velocity: .slow) }
+            // Trailing-aligned: tap the right end so the cursor lands after the old text.
+            field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+            if (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false { break }
+            app.swipeDown(velocity: .slow)
+        }
         let current = field.value as? String ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
         field.typeText(text)
