@@ -57,8 +57,16 @@ final class SelectionUITests: XCTestCase {
         XCTAssertTrue(waitFor { selected.exists && selected.label == "\(count) messages selected" }, "count: \(selected.label)")
         snapshot("selection-2-all-selected")
 
-        // Trash asks once for many.
-        app.buttons["selectionTrash"].tap()
+        // Trash asks once for many. The bottom bar is laid out again as the selection count
+        // settles; a tap while it moves was lost once on CI (no dialog, GKM-086). Tap it still.
+        let trash = app.buttons["selectionTrash"]
+        var last = CGRect.null
+        XCTAssertTrue(waitFor(timeout: 10) {
+            let now = trash.frame
+            defer { last = now }
+            return trash.isHittable && now == last
+        }, "the bottom bar's Trash settles")
+        trash.tap()
         let confirm = app.buttons.matching(identifier: "confirmTrashButton").firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         snapshot("selection-3-confirm")
