@@ -31,6 +31,8 @@ struct MailSplitView: View {
     @State private var columns = NavigationSplitViewVisibility.all
     @State private var router = MailRouter()
     @State private var undo = UndoManager()
+    /// Read outside the split view: inside, its columns have their own size classes.
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columns, preferredCompactColumn: $router.compactColumn) {
@@ -67,6 +69,9 @@ struct MailSplitView: View {
             if model.accounts.isEmpty { router.compactColumn = .sidebar }
             // A notification opened before the split view existed (a launch from it).
             if model.notificationOpens > 0, model.browser.openThread != nil { router.compactColumn = .detail }
+        }
+        .onChange(of: sizeClass, initial: true) { _, sizeClass in
+            router.isCollapsed = sizeClass == .compact
         }
         .onChange(of: model.browser.selectedRowID) { _, id in
             if id != nil { router.compactColumn = .detail }
@@ -130,6 +135,10 @@ final class MailRouter {
     var composing: ComposeItem?
     /// The column an iPhone shows: Focused's list at launch, the conversation once one is chosen.
     var compactColumn = NavigationSplitViewColumn.content
+    /// The split view is one stack: iPhone, or iPad in a narrow window.
+    var isCollapsed = false
+    /// The stack is back at Mailboxes, with nothing on top of it.
+    var showsMailboxesAlone: Bool { isCollapsed && compactColumn == .sidebar }
     var showsAddAccount = false
     var showsSettings = false
 

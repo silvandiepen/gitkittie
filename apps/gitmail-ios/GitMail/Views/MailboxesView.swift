@@ -82,8 +82,20 @@ struct MailboxesView: View {
     }
 
     private var selection: Binding<SidebarSelection?> {
-        Binding(get: { model.selection }, set: { new in
-            guard let new else { return }
+        Binding(get: {
+            // Back on Mailboxes on iPhone nothing is chosen, as in Mail: choosing the mailbox you
+            // came from is then a change the list acts on (GKM-080). Side by side (iPad), the
+            // chosen mailbox stays highlighted.
+            router.showsMailboxesAlone ? nil : model.selection
+        }, set: { new in
+            guard let new else {
+                // The list clears its selection when the stack goes back to Mailboxes, but SwiftUI
+                // doesn't write that back into preferredCompactColumn: without this the router
+                // still says .content, and choosing the same mailbox changes nothing (GKM-080).
+                // Side by side, a cleared selection means nothing; the mailbox stays chosen.
+                if router.isCollapsed { router.compactColumn = .sidebar }
+                return
+            }
             // On iPhone, choosing a mailbox (again) shows its list.
             router.compactColumn = .content
             Task { await model.select(new) }
