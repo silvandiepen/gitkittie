@@ -66,9 +66,11 @@ struct LocalMailServer {
 
     /// Puts synthetic messages in the user's inbox, oldest first. `receivedDaysAgo` gives each
     /// message's received date at the provider (IMAP APPEND date-time); without it they are
-    /// received now. `from` is the From header (GKM-071 sends many from one sender).
+    /// received now. `from` is the From header (GKM-071 sends many from one sender). `dates` are
+    /// the Date headers, which order the list; without them they are 24 November 2026, an hour apart
+    /// in each run of ten.
     func append(_ subjects: [String], for user: User, receivedDaysAgo: [Int]? = nil,
-                from: String = "Bo <bo@example.net>") async throws {
+                from: String = "Bo <bo@example.net>", dates: [String]? = nil) async throws {
         let connections = AccountConnections(trust: trust)
         let settings = MailConnectionSettings(
             kind: .imap,
@@ -76,7 +78,7 @@ struct LocalMailServer {
             smtp: MailServerSettings(host: "localhost", port: smtpsPort, security: .implicitTLS, username: user.address))
         try await connections.imap(settings, password: Secret(user.password)).withSession { session in
             for (index, subject) in subjects.enumerated() {
-                let raw = "From: \(from)\r\nTo: \(user.address)\r\nSubject: \(subject)\r\nMessage-ID: <\(UUID().uuidString)@example.net>\r\nDate: Tue, 24 Nov 2026 0\(index % 10):00:00 +0000\r\n\r\n\(subject) body.\r\n"
+                let raw = "From: \(from)\r\nTo: \(user.address)\r\nSubject: \(subject)\r\nMessage-ID: <\(UUID().uuidString)@example.net>\r\nDate: \(dates?[index] ?? "Tue, 24 Nov 2026 0\(index % 10):00:00 +0000")\r\n\r\n\(subject) body.\r\n"
                 let receivedAt = receivedDaysAgo.map { Date().addingTimeInterval(-Double($0[index]) * 86_400) }
                 _ = try await session.append(Data(raw.utf8), to: "INBOX", flags: MessageFlags(), receivedAt: receivedAt)
             }

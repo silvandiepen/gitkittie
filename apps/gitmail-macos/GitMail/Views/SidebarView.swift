@@ -31,6 +31,11 @@ struct SidebarView: View {
         .background(Theme.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
+                // The mail folder is in iCloud Drive or a synced folder: nothing syncs (MAIL-126).
+                if let hold = model.sync.folderHold {
+                    MailFolderHeldNotice(hold: hold) { settings.show(.storage, with: openSettings) }
+                        .padding(.horizontal, 10).padding(.top, 6)
+                }
                 // The disk is nearly full: nothing downloads until there is room (MAIL-106).
                 if let pause = model.sync.downloadPause {
                     DownloadPausedNotice(pause: pause) { settings.show(.storage, with: openSettings) }

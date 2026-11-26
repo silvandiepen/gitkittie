@@ -444,6 +444,36 @@ final class ClassificationAppTests: XCTestCase {
         XCTAssertNotNil(model.actionError)
     }
 
+    /// A notification for a conversation older than the list's first page (GKM-085): the list
+    /// loads pages up to it and selects its row, which is what pushes the reader on iPhone.
+    func testOpeningANotificationBelowTheFirstPageSelectsItsRow() async throws {
+        let model = await openModel(poster: RecordingPoster(permission: .allowed, answer: .allowed))
+        let store = try XCTUnwrap(model.mailStore)
+        let old = try await store.ingest(Self.eml(from: "Jo Lee <jo.lee@example.org>", to: me, subject: "The garden plan",
+                                                  date: Date().addingTimeInterval(-3 * 86_400)), account: account).id
+        for index in 0..<MailBrowser.pageSize {
+            try await store.ingest(Self.eml(from: "Jo Lee <jo.lee@example.org>", to: me, subject: "Note \(index)",
+                                            date: Date().addingTimeInterval(-Double(index) * 60)), account: account)
+        }
+        await model.refreshAfterSync()
+        let oldSummary = try await store.summary(of: old)
+        let thread = try XCTUnwrap(oldSummary).threadID
+        await model.select(.category(.focused))
+        XCTAssertFalse(model.browser.rows.contains { $0.threadID == thread }, "the first page leaves it out")
+
+        await model.openFromNotification(old)
+        XCTAssertEqual(model.selection, .category(.focused))
+        XCTAssertEqual(model.browser.openThread?.id, thread)
+        XCTAssertNotNil(model.browser.selectedRowID)
+        XCTAssertEqual(model.browser.selectedRowID, model.browser.rows.first { $0.threadID == thread }?.id)
+
+        // A refresh of the list (a sync, a change) keeps the row, the selection and the conversation.
+        let selected = model.browser.selectedRowID
+        await model.browser.reload()
+        XCTAssertEqual(model.browser.selectedRowID, selected)
+        XCTAssertEqual(model.browser.openThread?.id, thread)
+    }
+
     func testANotificationThatLaunchedTheAppOpensOnceTheStoreIsOpen() async throws {
         let seeding = try await MailStore.open(locations)
         try await seeding.save(MailAccount(id: account, displayName: "Corpus", address: me))
