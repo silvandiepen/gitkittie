@@ -172,21 +172,24 @@ private struct MailActionChrome: ViewModifier {
             .confirmationDialog(
                 deletionTitle,
                 isPresented: Binding(get: { actions.deletionToConfirm != nil }, set: { if !$0 { actions.deletionToConfirm = nil } }),
-                titleVisibility: .visible
-            ) {
-                Button("Delete Permanently", role: .destructive) { Task { await actions.confirmDeletion() } }
+                titleVisibility: .visible,
+                presenting: actions.deletionToConfirm
+            ) { request in
+                // The dialog clears the request as it closes; the button keeps the one it showed.
+                Button("Delete Permanently", role: .destructive) { Task { await actions.confirmDeletion(request) } }
                 Button("Cancel", role: .cancel) { actions.deletionToConfirm = nil }
-            } message: {
+            } message: { _ in
                 Text("They are removed from the provider’s Trash. The copies in your mail folder stay, and Edit ▸ Undo puts them back.")
             }
             .confirmationDialog(
                 actions.trashToConfirm?.question ?? "",
                 isPresented: Binding(get: { actions.trashToConfirm != nil }, set: { if !$0 { actions.trashToConfirm = nil } }),
-                titleVisibility: .visible
-            ) {
-                Button("Move to Trash", role: .destructive) { Task { await actions.confirmTrash() } }
+                titleVisibility: .visible,
+                presenting: actions.trashToConfirm
+            ) { request in
+                Button("Move to Trash", role: .destructive) { Task { await actions.confirmTrash(request) } }
                 Button("Cancel", role: .cancel) { actions.trashToConfirm = nil }
-            } message: {
+            } message: { _ in
                 Text("Edit ▸ Undo puts them all back.")
             }
             .alert("Couldn’t do that", isPresented: Binding(get: { actions.notice != nil }, set: { if !$0 { actions.notice = nil } })) {

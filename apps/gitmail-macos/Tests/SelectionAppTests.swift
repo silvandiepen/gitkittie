@@ -160,8 +160,11 @@ final class SelectionAppTests: XCTestCase {
 
         // Many ask once, then go in one step: one journal batch, one Undo.
         await model.actions.trash(targets, in: model.browser.scope)
-        XCTAssertEqual(model.actions.trashToConfirm?.question, "Move \(count - 1) messages to Trash?")
-        await model.actions.confirmTrash()
+        let shown = try XCTUnwrap(model.actions.trashToConfirm)
+        XCTAssertEqual(shown.question, "Move \(count - 1) messages to Trash?")
+        // As the dialog does it: closing clears the request before the button's task runs.
+        model.actions.trashToConfirm = nil
+        await model.actions.confirmTrash(shown)
         XCTAssertTrue(model.browser.markedRowIDs.isEmpty)
         let store = try XCTUnwrap(model.mailStore)
         let pending = try await store.actionStatus(account: work).pending

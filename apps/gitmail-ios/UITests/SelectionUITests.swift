@@ -28,15 +28,16 @@ final class SelectionUITests: XCTestCase {
         openMailbox("Inbox")
         let rows = app.descendants(matching: .any).matching(identifier: "messageRow")
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 60))
-        XCTAssertTrue(waitFor(timeout: 60) { rows.containing(NSPredicate(format: "label CONTAINS 'Lunch on Friday'")).count == 1 })
+        let deals = rows.containing(NSPredicate(format: "label CONTAINS 'From Deals'"))
+        XCTAssertTrue(waitFor(timeout: 60) { deals.count > 3 }, "the inbox fills")
 
         // A tap still opens a conversation.
-        rows.containing(NSPredicate(format: "label CONTAINS 'Lunch on Friday'")).firstMatch.tap()
+        deals.firstMatch.tap()
         XCTAssertTrue(app.staticTexts["threadSubject"].waitForExistence(timeout: 15))
         goBackToList()
 
         // Long-press a deal: See All Mail from Deals.
-        let deal = rows.containing(NSPredicate(format: "label CONTAINS 'From Deals'")).firstMatch
+        let deal = deals.firstMatch
         XCTAssertTrue(deal.waitForExistence(timeout: 10))
         deal.press(forDuration: 1.2)
         let seeAll = app.buttons["See All Mail from Deals"]
@@ -45,7 +46,7 @@ final class SelectionUITests: XCTestCase {
         seeAll.tap()
         let chip = app.buttons["senderChip"]
         XCTAssertTrue(chip.waitForExistence(timeout: 10), "the From chip says what the list shows")
-        XCTAssertTrue(waitFor { rows.containing(NSPredicate(format: "label CONTAINS 'Lunch on Friday'")).count == 0 })
+        XCTAssertTrue(waitFor { rows.containing(NSPredicate(format: "label CONTAINS 'From Bo'")).count == 0 }, "only their mail")
 
         // Select, Select All: every message from them, loaded or not.
         app.buttons["selectButton"].tap()
@@ -58,7 +59,7 @@ final class SelectionUITests: XCTestCase {
 
         // Trash asks once for many.
         app.buttons["selectionTrash"].tap()
-        let confirm = app.buttons["confirmTrashButton"]
+        let confirm = app.buttons.matching(identifier: "confirmTrashButton").firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         snapshot("selection-3-confirm")
         confirm.tap()

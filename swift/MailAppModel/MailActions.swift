@@ -128,8 +128,10 @@ final class MailActions {
         }
     }
 
-    func confirmTrash() async {
-        guard let request = trashToConfirm else { return }
+    /// `request` is the one the dialog showed: a dialog clears ``trashToConfirm`` as it closes,
+    /// before its button's task runs.
+    func confirmTrash(_ shown: TrashRequest? = nil) async {
+        guard let request = shown ?? trashToConfirm else { return }
         trashToConfirm = nil
         await perform(.moveToTrash, targets: request.targets, in: request.scope)
     }
@@ -152,8 +154,10 @@ final class MailActions {
         deletionToConfirm = DeletionRequest(targets: targets, scope: scope, count: count)
     }
 
-    func confirmDeletion() async {
-        guard let request = deletionToConfirm else { return }
+    /// `request` is the one the dialog showed: a dialog clears ``deletionToConfirm`` as it
+    /// closes, before its button's task runs.
+    func confirmDeletion(_ shown: DeletionRequest? = nil) async {
+        guard let request = shown ?? deletionToConfirm else { return }
         deletionToConfirm = nil
         await perform(.deletePermanently, targets: request.targets, in: request.scope)
     }

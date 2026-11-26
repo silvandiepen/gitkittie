@@ -134,10 +134,10 @@ struct MessageListScreen: View {
             }
         }
         .confirmationDialog(model.actions.trashToConfirm?.question ?? "", isPresented: trashShown, titleVisibility: .visible,
-                            presenting: model.actions.trashToConfirm) { _ in
+                            presenting: model.actions.trashToConfirm) { request in
             Button("Move to Trash", role: .destructive) {
                 Task {
-                    await model.actions.confirmTrash()
+                    await model.actions.confirmTrash(request)
                     editMode = .inactive
                 }
             }
@@ -148,7 +148,7 @@ struct MessageListScreen: View {
         .confirmationDialog("Delete permanently?", isPresented: deletionShown, titleVisibility: .visible,
                             presenting: model.actions.deletionToConfirm) { request in
             Button(request.count == 1 ? "Delete Message" : "Delete \(request.count) Messages", role: .destructive) {
-                Task { await model.actions.confirmDeletion() }
+                Task { await model.actions.confirmDeletion(request) }
             }
         } message: { _ in
             Text("They are removed from the provider’s Trash. The copy in your Mail folder stays until you remove it.")
