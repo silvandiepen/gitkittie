@@ -195,8 +195,11 @@ struct ReviewRequestRow: View {
                         .foregroundStyle(Color.accentColor)
                 }
             }
-            if let question = request.question {
-                Text(question).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+            if request.problem != nil {
+                Label("Can't be read: its review.md is not valid", systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange)
+            } else if let question = request.question {
+                Text(MarkdownPage.inline(question)).font(.callout).foregroundStyle(.secondary).lineLimit(2)
             }
             Text(summaryLine(request)).font(.caption).foregroundStyle(.tertiary)
         }
@@ -207,7 +210,7 @@ struct ReviewRequestRow: View {
         let s = request.summary
         var parts: [String] = []
         if let card = request.card { parts.append(card) }
-        if s.pendingItems > 0 { parts.append("\(s.pendingItems) pending") }
+        if s.pendingItems > 0 { parts.append("\(s.pendingItems) waiting") }
         if s.approved > 0 { parts.append("\(s.approved) approved") }
         if s.changesRequested > 0 { parts.append("\(s.changesRequested) changes") }
         if s.rejected > 0 { parts.append("\(s.rejected) rejected") }
@@ -217,26 +220,11 @@ struct ReviewRequestRow: View {
     }
 }
 
-/// One page of a request: a question to answer or a file to judge.
-private enum ReviewPage: Identifiable {
-    case question(ReviewQuestion)
-    case item(ReviewItem)
+/// One page of a request: a question to answer or a file to judge (`ReviewEntry`, in the
+/// order both apps show them: questions first, then the files group by group).
+private typealias ReviewPage = ReviewEntry
 
-    var id: String {
-        switch self {
-        case .question(let question): return "question:\(question.id)"
-        case .item(let item): return "item:\(item.id)"
-        }
-    }
-
-    /// Still waiting for the reviewer.
-    var isWaiting: Bool {
-        switch self {
-        case .question(let question): return !question.isAnswered
-        case .item(let item): return item.status == .pending
-        }
-    }
-
+private extension ReviewEntry {
     var color: Color {
         switch self {
         case .question(let question): return question.isAnswered ? Theme.accent : .secondary
@@ -244,13 +232,8 @@ private enum ReviewPage: Identifiable {
         }
     }
 
-    /// Questions first: they are what the agent is waiting on to go on.
-    static func all(_ request: ReviewRequest) -> [ReviewPage] {
-        request.questions.map(ReviewPage.question) + request.items.map(ReviewPage.item)
-    }
-
     /// "2 items and 1 question have no answer yet".
-    static func noAnswerTitle(_ pages: [ReviewPage]) -> String {
+    static func noAnswerTitle(_ pages: [ReviewEntry]) -> String {
         let questions = pages.filter { if case .question = $0 { return true } else { return false } }.count
         let total = pages.count
         return "\(ReviewSummary.describe(items: total - questions, questions: questions)) \(total == 1 ? "has" : "have") no answer yet"
@@ -268,11 +251,13 @@ struct ReviewDetailView: View {
     /// Counted up from outside to jump to the first page without an answer.
     var jumpToUnanswered = 0
 
-    /// The pages on show, fixed when the request opens so an answered slide does not
-    /// vanish under your thumb.
-    @State private var slideIDs: [String] = []
+    /// The pages on show, fixed when the request opens (or the filter changes) so an
+    /// answered slide does not vanish under your thumb.
+    @State private var slideIDs: Set<String> = []
     @State private var selection = ""
-    @State private var showsAnswered = false
+    /// Which pages show: what waits, what is answered, or everything. Remembered.
+    @AppStorage("reviewsFilter") private var filter: ReviewFilter = .waiting
+    @State private var showsNotes = false
     @State private var confirmClose = false
     @State private var commenting: ReviewRequest?
     @State private var removing: ReviewRequest?
@@ -292,7 +277,7 @@ struct ReviewDetailView: View {
     }
 
     private func slides(_ request: ReviewRequest) -> [ReviewPage] {
-        ReviewPage.all(request).filter { slideIDs.contains($0.id) }
+        request.entries.filter { slideIDs.contains($0.id) }
     }
 
     private func unanswered(_ request: ReviewRequest) -> [ReviewPage] {
@@ -303,10 +288,23 @@ struct ReviewDetailView: View {
         Group {
             if let request {
                 let pages = slides(request)
+                // Where the page on screen is, worked out once: every page asks whether it is
+                // near it, and a request can have hundreds of pages.
+                let position = pages.firstIndex { $0.id == selection } ?? 0
                 VStack(spacing: 0) {
-                    header(request, pages: pages)
-                    if pages.isEmpty {
-                        ContentUnavailableView("Nothing to review", systemImage: "checkmark.seal")
+                    header(request, pages: pages, position: position)
+                    if let problem = request.problem {
+                        ContentUnavailableView {
+                            Label("This request can't be read", systemImage: "exclamationmark.triangle")
+                        } description: {
+                            Text("Its review.md has frontmatter that is not valid YAML. \(problem) The agent that wrote it has to fix it.")
+                        }
+                    } else if pages.isEmpty {
+                        ContentUnavailableView {
+                            Label(filter == .answered ? "Nothing answered yet" : "Nothing waits here", systemImage: "checkmark.seal")
+                        } actions: {
+                            Button("Show All") { filter = .all }
+                        }
                     } else if selecting {
                         ReviewSelectGrid(request: request, items: shownItems(request), chosen: $chosen)
                     } else {
@@ -320,7 +318,7 @@ struct ReviewDetailView: View {
                                         // Only the slide on screen and its neighbours hold their
                                         // picture: a request can have dozens of large images.
                                         ReviewSlide(request: request, item: item,
-                                                    isNear: abs(index - (pages.firstIndex { $0.id == selection } ?? 0)) <= 1,
+                                                    isNear: abs(index - position) <= 1,
                                                     onDecided: { advance(after: page.id) })
                                     }
                                 }
@@ -332,7 +330,8 @@ struct ReviewDetailView: View {
                 }
                 .navigationTitle(request.title)
                 .onAppear { if slideIDs.isEmpty { load(request) } }
-                .onChange(of: showsAnswered) { _, _ in load(request) }
+                .onChange(of: filter) { _, _ in load(request) }
+                .sheet(isPresented: $showsNotes) { ReviewNotesSheet(request: request).environment(model) }
                 .onChange(of: jumpToUnanswered) { _, _ in goToUnanswered(request) }
                 .confirmationDialog(
                     ReviewPage.noAnswerTitle(unanswered(request)),
@@ -380,7 +379,14 @@ struct ReviewDetailView: View {
                             Button("Select", systemImage: "checkmark.circle") { withAnimation { selecting = true } }
                                 .accessibilityIdentifier("reviewSelectFiles")
                         }
-                        Toggle("Show Answered", isOn: $showsAnswered)
+                        Picker("Show", selection: $filter) {
+                            ForEach(ReviewFilter.allCases) { option in
+                                Text("\(option.title) (\(request.map { option.count(in: $0.summary) } ?? 0))").tag(option)
+                            }
+                        }
+                        if let request, !ReviewNotes.blocks(request).isEmpty {
+                            Button("Notes", systemImage: "doc.text") { showsNotes = true }
+                        }
                         Button("Reload", systemImage: "arrow.clockwise") { Task { await model.refreshReviews() } }
                         if let request {
                             ReviewRequestCommands(request: request, commenting: $commenting, removing: $removing)
@@ -419,20 +425,18 @@ struct ReviewDetailView: View {
         }
     }
 
-    /// What is on show: the questions and items without an answer, with the other options
-    /// of a pick-one group that is still open. A request with nothing waiting shows everything.
+    /// What is on show: for "Waiting", the questions and items without an answer, with the
+    /// other options of a pick-one group that is still open (a request with nothing waiting
+    /// shows everything); for "Answered", what has an answer; or all of it.
     private func load(_ request: ReviewRequest) {
-        let all = ReviewPage.all(request)
-        let waitingItems = request.items.filter { $0.status == .pending }
-        let everything = showsAnswered || !all.contains(where: \.isWaiting)
-        let openGroups = Set(waitingItems.compactMap(\.group))
-        let shown = everything ? all : all.filter { page in
-            switch page {
-            case .question(let question): return !question.isAnswered
-            case .item(let item): return item.status == .pending || (item.group.map(openGroups.contains) ?? false)
+        let hidden = request.hiddenIDs(for: filter)
+        let shown = request.entries.filter { entry in
+            switch entry {
+            case .question(let question): return !hidden.questions.contains(question.id)
+            case .item(let item): return !hidden.items.contains(item.id)
             }
         }
-        slideIDs = shown.map(\.id)
+        slideIDs = Set(shown.map(\.id))
         if !slideIDs.contains(selection) {
             selection = shown.first(where: \.isWaiting)?.id ?? shown.first?.id ?? ""
         }
@@ -492,19 +496,60 @@ struct ReviewDetailView: View {
     private func advance(after id: String) {
         guard let request = model.reviewRequest(ref) else { return }
         let pages = slides(request)
-        guard let index = pages.firstIndex(where: { $0.id == id }) else { return }
-        let later = pages[(index + 1)...].first(where: \.isWaiting) ?? pages[..<index].first(where: \.isWaiting)
-        if let later { withAnimation { selection = later.id } }
+        guard pages.contains(where: { $0.id == id }), let later = ReviewEntry.nextWaiting(after: id, in: pages),
+              later.id != id else { return }
+        withAnimation { selection = later.id }
     }
 
-    private func header(_ request: ReviewRequest, pages: [ReviewPage]) -> some View {
+    private func header(_ request: ReviewRequest, pages: [ReviewPage], position: Int) -> some View {
         let answered = pages.filter { !$0.isWaiting }.count
-        let position = (pages.firstIndex { $0.id == selection } ?? 0) + 1
+        let waiting = pages.count - answered
+        let current = pages.indices.contains(position) ? pages[position] : nil
+        let nextWaiting = ReviewEntry.nextWaiting(after: current?.id, in: pages)
         return VStack(alignment: .leading, spacing: 8) {
-            if let question = request.question {
-                Text(question).font(.headline).lineLimit(3)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                if let question = request.question {
+                    Text(MarkdownPage.inline(question)).font(.headline).lineLimit(3)
+                }
+                Spacer(minLength: 0)
+                if !ReviewNotes.blocks(request).isEmpty {
+                    Button { showsNotes = true } label: { Label("Notes", systemImage: "doc.text").font(.subheadline) }
+                        .buttonStyle(.borderless)
+                        .accessibilityIdentifier("reviewNotesButton")
+                }
             }
-            // One segment per slide, coloured by its answer; tap to go there.
+            progress(pages, position: position)
+            HStack(spacing: 8) {
+                Text("\(position + 1) of \(pages.count)").monospacedDigit()
+                if let current {
+                    Text(current.isWaiting ? "· waiting" : "· answered")
+                        .foregroundStyle(current.isWaiting ? Theme.accent : .secondary)
+                }
+                Spacer()
+                Text("\(answered) of \(pages.count) answered").monospacedDigit()
+                    .accessibilityIdentifier("reviewAnsweredCount")
+                if let nextWaiting, nextWaiting.id != current?.id, waiting > 0 {
+                    Button {
+                        withAnimation { selection = nextWaiting.id }
+                    } label: {
+                        Label("Next waiting", systemImage: "forward.fill").labelStyle(.iconOnly)
+                            .frame(minWidth: 32, minHeight: 28)
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .accessibilityLabel("Next waiting")
+                    .accessibilityIdentifier("reviewNextWaiting")
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal).padding(.top, 8).padding(.bottom, 6)
+    }
+
+    /// Where you are and what is answered. One segment per page, coloured by its answer, tap
+    /// to go there, while they are wide enough to tap; past that a bar of what is answered
+    /// with a mark where you are.
+    @ViewBuilder private func progress(_ pages: [ReviewPage], position: Int) -> some View {
+        if pages.count <= 40 {
             HStack(spacing: 3) {
                 ForEach(pages) { page in
                     Capsule()
@@ -517,15 +562,21 @@ struct ReviewDetailView: View {
             }
             .frame(height: 8)
             .accessibilityHidden(true)
-            HStack {
-                Text("\(position) of \(pages.count)").monospacedDigit()
-                Spacer()
-                Text("\(answered) of \(pages.count) answered").monospacedDigit()
-                    .accessibilityIdentifier("reviewAnsweredCount")
+        } else {
+            let answered = Double(pages.filter { !$0.isWaiting }.count)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.25)).frame(height: 4)
+                    Capsule().fill(Theme.accent).frame(width: proxy.size.width * answered / Double(pages.count), height: 4)
+                    Capsule().fill(Color.primary)
+                        .frame(width: 3, height: 10)
+                        .offset(x: max(0, proxy.size.width * Double(position) / Double(max(1, pages.count - 1)) - 1.5))
+                }
+                .frame(maxHeight: .infinity)
             }
-            .font(.caption).foregroundStyle(.secondary)
+            .frame(height: 10)
+            .accessibilityHidden(true)
         }
-        .padding(.horizontal).padding(.top, 8).padding(.bottom, 6)
     }
 }
 
@@ -570,9 +621,9 @@ private struct ReviewThumbnail: View {
                 .aspectRatio(1, contentMode: .fit)
                 .background(Theme.card, in: RoundedRectangle(cornerRadius: 10))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
+                // Chosen: a tinted fill over the picture, with the checkmark.
                 .overlay {
-                    RoundedRectangle(cornerRadius: 10)
-                        .strokeBorder(isChosen ? Color.accentColor : .clear, lineWidth: 3)
+                    RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(isChosen ? 0.28 : 0))
                 }
                 .overlay(alignment: .topTrailing) {
                     Image(systemName: isChosen ? "checkmark.circle.fill" : "circle")
@@ -596,10 +647,10 @@ private struct ReviewThumbnail: View {
     @ViewBuilder private var picture: some View {
         switch item.kind {
         case .image, .animation:
-            RemoteImage(request: request, file: item.file, maxPixel: 360)
+            ReviewImage(request: request, file: item.file, maxPixel: 360)
         case .model:
             if let preview = item.preview {
-                RemoteImage(request: request, file: preview, maxPixel: 360)
+                ReviewImage(request: request, file: preview, maxPixel: 360)
             } else {
                 symbol("cube.transparent")
             }
@@ -695,7 +746,10 @@ private struct ReviewSlide: View {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.id).font(.subheadline.weight(.semibold))
-                            if let note = item.note { Text(note).font(.callout).foregroundStyle(.secondary) }
+                            if let note = item.note {
+                                Text(MarkdownPage.inline(note)).font(.callout).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                         Spacer()
                         if let revises = item.revises {
@@ -741,7 +795,7 @@ private struct ReviewSlide: View {
                                 .font(.caption).foregroundStyle(.secondary)
                             Text(comment.text).font(.callout)
                             if let image = comment.image {
-                                RemoteImage(request: request, file: image, maxPixel: 600)
+                                ReviewImage(request: request, file: image, maxPixel: 600)
                                     .frame(height: 140)
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                     .contentShape(Rectangle())
@@ -785,6 +839,14 @@ private struct ReviewSlide: View {
         } else if item.status != .pending {
             badge(item.status.title, item.status == .approved ? "checkmark.circle.fill" : (item.status == .rejected ? "xmark.circle.fill" : "pencil.circle.fill"),
                   ReviewColor.status(item.status))
+        } else {
+            // Not decided yet: said as plainly as a decision is, on the picture itself.
+            Label("Waiting for you", systemImage: "circle.dashed")
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .foregroundStyle(Theme.accent)
+                .accessibilityIdentifier("reviewVerdict")
         }
     }
 
@@ -942,7 +1004,7 @@ private struct AssetView: View {
     @ViewBuilder private var content: some View {
         switch item.kind {
         case .image:
-            RemoteImage(request: request, file: item.file)
+            ReviewImage(request: request, file: item.file)
                 .contentShape(Rectangle())
                 .onTapGesture { enlarged = true }
                 .accessibilityAddTraits(.isButton)
@@ -954,7 +1016,7 @@ private struct AssetView: View {
         case .model:
             ZStack(alignment: .bottomTrailing) {
                 if let preview = item.preview {
-                    RemoteImage(request: request, file: preview)
+                    ReviewImage(request: request, file: preview)
                 } else {
                     Image(systemName: "cube.transparent").font(.system(size: 64)).foregroundStyle(.tertiary)
                 }
@@ -1087,56 +1149,6 @@ struct QuickLookItem: Identifiable {
 
     init(url: URL) { self.url = url }
     init(file: String) { self.url = URL(fileURLWithPath: "/"); self.file = file }
-}
-
-/// An image loaded through the board source (works for local folders, the folder server
-/// and provider repos alike).
-private struct RemoteImage: View {
-    @Environment(AppModel.self) private var model
-    let request: ReviewRequest
-    let file: String
-    /// The longest side to decode to, in pixels.
-    var maxPixel = 1600
-    @State private var image: UIImage?
-    @State private var failed = false
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image).resizable().scaledToFit()
-            } else if failed {
-                Image(systemName: "photo.badge.exclamationmark").font(.system(size: 40)).foregroundStyle(.tertiary)
-            } else {
-                ProgressView()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: "\(request.ref.id)/\(file)") {
-            guard let data = await model.assetData(request, file: file),
-                  let loaded = await ReviewImageDecoder.image(from: data, maxPixel: maxPixel) else {
-                failed = true
-                return
-            }
-            image = loaded
-        }
-    }
-}
-
-/// Decodes pictures off the main thread and no larger than they are shown: a full-size
-/// decode of every image in a request is what runs the app out of memory.
-enum ReviewImageDecoder {
-    static func image(from data: Data, maxPixel: Int) async -> UIImage? {
-        await Task.detached(priority: .userInitiated) {
-            guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceShouldCacheImmediately: true,
-                kCGImageSourceThumbnailMaxPixelSize: maxPixel,
-            ]
-            return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary).map { UIImage(cgImage: $0) }
-        }.value
-    }
 }
 
 private struct AudioPlayerView: View {
