@@ -28,6 +28,9 @@ struct AccountServices {
     /// How often a running sync looks at the free space besides as mail comes in; also how
     /// often a sync stopped on this device (paused for space, store not writable) looks again.
     var freeSpaceCheckInterval: Duration = .seconds(60)
+    /// Where a mail folder is (GKM-103, MAIL-126): in iCloud Drive or a File Provider folder the
+    /// sync doesn't start. Tests pass a placement of their own.
+    var folderPlacement: @Sendable (URL) -> MailFolderPlacement = MailFolderPlacement.of(_:)
 
     /// The sync's floor (GKM-091): the minimum and the free-space reader above.
     var freeSpaceFloor: FreeSpaceFloor {
@@ -77,6 +80,10 @@ final class AccountSync {
     /// Set while downloading is paused because the mail folder's disk is nearly full (MAIL-106);
     /// says so in words. Nil when there is room.
     private(set) var downloadPause: DownloadPause?
+    /// Set while the sync is held back because the mail folder is in iCloud Drive or a folder
+    /// another app syncs (GKM-103, MAIL-126): nothing starts, not even actions, until another
+    /// folder is chosen. Nil for a folder on this device.
+    private(set) var folderHold: MailFolderPlacement?
 
     @ObservationIgnored private var coordinators: [MailAccountID: SyncCoordinator] = [:]
     /// Every account this sync was started for, downloading or paused for space, as it was
@@ -123,6 +130,10 @@ final class AccountSync {
     /// Under the minimum free space nothing downloads, and it says so (MAIL-106); the free
     /// space is looked at again as mail comes in and once a minute.
     func start(_ accounts: [MailAccount], store: MailStore) async {
+        guard !isHeld(store) else {
+            for account in accounts { folders[account.id] = (try? await store.syncedFolders(account: account.id)) ?? [] }
+            return
+        }
         self.store = store
         _ = hasRoom()
         watchFreeSpace()
@@ -137,7 +148,7 @@ final class AccountSync {
     /// Mac, or a removed Keychain item) it says so instead. Actions, attachments on demand and
     /// server search start whatever the free space; downloading only when there is room.
     func start(_ account: MailAccount, store: MailStore) async {
-        guard started[account.id] == nil, let connector = connector(for: account) else { return }
+        guard started[account.id] == nil, !isHeld(store), let connector = connector(for: account) else { return }
         self.store = store
         let id = account.id
         started[id] = account
@@ -159,6 +170,14 @@ final class AccountSync {
         await replayer.start()
         if hasRoom() { await startDownloading(account, connector: connector, store: store) }
         if spaceWatch == nil { watchFreeSpace() }
+    }
+
+    /// True, with `folderHold` set, when the store's mail folder is somewhere the sync must not
+    /// write (GKM-103): checked on every start, so no start path can get around it.
+    private func isHeld(_ store: MailStore) -> Bool {
+        let placement = services.folderPlacement(store.locations.mailFolder)
+        folderHold = placement.isSafe ? nil : placement
+        return folderHold != nil
     }
 
     /// The account's IMAP connector with its password; nil, with the account's status saying
@@ -329,6 +348,7 @@ final class AccountSync {
         for id in Array(started.keys) { await stop(id) }
         folders = [:]
         downloadPause = nil
+        folderHold = nil
     }
 
     /// The folder the person is looking at, so its account waits on it.

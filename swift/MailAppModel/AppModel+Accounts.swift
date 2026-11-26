@@ -125,6 +125,12 @@ extension AppModel {
     /// Shows the mail in another folder (MAIL-021). The current folder is left as it is; its
     /// accounts come back when it is chosen again.
     func useMailFolder(_ url: URL?) async {
+        // In iCloud Drive or a folder another app syncs (GKM-103, MAIL-126): refused before
+        // anything stops, so the current folder carries on as it was.
+        if let url, let refusal = mailFolderRefusal(for: url) {
+            actionError = refusal
+            return
+        }
         await sync.stopAll()
         let location = MailFolderLocation(defaults: sync.services.defaults)
         do {
@@ -135,10 +141,18 @@ extension AppModel {
         await open()
     }
 
+    /// Why a folder the person picked can't be the mail folder (GKM-103, MAIL-126): it is in
+    /// iCloud Drive or a folder another app syncs. Nil when it can.
+    func mailFolderRefusal(for url: URL) -> String? {
+        sync.services.folderPlacement(url).refusal
+    }
+
     /// The sidebar's line for an account's sync.
     func syncStatus(_ id: MailAccountID) -> String? {
         guard let account = accounts.first(where: { $0.id == id }) else { return nil }
         guard account.connection != nil else { return "Not connected · mail kept on \(DeviceWords.this)" }
+        // The mail folder holds the sync back (GKM-103): nothing else about it is news.
+        if let hold = sync.folderHold?.shortText { return hold }
         // Paused for space (MAIL-106): the coordinator's last progress would still say "Downloading".
         let syncLine = sync.isPausedForSpace(id) ? DownloadPause.shortText : SyncStatusText.line(sync.progress[id])
         // A stop on this device says what to do as well (GKM-091).

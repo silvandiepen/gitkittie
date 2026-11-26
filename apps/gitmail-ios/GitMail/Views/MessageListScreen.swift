@@ -31,6 +31,11 @@ struct MessageListScreen: View {
             if isEditing {
                 browser.markedRowIDs = ids
             } else {
+                // The list clears its selection when the stack goes back from the reader, but
+                // SwiftUI doesn't write that back into preferredCompactColumn, so the router kept
+                // saying .detail on the list. Say what is shown (GKM-085; the mailboxes' twin is
+                // GKM-080). The reader itself is pushed by the row this list selects.
+                if ids.isEmpty, router.isCollapsed { router.compactColumn = .content }
                 let id = ids.first { $0 != browser.selectedRowID } ?? ids.first
                 Task { await browser.select(id) }
             }

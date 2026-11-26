@@ -10,6 +10,8 @@ struct StorageSettingsTab: View {
     @State private var freed: EvictionResult?
     @State private var working = false
     @State private var folderSize: Int64?
+    /// Why the folder just picked can't be used (GKM-103), for the alert.
+    @State private var refusal: String?
 
     /// Attachments over this stay at the provider until opened; nil downloads everything.
     private static let thresholds: [Int?] = [1_000_000, 5_000_000, 20_000_000, nil]
@@ -17,6 +19,17 @@ struct StorageSettingsTab: View {
 
     var body: some View {
         Form {
+            if let text = model.sync.folderHold?.text {
+                Section {
+                    Label {
+                        Text(text)
+                    } icon: {
+                        Image(systemName: "icloud.slash").foregroundStyle(.orange)
+                    }
+                    .accessibilityIdentifier("storageMailFolderHeld")
+                }
+            }
+
             if let pause = model.sync.downloadPause {
                 Section {
                     Label {
@@ -104,6 +117,14 @@ struct StorageSettingsTab: View {
             storage = await model.offlineStorage()
             folderSize = await model.mailFolderSize()
         }
+        .alert("This folder can’t hold your mail yet", isPresented: Binding(
+            get: { refusal != nil },
+            set: { if !$0 { refusal = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(refusal ?? "")
+        }
     }
 
     private var threshold: Binding<Int?> {
@@ -135,6 +156,12 @@ struct StorageSettingsTab: View {
             guard let url = await Platform.chooseFolder(
                 title: "Use Another Mail Folder", prompt: "Use Folder",
                 message: "GitKittie Mail shows the accounts and mail in the folder you choose. The current folder stays as it is.") else { return }
+            // iCloud Drive and folders other apps sync are refused here, where the person is
+            // looking (GKM-103); `useMailFolder` refuses them too.
+            if let reason = model.mailFolderRefusal(for: url) {
+                refusal = reason
+                return
+            }
             await model.useMailFolder(url)
         }
     }
