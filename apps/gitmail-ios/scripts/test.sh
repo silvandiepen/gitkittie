@@ -16,6 +16,16 @@ RESULT_BUNDLE="${RESULT_BUNDLE:-${TMPDIR:-/tmp}/gitmail-ios-tests.xcresult}"
 SCREENSHOTS="${SCREENSHOTS:-}"
 
 cd "$APP_DIR"
+
+# A font at a fixed point size does not follow Dynamic Type, and the accessibility audit only
+# sees the screens the UI tests open (GKM-081). Use a text style, or a size relative to one.
+fixed_fonts="$(grep -rn --include='*.swift' '\.system(size:' . | grep -v 'relativeTo:' || true)"
+if [[ -n "$fixed_fonts" ]]; then
+  echo "Fixed font sizes that don't scale with Dynamic Type (use a text style, or relativeTo:):" >&2
+  echo "$fixed_fonts" >&2
+  exit 1
+fi
+
 xcodegen generate --quiet
 rm -rf "$RESULT_BUNDLE"
 

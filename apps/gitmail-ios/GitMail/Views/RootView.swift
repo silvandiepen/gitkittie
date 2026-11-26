@@ -151,9 +151,13 @@ final class MailRouter {
 private struct Splash: View {
     var body: some View {
         VStack(spacing: 16) {
+            // Decorative, and drawn from a text style so it grows with Dynamic Type (GKM-081):
+            // Large Title at the large symbol scale is about the 44 pt it was at the default size.
             Image(systemName: "envelope")
-                .font(.system(size: 44, weight: .ultraLight))
+                .font(.system(.largeTitle, weight: .ultraLight))
+                .imageScale(.large)
                 .foregroundStyle(Theme.accent)
+                .accessibilityHidden(true)
             ProgressView()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
