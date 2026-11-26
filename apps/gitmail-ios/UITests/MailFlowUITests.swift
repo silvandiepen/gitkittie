@@ -248,7 +248,12 @@ final class MailFlowUITests: XCTestCase {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         for owner in [app!, springboard] {
             let notNow = owner.buttons["Not Now"]
-            if notNow.waitForExistence(timeout: wait) { notNow.tap(); return }
+            guard notNow.waitForExistence(timeout: wait) else { continue }
+            // At the largest text sizes the offer is taller than the screen and Not Now starts
+            // below it: scroll the offer up first.
+            for _ in 0..<3 where !notNow.isHittable { owner.staticTexts["Save Password?"].firstMatch.swipeUp() }
+            notNow.tap()
+            return
         }
     }
 
