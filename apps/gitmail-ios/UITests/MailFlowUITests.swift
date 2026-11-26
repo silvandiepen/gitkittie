@@ -389,8 +389,8 @@ final class MailFlowUITests: XCTestCase {
         if !settings.exists { app.navigationBars.buttons.element(boundBy: 0).tap() }
         XCTAssertTrue(settings.waitForExistence(timeout: 10))
         settings.tap()
-        XCTAssertTrue(app.staticTexts["When Mail Isn’t Open"].waitForExistence(timeout: 5)
-                      || app.staticTexts["WHEN MAIL ISN’T OPEN"].waitForExistence(timeout: 2))
+        // The sheet's bar: at the largest text sizes its sections start below the screen.
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
     }
 
     private func snapshot(_ name: String) {
