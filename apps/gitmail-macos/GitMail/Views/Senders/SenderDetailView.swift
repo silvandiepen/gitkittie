@@ -128,6 +128,11 @@ private struct SenderRulesSection: View {
                             Button(purpose.destinationTitle) { Task { await model.senders.propose(.category(purpose), for: sender) } }
                         }
                     }
+                    Divider()
+                    // Blocking (GKM-072): moves the mail at your provider, after its preview.
+                    ForEach(SenderRuleText.blockActions, id: \.self) { action in
+                        Button(SenderRuleText.title(action) + "…") { Task { await model.senders.propose(action, for: sender) } }
+                    }
                 }
                 .fixedSize()
             }

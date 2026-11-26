@@ -4,15 +4,29 @@ import SwiftUI
 
 // "See All Mail from…" and a selection of many on the Mac (GKM-071, MAIL-098..100).
 
-/// The row menu's first item: every message from the row's sender, across accounts and folders.
+/// The row menu's first items: every message from the row's sender, across accounts and
+/// folders; and blocking that sender in the row's account (GKM-072), Always Junk or Always
+/// Trash, each shown as a preview first. A blocked sender offers to stop instead.
 struct SeeAllMailFromButton: View {
     @Environment(AppModel.self) private var model
     let row: ListRow
 
     var body: some View {
         if let sender = row.latest.from, !sender.address.isEmpty {
-            Button("See All Mail from \(SenderText.name(sender))") {
+            let name = SenderText.name(sender)
+            Button("See All Mail from \(name)") {
                 Task { await model.showAllMail(from: sender) }
+            }
+            if let rule = model.senders.blockingRule(for: sender.address, account: row.latest.account) {
+                Button(SenderRuleText.unblockMenuTitle(rule, name: name)) {
+                    Task { await model.senders.proposeRemoval(of: rule) }
+                }
+            } else {
+                ForEach(SenderRuleText.blockActions, id: \.self) { action in
+                    Button(SenderRuleText.blockMenuTitle(action, name: name)) {
+                        Task { await model.senders.proposeBlock(action, address: sender, account: row.latest.account) }
+                    }
+                }
             }
             Divider()
         }

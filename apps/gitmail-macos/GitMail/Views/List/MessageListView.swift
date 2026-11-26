@@ -20,6 +20,7 @@ struct MessageListView: View {
     }
 
     var body: some View {
+        @Bindable var senders = model.senders
         VStack(spacing: 0) {
             if requests.showsFilters || !browser.filters.isEmpty {
                 SearchFilterBar()
@@ -47,6 +48,13 @@ struct MessageListView: View {
                 .help("Filter by account, category, person, date, attachments, folder or unread")
                 .accessibilityValue(browser.filters.isEmpty ? "" : "On")
             }
+        }
+        // Always Junk or Always Trash from a row's menu (GKM-072): its preview, then Apply.
+        .sheet(item: $senders.pending) { _ in RulePreviewSheet() }
+        .alert("Couldn’t do that", isPresented: Binding(get: { senders.notice != nil }, set: { if !$0 { senders.notice = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(senders.notice ?? "")
         }
     }
 
