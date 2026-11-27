@@ -158,7 +158,96 @@ final class TasksCLIParsingTests: XCTestCase {
             for key in plan.arguments.keys { XCTAssertTrue(schema.properties.contains(key), "\(line): \(tool.name) has no argument \(key)") }
         }
         // Everything but the base64 uploads has its own command; those go through `raw`.
-        XCTAssertEqual(Set(AgentTools.all.map(\.name)).subtracting(used), ["attach_file", "create_review", "write_doc", "delete_doc"])
+        // (`tasks guide` prints the guide itself, offline: the same text get_agent_guide returns.)
+        XCTAssertEqual(Set(AgentTools.all.map(\.name)).subtracting(used), ["attach_file", "create_review", "write_doc", "delete_doc", "get_agent_guide"])
+    }
+
+    func testTheGuideCommand() throws {
+        XCTAssertEqual(try Commands.parse(["guide"]).0, .guide(board: nil))
+        XCTAssertEqual(try Commands.parse(["guide", "--board", "Pets"]).0, .guide(board: "Pets"))
+        XCTAssertEqual(try Commands.parse(["guide", "-b", "Pets", "--json"]).json, true)
+        // TASKS_BOARD alone does not make the guide ask the app for anything.
+        XCTAssertEqual(try Commands.parse(["guide"], environment: ["TASKS_BOARD": "Pets"]).0, .guide(board: nil))
+        XCTAssertTrue(usageError(["guide", "Pets"]).contains("unexpected"))
+        guard case .help(let overview) = try Commands.parse(["--help"]).0 else { return XCTFail() }
+        XCTAssertTrue(overview.contains("run `tasks guide` first"))
+    }
+
+    /// The guide's reference is generated from the command table and the tool list, so it names
+    /// every command (with its usage and options), every tool (with its arguments), every exit
+    /// code and every environment variable, and has no placeholder left.
+    func testTheGuideCoversEveryCommandToolAndExitCode() throws {
+        let guide = AgentGuide.text()
+        XCTAssertFalse(guide.contains("{{"), "a placeholder was not filled in")
+        XCTAssertFalse(guide.contains("Sil"), "the guide is about the person using the app, not one named person")
+        for spec in CommandTable.all {
+            XCTAssertTrue(guide.contains("### `tasks \(spec.name)`"), "the guide has no section for \(spec.name)")
+            for usage in spec.usage { XCTAssertTrue(guide.contains(usage), "the guide lacks the usage \(usage)") }
+            for option in spec.options { XCTAssertTrue(guide.contains("`\(option.label)`: \(option.help)"), "\(spec.name): the guide lacks \(option.label)") }
+            XCTAssertFalse(spec.examples.isEmpty, "\(spec.name) has no example")
+            for example in spec.examples { XCTAssertTrue(guide.contains(example), "the guide lacks the example \(example)") }
+            if !["tools", "help"].contains(spec.name) { XCTAssertNotNil(spec.returns, "\(spec.name) does not say what --json prints") }
+            for tool in spec.tools { XCTAssertNotNil(AgentTools.all.first { $0.name == tool }, "\(spec.name) names \(tool), which the server does not offer") }
+        }
+        for option in CommandTable.global { XCTAssertTrue(guide.contains("`\(option.label)`"), "the guide lacks the global option \(option.label)") }
+        for tool in AgentTools.all {
+            XCTAssertTrue(guide.contains("### `\(tool.name)`\n\n\(tool.description)"), "the guide lacks the tool \(tool.name)")
+            for property in ToolSchema(tool).properties {
+                XCTAssertTrue(guide.contains("- `\(property)`"), "the guide lacks \(tool.name)'s argument \(property)")
+            }
+        }
+        for status in ExitStatus.allCases { XCTAssertTrue(guide.contains("| \(status.rawValue) | "), "the guide lacks exit code \(status.rawValue)") }
+        for variable in CommandTable.environment { XCTAssertTrue(guide.contains("`\(variable.name)`")) }
+        // The prose comes first, the reference after it.
+        XCTAssertTrue(guide.hasPrefix("# Tasks: the agent guide\n"))
+        let order = try ["## 3. The start of every session", "## 5. The card lifecycle", "## 6. Reviews", "## 9. Command reference",
+                     "## 10. Exit codes", "## 11. Tool reference"].map { try XCTUnwrap(guide.range(of: $0)?.lowerBound, $0) }
+        XCTAssertEqual(order, order.sorted())
+    }
+
+    /// Every command line in the guide (the command table's examples and the prose's `sh` blocks)
+    /// is one the CLI accepts.
+    func testEveryCommandLineInTheGuideParses() throws {
+        var lines = CommandTable.all.flatMap(\.examples)
+        var inShell = false
+        for line in AgentGuide.prose.components(separatedBy: "\n") {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") { inShell = line.trimmingCharacters(in: .whitespaces) == "```sh"; continue }
+            if inShell, line.trimmingCharacters(in: .whitespaces).hasPrefix("tasks ") { lines.append(line.trimmingCharacters(in: .whitespaces)) }
+        }
+        XCTAssertGreaterThan(lines.count, CommandTable.all.count + 3)
+        let input = InputSources(stdin: { Data("{}".utf8) }, file: { _ in Data("body".utf8) })
+        for line in lines {
+            let words = try shellWords(line)
+            XCTAssertEqual(words.first, "tasks", line)
+            XCTAssertNoThrow(try Commands.parse(Array(words.dropFirst()), environment: env, input: input), line)
+        }
+    }
+
+    /// Split a command line as a shell would: quotes, backslash escapes in double quotes, and
+    /// nothing from the first unquoted redirection on.
+    private func shellWords(_ line: String) throws -> [String] {
+        var words: [String] = []
+        var word = ""
+        var started = false
+        var quote: Character?
+        var characters = Array(line)[...]
+        while let character = characters.popFirst() {
+            if let open = quote {
+                if character == open { quote = nil } else if open == "\"", character == "\\", let next = characters.popFirst() { word.append(next) } else { word.append(character) }
+                continue
+            }
+            switch character {
+            case "'", "\"": quote = character; started = true
+            case " ":
+                if started { words.append(word); word = ""; started = false }
+            case "<" where !started:
+                return words
+            default: word.append(character); started = true
+            }
+        }
+        if quote != nil { throw CLIError.usage("unclosed quote in \(line)") }
+        if started { words.append(word) }
+        return words
     }
 
     func testHelp() throws {
@@ -362,6 +451,65 @@ final class TasksCLIIntegrationTests: XCTestCase {
         let raw = await tasks(["raw", "get_board", #"{"board": "Pets"}"#])
         XCTAssertEqual(raw.code, 0, raw.err)
         XCTAssertTrue(raw.out.contains("\"card_id_prefix\" : \"PETS\""), raw.out)
+    }
+
+    /// `tasks guide` works without the app; `--board` appends the board's rules from the app; the
+    /// server's get_agent_guide returns the very same text, with and without a board.
+    func testTheGuideOfflineWithTheBoardsRulesAndOverMCP() async throws {
+        let offline = await tasks(["guide"], connection: root.appendingPathComponent("none/connection.json"))
+        XCTAssertEqual(offline.code, 0, offline.err)
+        XCTAssertEqual(offline.out, AgentGuide.text() + "\n")
+
+        let json = await tasks(["guide", "--json"], connection: root.appendingPathComponent("none/connection.json"))
+        XCTAssertEqual(json.code, 0, json.err)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(json.out.utf8), options: .fragmentsAllowed) as? String, AgentGuide.text())
+
+        let withRules = await tasks(["guide", "--board", "Pets"])
+        XCTAssertEqual(withRules.code, 0, withRules.err)
+        XCTAssertTrue(withRules.out.hasPrefix(AgentGuide.text().trimmingCharacters(in: .newlines) + "\n\n## This board's rules: `Pets`"), String(withRules.out.suffix(2_000)))
+        XCTAssertTrue(withRules.out.contains("### The repository's contract (its README.md)"), withRules.out)
+        XCTAssertTrue(withRules.out.contains("# Board contract"), "the board's contract is in it")
+        XCTAssertTrue(withRules.out.contains("### The card template (TASK_TEMPLATE.md)"))
+        XCTAssertTrue(withRules.out.contains("config: project\nproject: Pets"), "the board's own README is in it")
+
+        // The tool, over MCP through the real server.
+        let viaTool = await tasks(["raw", "get_agent_guide"])
+        XCTAssertEqual(viaTool.code, 0, viaTool.err)
+        XCTAssertEqual(viaTool.out, offline.out)
+        let viaToolWithRules = await tasks(["raw", "get_agent_guide", #"{"board": "Pets"}"#])
+        XCTAssertEqual(viaToolWithRules.code, 0, viaToolWithRules.err)
+        XCTAssertEqual(viaToolWithRules.out, withRules.out)
+
+        let unknown = await tasks(["guide", "--board", "Nope"])
+        XCTAssertEqual(unknown.code, 1)
+        XCTAssertTrue(unknown.err.contains("No board"), unknown.err)
+        XCTAssertTrue(unknown.out.isEmpty, "nothing is printed when the board's rules cannot be read")
+    }
+
+    /// The owner claiming again is the heartbeat: the lease moves, the claim keeps its start.
+    func testClaimingYourOwnCardAgainRenewsTheLease() async throws {
+        let first = await tasks(["claim", "PETS-007", "--hours", "1"])
+        XCTAssertEqual(first.code, 0, first.err)
+        let path = "2. In Progress/PETS-007-feed-the-cat.md"
+        let claimed = try read(path)
+        let started = try XCTUnwrap(claimed.firstMatch(of: #/picked_up_at: (\S+)/#)?.output.1)
+        // Pretend the claim is older, as it would be at a heartbeat.
+        let older = claimed.replacingOccurrences(of: "picked_up_at: \(started)", with: "picked_up_at: 2026-01-01T00:00:00Z")
+        try Data(older.utf8).write(to: root.appendingPathComponent("board/Pets/\(path)"))
+
+        let renewed = await tasks(["claim", "PETS-007", "--hours", "8"])
+        XCTAssertEqual(renewed.code, 0, renewed.err)
+        let card = try read(path)
+        XCTAssertTrue(card.contains("picked_up_at: 2026-01-01T00:00:00Z"), card)
+        XCTAssertTrue(card.contains("`hermio` renewed the claim until"), card)
+        let expires = try XCTUnwrap(card.firstMatch(of: #/claim_expires_at: (\S+)/#)?.output.1)
+        let lease = try XCTUnwrap(ISO8601DateFormatter().date(from: String(expires))).timeIntervalSinceNow
+        XCTAssertGreaterThan(lease, 7 * 3600)
+
+        // Someone else still cannot take it.
+        let other = await tasks(["claim", "PETS-007"], agent: "codex")
+        XCTAssertEqual(other.code, 1)
+        XCTAssertTrue(other.err.contains("already claimed by hermio"), other.err)
     }
 
     func testRefusalsAndMistakesExitWithTheirCodes() async throws {

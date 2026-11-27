@@ -19,59 +19,25 @@ public struct MCPTool: Sendable {
 
 /// The tools the agent server offers, and how to use them.
 public enum AgentTools {
-    /// The prompt for an agent's instructions file; `boards` are (reference, name) pairs.
-    public static func prompt(boards: [(reference: String, name: String)]) -> String {
-        let list = boards.isEmpty
-            ? "- (no boards yet: list_boards shows them once boards are added in the app)"
-            : boards.map { "- `\($0.reference)`\($0.name == $0.reference ? "" : " (\($0.name))")" }.joined(separator: "\n")
-        return """
-        ## Tasks: the shared task board
+    /// The short text for an agent's instructions file (CLAUDE.md, AGENTS.md): what Tasks is, and
+    /// to read the guide first. Everything else is in the guide (`AgentGuide`), which the agent
+    /// gets from `tasks guide` or `get_agent_guide`, so this never goes out of date.
+    public static let prompt = """
+    ## Tasks: the shared task board
 
-        My work is tracked in **Tasks** (GitKittie Tasks), a Kanban board app. Every board is a folder of \
-        Markdown cards in a git repository; the app shows them as lanes (To do, In Progress, In Review, \
-        Testing, Done). It is how a new session finds out what the last one did, so keep it current.
+    My work is tracked in **Tasks** (GitKittie Tasks), a Kanban board app whose boards are Markdown \
+    cards in git repositories; every session reads it to see where the last one left off and keeps \
+    it current.
 
-        **How to reach it:** through the `tasks` MCP server (the Tasks app; it opens itself when it is \
-        closed). Use its tools for everything on a board; don't read or write the card files yourself:
-
-        - `list_boards`, then `get_board_rules` once per board before your first change: the board's \
-          contract (fields, lanes, lifecycle). It wins over anything written here.
-        - `list_cards` (by lane), `get_card`, `create_card`, `update_card` (fields, an activity entry, a move \
-          to another lane), `claim_card`.
-        - Reviews: `list_reviews`, `create_review`, `wait_for_reviews`, `handle_review_item`, `close_review`.
-        - Docs: `list_docs`, `get_doc`, `search_docs`, `write_doc`; files: `attach_file`.
-
-        Every change is written and committed at once; a call that returns without error has landed.
-
-        **No `tasks` tools in this session?** Use the `tasks` command-line tool instead (installed from \
-        Tasks ▸ Agent Access… ▸ Install Command-Line Tool…). It talks to the same app with the same \
-        commands, e.g. `tasks list --board <board> --lane in-progress`, `tasks show <card>`, \
-        `tasks claim <card>`, `tasks update <card> --description "…" --activity "…"`, \
-        `tasks move <card> review`; `tasks --help` lists them all. Set `TASKS_AGENT` to your handle \
-        and add `--json` when you parse the output. Say that the tools were missing, so the app can be \
-        connected (Tasks ▸ Agent Access… has the command). Never call the app's HTTP endpoint with curl \
-        and never read its token.
-
-        **How to work with it:**
-
-        1. At the start, `list_cards` in In Progress (where we left off), then To do. Say which card you \
-           are working on, or that you are creating one.
-        2. `claim_card` before you implement it.
-        3. Keep the card current while you work: what's done, approaches tried and rejected, scope changes.
-        4. File a new card for a real problem you find but don't fix now.
-        5. Never leave a claimed card silently stale: if you stop, write what is done, what isn't, and the \
-           next concrete step.
-        6. Ask for decisions with `create_review` (questions with options) instead of in chat, when they \
-           can wait.
-
-        **Boards:**
-
-        \(list)
-        """
-    }
+    **Before anything else, run `tasks guide` (or call the `get_agent_guide` tool of the `tasks` MCP \
+    server) and follow it.** It is the complete manual: how to reach the boards, the start-of-work \
+    routine, the card lifecycle, reviews, and every command and tool. If you have neither the \
+    command nor the tools, say so and ask me for the full guide.
+    """
 
     public static let instructions = """
-    This is the person's task board, served by the Tasks app (GitKittie Tasks). Use these tools for everything on the board instead of \
+    This is the person's task board, served by the Tasks app (GitKittie Tasks). Call get_agent_guide first and \
+    follow it: it is the complete manual for working on the boards. Use these tools for everything on the board instead of \
     reading or writing card files in a repository. Start with list_boards. Before your first change on a board, \
     read get_board_rules once: it is the board's contract (fields, lanes, lifecycle) and it wins over anything \
     written here. Claim a card with claim_card before you implement it. Keep the card current while you work with \
@@ -85,6 +51,8 @@ public enum AgentTools {
     private static let fields = #""fields": {"type": "object", "description": "Top-level frontmatter keys to set, e.g. {\"priority\": \"P1\", \"blocked\": true, \"commits\": [\"abc123\"], \"reviewer\": null}. Values: string, number, boolean, null, or a list of strings. Other keys are left as they are.", "additionalProperties": true}"#
 
     public static let all: [MCPTool] = [
+        MCPTool(name: "get_agent_guide", description: "The complete manual for agents working on these boards (the same text as `tasks guide`): the start-of-work routine, the card lifecycle, reviews, docs, every tool and command, and what to do when something fails. Read it once before anything else. With \"board\", that board's rules are appended.",
+                inputSchema: #"{"type": "object", "properties": {"board": {"type": "string", "description": "Optional: a board whose rules (get_board_rules) to append."}}}"#),
         MCPTool(name: "list_boards", description: "List every board you can use: the ones in the Tasks app's sidebar and the other boards in the same repositories.",
                 inputSchema: #"{"type": "object", "properties": {}}"#),
         MCPTool(name: "create_board", description: "Create a new, empty board for a project in a repository that already holds boards. It inherits the repository's lanes and appears in the app. Check list_boards first: do not create a board for a project that already has one under a slightly different name.",

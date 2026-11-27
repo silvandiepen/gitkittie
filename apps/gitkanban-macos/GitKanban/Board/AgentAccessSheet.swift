@@ -109,8 +109,9 @@ struct AgentAccessSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Tell your agents about Tasks").font(.subheadline.weight(.medium))
-                    Text("Paste this into your agent's instructions (CLAUDE.md or AGENTS.md) so every session knows what Tasks is, how to reach it and how to work with your boards.")
+                    Text("Tell your agents about Tasks")
+                        .font(.subheadline.weight(.medium))
+                    Text("Paste this into your agent's instructions (CLAUDE.md or AGENTS.md). It tells every session to read the guide first (`tasks guide`, or the get_agent_guide tool), which has the rest: how to reach the boards, the card lifecycle, reviews, every command and tool.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     ScrollView {
@@ -120,11 +121,20 @@ struct AgentAccessSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(8)
                     }
-                    .frame(height: 160)
+                    .frame(height: 110)
                     .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                     .accessibilityIdentifier("agentPrompt")
                     HStack {
+                        Text("For an agent with neither the command nor the tools, paste the full guide instead.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                         Spacer()
+                        Button(copied == "guide" ? "Copied" : "Copy Full Guide") {
+                            Platform.copy(model.agentGuide)
+                            copied = "guide"
+                        }
+                        .controlSize(.small)
+                        .accessibilityIdentifier("copyFullGuide")
                         Button(copied == "prompt" ? "Copied" : "Copy Prompt") {
                             Platform.copy(model.agentPrompt)
                             copied = "prompt"

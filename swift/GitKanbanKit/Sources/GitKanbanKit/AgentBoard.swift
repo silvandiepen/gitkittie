@@ -489,13 +489,17 @@ public struct AgentBoard {
         }
         let progress = shell.config.lanes.first { $0.status == "in-progress" }
             ?? shell.config.lanes.first { $0.name.lowercased().contains("progress") }
+        // The owner claiming again is the heartbeat: a new lease, but the claim keeps its start.
+        let renewal = AgentCardText.value(found.text, "picked_up_by") == agent && AgentCardText.value(found.text, "picked_up_at") != nil
+        let expires = Review.timestamp(now().addingTimeInterval(hours * 3600))
         var fields: [(key: String, value: AgentFieldValue)] = [
-            ("picked_up_by", .string(agent)), ("picked_up_at", .string(stamp)), ("last_heartbeat_at", .string(stamp)),
-            ("claim_expires_at", .string(Review.timestamp(now().addingTimeInterval(hours * 3600)))),
+            ("picked_up_by", .string(agent)), ("last_heartbeat_at", .string(stamp)), ("claim_expires_at", .string(expires)),
         ]
+        if !renewal { fields.insert(("picked_up_at", .string(stamp)), at: 1) }
         if let branch, !branch.isEmpty { fields.append(("working_branch", .string(branch))) }
-        return try await updateCard(found.fileName, fields: fields, lane: progress?.id, activity: "claimed the card.",
-                                    agent: agent, message: "chore(tasks): claim \(found.id)")
+        return try await updateCard(found.fileName, fields: fields, lane: progress?.id,
+                                    activity: renewal ? "renewed the claim until \(expires)." : "claimed the card.",
+                                    agent: agent, message: "chore(tasks): \(renewal ? "heartbeat" : "claim") \(found.id)")
     }
 
     /// Attach a file (a screenshot) to a card.

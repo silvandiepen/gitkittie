@@ -1,22 +1,5 @@
 import Foundation
-
-/// One option a command takes.
-public struct OptionSpec: Sendable {
-    public let name: String
-    public let short: Character?
-    /// What the value is called in help (`<lane>`); nil for a flag.
-    public let value: String?
-    public let help: String
-
-    public init(_ name: String, short: Character? = nil, value: String? = nil, _ help: String) {
-        self.name = name
-        self.short = short
-        self.value = value
-        self.help = help
-    }
-
-    var takesValue: Bool { value != nil }
-}
+import TasksAgentTools
 
 /// A command line split into options and positionals.
 public struct ParsedArguments: Equatable, Sendable {

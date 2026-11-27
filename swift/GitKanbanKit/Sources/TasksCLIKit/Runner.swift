@@ -1,4 +1,5 @@
 import Foundation
+import TasksAgentTools
 
 /// Which board numbers which cards (GKM → tasks/GitKittie), learned from `get_board` on the
 /// boards in the app's sidebar and kept in a small cache file, so `tasks show GKM-123` needs
@@ -123,6 +124,14 @@ public struct TasksCommand {
                 output("tasks \(Commands.version)")
             case .tools(let name):
                 output(try renderer.tools(name))
+            case .guide(let board):
+                var rules: AgentGuide.BoardRules?
+                if let board {
+                    let answer = try await client.callJSON("get_board_rules", ["board": .string(board)])
+                    rules = AgentGuide.BoardRules(board: board, files: answer as? [String: Any] ?? [:])
+                }
+                let text = AgentGuide.text(rules: rules)
+                output(json ? Renderer.pretty(text) : text)
             case .run(let plan):
                 try await execute(plan, json: json)
             }

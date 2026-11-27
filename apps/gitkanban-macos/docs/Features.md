@@ -198,6 +198,13 @@ The S3 code (`S3StorageService` in GitKittieKit) is shared with GitKittie Folder
   `Contents/Helpers/tasks`; Agent Access ▸ **Install Command-Line Tool…** links it into
   `~/.local/bin` and shows the PATH line. Code: `swift/GitKanbanKit/Sources/TasksCLIKit` (+
   `TasksCLI`, `TasksAgentTools`); tests: `TasksCLIParsingTests`, `TasksCLIIntegrationTests`.
+- **Agent guide** (GITKITTIE-124): `tasks guide` prints one complete manual for agents (how to reach
+  the boards, the start-of-work routine, the card lifecycle with claims and heartbeats, reviews,
+  docs, attachments, every command and tool, exit codes and common errors); `--board <B>` appends
+  that board's rules, `--json` gives it as a JSON string. The `get_agent_guide` tool returns the same
+  text. Agent Access shows a short prompt ("run `tasks guide` first", Copy Prompt) and **Copy Full
+  Guide**. Prose: `swift/GitKanbanKit/Sources/TasksAgentTools/AgentGuide.md`; the reference is
+  generated from the command table and tool list (`docs/Decisions.md` § 18).
 
 ---
 

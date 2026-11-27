@@ -1,4 +1,5 @@
 import Foundation
+import TasksAgentTools
 
 /// Why a command failed, and the exit code that says so.
 public enum CLIError: Error, Equatable, LocalizedError {
@@ -14,15 +15,18 @@ public enum CLIError: Error, Equatable, LocalizedError {
     /// Agent Access was never turned on on this Mac: there is nothing to connect to.
     case notSetUp(String)
 
-    public var exitCode: Int32 {
+    /// The exit code and its meaning, from the table the guide prints.
+    public var status: ExitStatus {
         switch self {
-        case .tool: 1
-        case .usage: 2
-        case .unreachable: 3
-        case .auth: 4
-        case .notSetUp: 5
+        case .tool: .refused
+        case .usage: .usage
+        case .unreachable: .unreachable
+        case .auth: .auth
+        case .notSetUp: .notSetUp
         }
     }
+
+    public var exitCode: Int32 { status.rawValue }
 
     public var message: String {
         switch self {
@@ -30,15 +34,7 @@ public enum CLIError: Error, Equatable, LocalizedError {
         }
     }
 
-    public var kind: String {
-        switch self {
-        case .usage: "usage"
-        case .tool: "refused"
-        case .unreachable: "unreachable"
-        case .auth: "auth"
-        case .notSetUp: "not_set_up"
-        }
-    }
+    public var kind: String { status.kind }
 
     public var errorDescription: String? { message }
 }

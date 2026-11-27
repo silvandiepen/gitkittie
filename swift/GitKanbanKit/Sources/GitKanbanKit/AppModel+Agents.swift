@@ -273,6 +273,13 @@ extension AppModel {
             }
             return json(boards)
         }
+        if name == "get_agent_guide" {
+            // Text, not JSON: the guide is Markdown for the agent to read.
+            guard let wanted = string("board") else { return AgentGuide.text() }
+            let (repo, selected) = try await agentBoard(wanted)
+            let rules = try await AgentBoard(source: try agentSource(for: repo), folder: selected.folder).rules()
+            return AgentGuide.text(rules: AgentGuide.BoardRules(board: wanted, files: rules))
+        }
         if name == "create_board" {
             let repo = try agentRepo(string("repository"))
             let made = try await AgentBoardFactory.create(
@@ -472,12 +479,11 @@ enum AgentBridge {
 }
 
 extension AppModel {
-    /// What to tell agents about Tasks, for their CLAUDE.md / AGENTS.md: what it is, how to reach it, how
-    /// to work with it, and the boards in the sidebar. Agents that are not connected learn it from here;
-    /// connected ones also get `AgentTools.instructions` from the server.
-    public var agentPrompt: String {
-        AgentTools.prompt(boards: addedRepos.flatMap { repo in
-            repo.boards.map { (Self.agentReference(repo, $0), $0.name) }
-        })
-    }
+    /// What to tell agents about Tasks, for their CLAUDE.md / AGENTS.md: what it is, and to read the
+    /// guide (`tasks guide` / `get_agent_guide`) before anything else.
+    public var agentPrompt: String { AgentTools.prompt }
+
+    /// The complete agent guide, for agents that have neither the `tasks` command nor the tools
+    /// (Agent Access ▸ Copy Full Guide). The same text as `tasks guide`.
+    public var agentGuide: String { AgentGuide.text() }
 }

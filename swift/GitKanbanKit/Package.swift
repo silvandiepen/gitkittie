@@ -10,7 +10,8 @@ import PackageDescription
 //
 // `TasksAgentTools` is the list of tools the app's agent server offers, in a target without
 // dependencies so the `tasks` command-line tool (`TasksCLIKit` + the `tasks` executable)
-// shares it with the server instead of keeping a copy.
+// shares it with the server instead of keeping a copy, together with the CLI's command table and
+// the agent guide (`tasks guide`, `get_agent_guide`).
 let package = Package(
     name: "GitKanbanKit",
     platforms: [.macOS(.v14), .iOS(.v17)],
@@ -25,7 +26,9 @@ let package = Package(
         .package(url: "https://github.com/silvandiepen/git-pont.git", branch: "master")
     ],
     targets: [
-        .target(name: "TasksAgentTools"),
+        // The agent guide's prose is compiled into the binary (`PackageResources.AgentGuide_md`):
+        // the `tasks` tool ships alone in Contents/Helpers, with no resource bundle beside it.
+        .target(name: "TasksAgentTools", resources: [.embedInCode("AgentGuide.md")]),
         .target(name: "TasksCLIKit", dependencies: ["TasksAgentTools"]),
         .executableTarget(name: "TasksCLI", dependencies: ["TasksCLIKit"]),
         .target(
