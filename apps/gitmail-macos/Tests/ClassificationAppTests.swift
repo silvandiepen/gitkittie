@@ -427,7 +427,7 @@ final class ClassificationAppTests: XCTestCase {
         XCTAssertEqual(model.browser.openThread?.messages.filter(\.isExpanded).map(\.id), [notified])
         XCTAssertEqual(model.browser.selectedRowID, model.browser.rows.first { $0.threadID == thread }?.id)
         XCTAssertNotNil(model.browser.selectedRowID)
-        XCTAssertEqual(model.notificationOpens, 1)
+        XCTAssertEqual(model.externalOpens, 1)
         let read = try await store.summary(of: notified)
         XCTAssertEqual(read?.isUnread, false, "opened is read, as if it had been chosen")
 
@@ -484,7 +484,7 @@ final class ClassificationAppTests: XCTestCase {
         XCTAssertNil(model.browser.openThread, "nothing to show before the store is open")
         await model.open()
         XCTAssertEqual(model.browser.openThread?.messages.filter(\.isExpanded).map(\.id), [id])
-        XCTAssertEqual(model.notificationOpens, 1)
+        XCTAssertEqual(model.externalOpens, 1)
     }
 }
 

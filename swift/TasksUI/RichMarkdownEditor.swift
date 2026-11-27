@@ -144,7 +144,9 @@ private struct Representable: PlatformRepresentable {
                     self.render()
                     self.parent.onEndEditing()
                 case "linkActivated":
-                    if let raw = body["url"] as? String, let url = URL(string: raw), ["http", "https", "mailto"].contains(url.scheme ?? "") {
+                    // `gitkittie-mail`: a task made from a message links back to it (GKM-033).
+                    if let raw = body["url"] as? String, let url = URL(string: raw),
+                       ["http", "https", "mailto", "gitkittie-mail"].contains(url.scheme?.lowercased() ?? "") {
                         #if os(macOS)
                         NSWorkspace.shared.open(url)
                         #else

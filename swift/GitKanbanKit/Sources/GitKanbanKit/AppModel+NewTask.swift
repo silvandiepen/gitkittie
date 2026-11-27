@@ -18,15 +18,18 @@ extension AppModel {
     /// A new task as ⌘N starts one, holding `images` (opened in Tasks: dropped on the Dock
     /// icon, or Open With) when there are any. Images that waited for an earlier request and
     /// were never placed — its chooser was cancelled — are dropped here.
-    func requestNewTask(images: [TaskImage]) {
-        // The new-task sheet is already up: the images join the task being written, which
-        // stays where it is (the sheet takes `newTaskImages` as they arrive).
-        if !images.isEmpty, newTaskLane != nil {
+    func requestNewTask(images: [TaskImage], request: NewTaskRequest? = nil) {
+        // The new-task sheet is already up: the images and the request join the task being
+        // written, which stays where it is (the sheet takes them as they arrive).
+        if !images.isEmpty || request != nil, newTaskLane != nil {
             newTaskImages += images
+            if let request { newTaskRequest = request }
             return
         }
         newTaskAwaitsBoard = nil
         imagesAwaitingBoard = images
+        requestAwaitingBoard = request
+        newTaskRequest = nil
         if newTaskLaneOnScreen != nil {
             showOpenBoardsTasks()
             startNewTaskOnScreen()
@@ -60,6 +63,8 @@ extension AppModel {
     private func startNewTaskOnScreen() {
         let images = imagesAwaitingBoard
         imagesAwaitingBoard = []
+        newTaskRequest = requestAwaitingBoard
+        requestAwaitingBoard = nil
         if images.isEmpty {
             newTaskLane = newTaskLaneOnScreen
         } else {

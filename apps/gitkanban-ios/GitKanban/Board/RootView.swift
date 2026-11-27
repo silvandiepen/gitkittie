@@ -28,6 +28,10 @@ struct RootView: View {
             SyncIndicator().padding(.trailing, 16).padding(.bottom, 12)
         }
         .checksForAppUpdates(updates)
+        // A task asked for by another app with no board open (GKM-033).
+        .sheet(isPresented: Binding(get: { model.isChoosingBoardForNewTask }, set: { model.isChoosingBoardForNewTask = $0 })) {
+            NewTaskBoardPicker().environment(model)
+        }
     }
 }
 

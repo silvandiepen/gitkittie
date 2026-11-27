@@ -110,6 +110,12 @@ Each record is sealed with the archive key (256 random bits, new per archive) an
 
 *Tested* in `EncryptedArchiveTests` (MailStoreTests: round trip into a clean folder and the store opening it, with spaces, sender rules, classification rules and a correction; wrong key, typos, a flipped bit, swapped, dropped and repeated records, cut archives, a removed or added final mark, trailing bytes, a changed header, a newer format, unsafe paths and duplicates written with the real writer; nothing in the clear) and `EncryptedArchiveAppTests` (the key confirmed or the archive discarded, restore into a new folder with its own device state). Archive sync is not built: `ArchiveSync.md`.
 
+## Tasks and stable links
+
+**What exists (GKM-033; MAIL-131..133).** A message has a stable link, `gitkittie-mail://message/<account-id>/m-<sha256(Message-ID)>` (`f-<content fingerprint>` without a Message-ID), made and resolved by `MessageLink` in MailStore: the account's messages first, then every account, oldest match first. It is built from what the message carries, not from the local id, so it survives a rebuilt index, a fresh download and an account added again, and it reveals nothing about the message. Both apps open it like a notification (`AppModel.openLink`, waiting for the store when the link launched the app). **Make Task** builds `gitkittie-tasks://new?title=…&body=…` (`TaskHandoff` in MailAppModel): subject, who, the day and the link, never the text. Tasks (`NewTaskRequest` in GitKanbanKit) only fills in its new-task sheet from it.
+
+Not built yet: export of metadata to Git through GitPont (GKM-107) and read-only agent access per space or account (GKM-108); see MAIL-134 and ThreatModel §7 and §10.
+
 ## Background processing
 
 macOS can monitor while running. iOS background execution is opportunistic, not guaranteed instant notifications or continuous filtering. Core mail requires no custom server. Optional self-hosted relay later for continuous monitoring and push, with explicit trust boundary, secure credentials and minimal notification payload. Do not advertise guaranteed instant push until validated.

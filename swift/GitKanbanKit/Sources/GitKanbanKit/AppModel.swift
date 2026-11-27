@@ -152,6 +152,14 @@ public final class AppModel {
     /// Images opened in Tasks before it had restored — a drop on the Dock icon that launched
     /// it. They start their task once `restore()` has reopened the last board.
     @ObservationIgnored var imagesAwaitingRestore: [TaskImage] = []
+    /// The title and description the new-task sheet starts with: asked for by another app
+    /// (`gitkittie-tasks://new`, GitKittie Mail's Make Task). The sheet takes it when it opens,
+    /// or as it arrives while the sheet is up; see `openTaskRequest(_:)`.
+    public var newTaskRequest: NewTaskRequest?
+    /// A request that waits for the board its task goes on, as `imagesAwaitingBoard` does.
+    @ObservationIgnored var requestAwaitingBoard: NewTaskRequest?
+    /// A request that arrived before `restore()` was done (it launched the app).
+    @ObservationIgnored var requestAwaitingRestore: NewTaskRequest?
     public var boardViewMode: BoardViewMode = .lanes
     public var showQuickCreate = false
 
@@ -332,7 +340,7 @@ public final class AppModel {
         Task { await flushOutbox() }
         await reopenLastBoard()
         isRestoring = false
-        startImagesOpenedBeforeRestore()
+        startWhatWasOpenedBeforeRestore()
     }
 
     /// Restore just enough to write a card from outside the app (the share extension):

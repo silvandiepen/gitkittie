@@ -89,6 +89,12 @@ targets:
           - _gitkanban._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # `gitkittie-tasks://new?title=…&body=…` starts a new task (GitKittie Mail's Make Task,
+        # GKM-033). It only fills in the new-task sheet; nothing is saved without Create.
+        CFBundleURLTypes:
+          - CFBundleURLName: app.hakobs.gitkanban.new-task
+            CFBundleURLSchemes:
+              - gitkittie-tasks
         # Sending the outbox when the app is woken in the background (GitKanbanApp).
         UIBackgroundModes:
           - fetch
