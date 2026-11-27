@@ -1,23 +1,11 @@
 import Foundation
 import Network
+import TasksAgentTools
 
 // A small Model Context Protocol server over HTTP ("Streamable HTTP" with plain JSON
 // answers), so an agent can use the app's boards as tools. Loopback only, and every
 // request needs the bearer token. The protocol part (`MCPDispatcher`) knows nothing about
 // boards or sockets; the tools are handed in.
-
-/// One tool an agent can call.
-public struct MCPTool: Sendable {
-    public let name: String
-    public let description: String
-    /// A JSON Schema object for the arguments, as JSON text.
-    public let inputSchema: String
-    public init(name: String, description: String, inputSchema: String) {
-        self.name = name
-        self.description = description
-        self.inputSchema = inputSchema
-    }
-}
 
 /// JSON-RPC for MCP: `initialize`, `ping`, `tools/list`, `tools/call`.
 public struct MCPDispatcher: Sendable {
