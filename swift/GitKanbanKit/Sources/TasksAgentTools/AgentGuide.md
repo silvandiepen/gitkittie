@@ -47,7 +47,9 @@ Rules for both:
 - **If you have neither**, tell the person: they can connect agents in Tasks ▸ account menu ▸ Agent
   Access… (one command for Claude Code; "Install Command-Line Tool…" for the `tasks` command).
   Until then this guide can still be pasted to you (Agent Access ▸ Copy Full Guide), but you cannot
-  change a board.
+  change a board through Tasks. Edit a board's repository directly only when the board's rules or
+  your own instructions describe that fallback, and then follow them exactly (they say how to
+  commit and push each change).
 
 ### Who you are
 
@@ -59,9 +61,9 @@ export TASKS_AGENT=claude      # or pass --agent claude on each command
 ```
 
 Use the canonical handle the board knows you by: `tasks board <board>` (or `get_board`) lists the
-board's `users`, and the agent entries there are the handles to use. If you are on the list, use
-exactly that id; if you are not, use the short lowercase handle your instructions give you, and
-never a display-name variant ("Claude Code", "claude-opus"). **Never guess or borrow an identity**:
+board's `users`. If you are on the list, use exactly that id; if you are not, use the short
+lowercase handle your instructions give you, and never a display-name variant ("Claude Code",
+"claude-opus"). **Never guess or borrow an identity**:
 don't act under another agent's or a person's handle. The command line refuses to change anything
 without a handle, so nothing is ever recorded under a guessed name.
 
