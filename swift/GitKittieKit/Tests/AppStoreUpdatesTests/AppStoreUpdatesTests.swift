@@ -243,3 +243,75 @@ struct UpdateCheckerTests {
         #expect(await self.checker(store).check(now: start.addingTimeInterval(24 * 3600))?.version == "1.4.0")
     }
 }
+
+// MARK: - Distribution
+
+/// Which copies may ask StoreKit for the app transaction. Asking in a copy without a receipt
+/// makes macOS show "Sign in to your Apple Account" (GITKITTIE-110), so only a production receipt
+/// with content may.
+struct AppDistributionTests {
+    private func folder() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("tmac-receipt-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    @Test func noReceiptURLIsMissing() {
+        #expect(AppDistribution.receipt(at: nil) == .missing)
+    }
+
+    @Test func aMacBuildWithoutAReceiptIsMissing() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // A team-signed Release build: the URL is there, the file is not.
+        #expect(AppDistribution.receipt(at: root.appendingPathComponent("Contents/_MASReceipt/receipt")) == .missing)
+    }
+
+    @Test func anEmptyReceiptIsMissing() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let receipt = root.appendingPathComponent("receipt")
+        try Data().write(to: receipt)
+        #expect(AppDistribution.receipt(at: receipt) == .missing)
+    }
+
+    @Test func aFolderNamedReceiptIsMissing() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let receipt = root.appendingPathComponent("receipt")
+        try FileManager.default.createDirectory(at: receipt, withIntermediateDirectories: true)
+        #expect(AppDistribution.receipt(at: receipt) == .missing)
+    }
+
+    @Test func aSandboxReceiptIsSandboxWhetherOrNotItExists() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let receipt = root.appendingPathComponent("sandboxReceipt")
+        #expect(AppDistribution.receipt(at: receipt) == .sandbox)
+        try Data([1, 2, 3]).write(to: receipt)
+        #expect(AppDistribution.receipt(at: receipt) == .sandbox)
+    }
+
+    @Test func aProductionReceiptWithContentIsProduction() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let receipt = root.appendingPathComponent("receipt")
+        try Data([0x30, 0x80]).write(to: receipt)
+        #expect(AppDistribution.receipt(at: receipt) == .production)
+    }
+
+    /// The whole check on a Mac app bundle with no receipt answers without asking StoreKit.
+    @Test func aBundleWithoutAReceiptIsNotFromTheAppStore() async throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = root.appendingPathComponent("tmac.app")
+        let contents = app.appendingPathComponent("Contents")
+        try FileManager.default.createDirectory(at: contents.appendingPathComponent("MacOS"), withIntermediateDirectories: true)
+        let info: [String: Any] = ["CFBundleIdentifier": "app.hakobs.tmac", "CFBundlePackageType": "APPL"]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            .write(to: contents.appendingPathComponent("Info.plist"))
+        let bundle = try #require(Bundle(url: app))
+        #expect(AppDistribution.receipt(at: bundle.appStoreReceiptURL) == .missing)
+        #expect(await AppDistribution.isAppStore(bundle: bundle) == false)
+    }
+}
