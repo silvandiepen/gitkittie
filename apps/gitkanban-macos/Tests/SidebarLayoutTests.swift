@@ -21,6 +21,8 @@ final class SidebarLayoutTests: XCTestCase {
     private let suite = "gk-sidebar-\(UUID().uuidString)"
     private var root: URL!
     private var windows: [NSWindow] = []
+    /// Each window's height as it was made, before SwiftUI filled it.
+    private var requestedHeight: [ObjectIdentifier: CGFloat] = [:]
 
     override func setUp() async throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(suite + "-board", isDirectory: true)
@@ -157,7 +159,12 @@ final class SidebarLayoutTests: XCTestCase {
 
     // MARK: The window
 
-    /// The app's window content (`GitKanbanApp`) in a window that is never ordered in.
+    /// The app's window content (`GitKanbanApp`) in a window that is never ordered in, made
+    /// the way SwiftUI makes a `WindowGroup` window: content under the title bar
+    /// (`.fullSizeContentView`) and a unified toolbar. Without them macOS 15 refuses the
+    /// sidebar-tracking separator SwiftUI puts in the toolbar for a `NavigationSplitView`
+    /// ("Cannot register more than one NSTrackingSeparatorToolbarItem that tracks the same
+    /// divider") and the test process dies.
     private func host(_ model: AppModel, size: NSSize) -> NSWindow {
         let view = NSHostingView(rootView: RootView()
             .environment(model)
@@ -165,10 +172,13 @@ final class SidebarLayoutTests: XCTestCase {
             .tint(Theme.accent)
             .preferredColorScheme(.dark))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
-                              styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+                              styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
+                              backing: .buffered, defer: false)
+        window.toolbarStyle = .unified
         window.isReleasedWhenClosed = false
         window.contentView = view
         window.setContentSize(size)
+        requestedHeight[ObjectIdentifier(window)] = window.frame.height
         windows.append(window)
         settle(window)
         return window
@@ -195,15 +205,19 @@ final class SidebarLayoutTests: XCTestCase {
         guard let list = outline(in: window), list.numberOfRows > 0 else {
             return XCTFail("\(context): the sidebar has no rows", file: file, line: line)
         }
+        // The window keeps the size it was given (plus its toolbar): the content has to fit
+        // it, not push it to the height the content asks for.
+        XCTAssertLessThan(window.frame.height, requestedHeight[ObjectIdentifier(window)].map { $0 + 120 } ?? .infinity,
+                          "\(context): the window grew to \(window.frame)", file: file, line: line)
         let visible = content.bounds
         let splitFrame = split.convert(split.bounds, to: nil)
         XCTAssertLessThanOrEqual(splitFrame.height, visible.height + 1,
                                  "\(context): the split view is taller than the window (\(splitFrame) in \(visible))",
                                  file: file, line: line)
-        // All Tasks, the first row, is where the top of the sidebar is.
+        // All Tasks, the first row, is where the top of the sidebar is: below the toolbar.
         let firstRow = list.convert(list.rect(ofRow: 0), to: nil)
-        XCTAssertTrue(visible.contains(firstRow),
-                      "\(context): the sidebar's first row \(firstRow) is outside the window \(visible)",
+        XCTAssertTrue(window.contentLayoutRect.contains(firstRow),
+                      "\(context): the sidebar's first row \(firstRow) is outside the window \(window.contentLayoutRect)",
                       file: file, line: line)
     }
 
