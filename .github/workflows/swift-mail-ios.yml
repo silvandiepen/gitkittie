@@ -19,6 +19,10 @@ on:
       - .github/workflows/swift-mail-ios.yml
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   mailkit:
     name: GitKittieMailKit (iOS Simulator)

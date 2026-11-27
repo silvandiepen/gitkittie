@@ -155,7 +155,9 @@ extension AppModel {
         if let hold = sync.folderHold?.shortText { return hold }
         // Paused for space (MAIL-106): the coordinator's last progress would still say "Downloading".
         let syncLine = sync.isPausedForSpace(id) ? DownloadPause.shortText : SyncStatusText.line(sync.progress[id])
-        let lines = [syncLine, ActionStatusText.line(sync.replay[id])].compactMap { $0 }
+        // A stop on this device says what to do as well (GKM-091).
+        let advice = sync.isPausedForSpace(id) ? nil : SyncStatusText.advice(sync.progress[id])
+        let lines = [syncLine, advice, ActionStatusText.line(sync.replay[id])].compactMap { $0 }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 

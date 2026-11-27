@@ -22,7 +22,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "GitKittieKit", dependencies: ["Yams"]),
-        .testTarget(name: "GitKittieKitTests", dependencies: ["GitKittieKit"]),
+        .testTarget(name: "GitKittieKitTests", dependencies: ["GitKittieKit", "Yams"]),
         .target(name: "AppStoreUpdates",
                 swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]),
         .testTarget(name: "AppStoreUpdatesTests", dependencies: ["AppStoreUpdates"],

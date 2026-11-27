@@ -47,6 +47,12 @@ struct GitMailApp: App {
                     Task { await Platform.importMessages(into: model) }
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
+                Divider()
+                // Encrypted archive (GKM-032): everything in one encrypted file, and back.
+                Button("Export Encrypted Archive…") { Task { await Platform.writeEncryptedArchive(model: model) } }
+                    .disabled(model.phase != .ready || model.encryptedArchive.isWorking)
+                Button("Restore Encrypted Archive…") { requests.restoresArchive = true }
+                    .disabled(model.encryptedArchive.isWorking)
             }
             // One Message menu: Send and Reply first, then the actions on the conversations.
             // Items without a shortcut can only be chosen from the open menu, which SwiftUI syncs

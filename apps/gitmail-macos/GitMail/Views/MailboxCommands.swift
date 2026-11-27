@@ -15,6 +15,8 @@ final class MailWindowRequests {
     var showsFilters = false
     /// Counts Edit ▸ Find ▸ Search Mail; the list focuses its search field on each change.
     var searchRequests = 0
+    /// File ▸ Restore Encrypted Archive… (GKM-032).
+    var restoresArchive = false
 }
 
 /// The Mailbox menu: accounts, spaces, sync, notifications and the mail folder, for whatever
@@ -174,5 +176,7 @@ private struct MailWindowSheets: ViewModifier {
             } message: { _ in
                 Text("Only the space goes. Its messages stay in your Mail folder and at your mail provider.")
             }
+            // The encrypted archive's recovery key and restore (GKM-032).
+            .encryptedArchiveChrome(model, restoring: $requests.restoresArchive)
     }
 }

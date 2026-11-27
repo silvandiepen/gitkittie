@@ -87,6 +87,8 @@ final class AppModel {
     let library = AttachmentLibraryModel()
     /// What the last export did, for a notice; cleared when shown (GKM-023).
     var exportReport: ExportReport?
+    /// The encrypted archive being written or restored, and its recovery key while it is shown (GKM-032).
+    let encryptedArchive = EncryptedArchiveModel()
     /// Everyday actions with Undo, sent through each account's action journal (GKM-015).
     let actions: MailActions
     /// Senders and lists, their rules, and unsubscribe (GKM-019, GKM-020; Models/Senders).
@@ -124,6 +126,9 @@ final class AppModel {
     @ObservationIgnored private var sendingFolder: URL?
 
     private let locations: StoreLocations?
+    /// The folders a mail folder's device state is placed beside (`MailFolderLocation`): the ones
+    /// this model was made with, else the app's standard ones.
+    func standardLocations() throws -> StoreLocations { try locations ?? StoreLocations.standard() }
     private var store: MailStore?
     private let extractor: (any AttachmentTextExtracting)?
     private var extraction: Task<Void, Never>?
