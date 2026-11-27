@@ -158,6 +158,16 @@ public actor Outbox {
         return Review.edits(inSnapshot: text)
     }
 
+    /// Whether a write still carries something to send. A write whose content is not on this
+    /// device (made while the disk was full, ARVIK-471) can never go out: retrying it only
+    /// fails again, so it can only be removed.
+    public func canSend(_ operation: OutboxOperation) -> Bool {
+        switch operation.kind {
+        case .delete: return true
+        case .write: return operation.mergesReview ? reviewEdits(for: operation) != nil : data(for: operation) != nil
+        }
+    }
+
     // MARK: Changing
 
     /// Run `change` on the index while holding the cross-process lock, and write it back.

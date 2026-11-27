@@ -8,10 +8,20 @@ extension AppModel {
     public var hasUnsentChanges: Bool { syncItems.contains { $0.state != .failed } }
     /// Writes the provider refused. They stay until retried or discarded.
     public var failedSyncItems: [OutboxOperation] { syncItems.filter { $0.state == .failed } }
+    /// Refused writes that a retry could still send.
+    public var retryableFailedSyncItems: [OutboxOperation] { failedSyncItems.filter { !unsendableSyncIDs.contains($0.id) } }
+    /// A refused write that can never be sent: nothing of it is on this device.
+    public func isUnsendable(_ item: OutboxOperation) -> Bool { unsendableSyncIDs.contains(item.id) }
 
     /// Re-read the outbox from disk (the share extension writes to it too).
     public func refreshSyncItems() async {
-        syncItems = await outbox.operations()
+        let items = await outbox.operations()
+        var unsendable: Set<String> = []
+        for item in items where item.state == .failed {
+            if !(await outbox.canSend(item)) { unsendable.insert(item.id) }
+        }
+        syncItems = items
+        unsendableSyncIDs = unsendable
         syncReceipts = await outbox.receipts()
     }
 
@@ -50,9 +60,11 @@ extension AppModel {
         await flushOutbox()
     }
 
+    /// Retry every refused write that can still be sent. One whose content is gone stays
+    /// as it is: sending it again would only fail again.
     public func retryAllFailedSync() async {
         do {
-            for item in failedSyncItems { try await outbox.retry(item.id) }
+            for item in retryableFailedSyncItems { try await outbox.retry(item.id) }
         } catch {
             errorMessage = error.localizedDescription
         }
