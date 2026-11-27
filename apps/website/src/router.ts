@@ -13,6 +13,7 @@ export const router = createRouter({
     { path: '/folder', name: 'folder', component: () => import('./pages/FolderPage.vue'), meta: { title: 'GitKittie Folder — Automatic version history for your folders' } },
     { path: '/tasks', name: 'tasks', component: () => import('./pages/TasksPage.vue'), meta: { title: 'GitKittie Tasks — Your task board is a git repo' } },
     { path: '/bud', name: 'bud', component: () => import('./pages/BudPage.vue'), meta: { title: 'GitKittie Bud — Rewriting git history, made visual' } },
+    { path: '/mail', name: 'mail', component: () => import('./pages/MailPage.vue'), meta: { title: 'GitKittie Mail — Keep the conversations, lose the noise' } },
     // The product pages were at /gitfolder, /gitkanban and /gitbud before the apps were
     // named GitKittie Folder, Tasks and Bud. public/_redirects sends those with a 301 on
     // Cloudflare; these catch a link followed inside the app or in `vite dev`.

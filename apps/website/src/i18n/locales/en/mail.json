@@ -1,0 +1,154 @@
+{
+  "meta": {
+    "title": "GitKittie Mail — Keep the conversations, lose the noise",
+    "description": "GitKittie Mail is a local-first mail client for the address you already have: a Focused inbox sorted on your device, control over senders and lists, safe cleanup, and every message kept as a file you own. No GitKittie account or server. In development."
+  },
+  "hero": {
+    "badge": "In development · Mac first",
+    "title": "Keep the conversations. *Lose the noise.*",
+    "subtitle": "GitKittie Mail works with the email address you already have. It sorts marketing and automated mail away from the people you write to, lets you decide what each sender gets to do, and keeps every message as a file on your own device.",
+    "notify": "Notify me when it's ready"
+  },
+  "inbox": {
+    "eyebrow": "A calmer inbox",
+    "title": "The mail that matters, *first.*",
+    "subtitle": "Mail is sorted on your device by rules you can read, not by a model in the cloud. Nothing moves at your provider just because it was sorted.",
+    "items": [
+      {
+        "icon": "check",
+        "title": "Focused, and everything else in its place",
+        "desc": "The window opens on Focused: conversations, security mail and anything you need to act on or pay. Receipts, updates, newsletters and promotions each get a view of their own. Mail the app is not sure about stays in Focused, where you will see it."
+      },
+      {
+        "icon": "file",
+        "title": "Every message says why",
+        "desc": "Open Why? on any message to see what sorted it. Correct it there; a correction becomes a rule for that sender only when you choose that."
+      },
+      {
+        "icon": "bell",
+        "title": "Quiet notifications",
+        "desc": "Only unread mail in Focused counts on the badge and can notify you. Turn notifications off per account, or set a list to always or never notify."
+      },
+      {
+        "icon": "users",
+        "title": "Senders and lists, under your control",
+        "desc": "See who sends you the most and how much of it you read. Send a sender to the inbox, a category or a silent archive, mute it, or keep only its receipts or only its latest message. Every rule shows what it will change before you save it."
+      },
+      {
+        "icon": "shield",
+        "title": "Unsubscribe without confirming your address",
+        "desc": "Unsubscribe is offered only for real mailing lists that can be trusted with the request. Suspicious mail gets Report as Junk and Mute instead. Nothing is contacted until you approve, and the app tracks whether the mail actually stopped."
+      },
+      {
+        "icon": "refresh",
+        "title": "Clean up years of mail, safely",
+        "desc": "Clean Up shows what fills your mailbox: noisy senders, ended offers, old digests and large attachments. Every batch shows the exact messages it will touch, leaves flagged, recent and uncertain mail out, and undoes in one step."
+      }
+    ]
+  },
+  "everyday": {
+    "eyebrow": "Everyday mail",
+    "title": "A real mail client, *not a filter.*",
+    "subtitle": "Read, write and organise mail the way you do now, with your provider still in charge of it. Apple Mail and your other apps keep working beside it.",
+    "items": [
+      {
+        "icon": "columns",
+        "title": "Spaces for projects and people",
+        "desc": "Collect mail by project, client or topic across all your accounts. Rules on sender, domain, list or subject words fill a space, and a message can sit in several spaces without being copied."
+      },
+      {
+        "icon": "menu",
+        "title": "Write in Markdown, send ordinary mail",
+        "desc": "Reply, Reply All and Forward, with drafts saved as you type. You write plain Markdown; it goes out as normal mail that reads well in any client."
+      },
+      {
+        "icon": "check",
+        "title": "An outbox that never sends twice",
+        "desc": "If a connection drops mid-send, the app checks your Sent mail before trying again instead of sending a second copy. A message whose fate is unclear is shown as such, never retried blindly."
+      },
+      {
+        "icon": "history",
+        "title": "Undo for every action",
+        "desc": "Archive, move, trash, flag and mark as read, with Undo and Redo. Actions taken offline are kept and sent when you are back online."
+      },
+      {
+        "icon": "clock",
+        "title": "Search that stays on your device",
+        "desc": "Search by sender, account, category, space, date or attachment, including the text inside PDF attachments. The search index lives on your device and is rebuilt from your files whenever it needs to be."
+      },
+      {
+        "icon": "folder",
+        "title": "Large attachments when you need them",
+        "desc": "Big attachments stay at your provider until you open them. Pin a message, a conversation or a space to keep all of it on the device for offline."
+      }
+    ]
+  },
+  "files": {
+    "eyebrow": "Your mail, your files",
+    "title": "Every message is *a file you own.*",
+    "subtitle": "Mail does not hide your mail in a database only it can read. Each message is kept as its original .eml file, with a readable Markdown copy beside it, in a folder on your device.",
+    "items": [
+      {
+        "icon": "file",
+        "title": "Originals, byte for byte",
+        "desc": "The .eml file is exactly what your provider sent. Any mail app can open it, and it is checked against a recorded fingerprint before it is ever exported."
+      },
+      {
+        "icon": "folder",
+        "title": "Export without lock-in",
+        "desc": "Export a message, a conversation, a space or a whole account as plain files. Import .eml files from anywhere. Keep, export or remove your local copy when you remove an account."
+      },
+      {
+        "icon": "lock",
+        "title": "Nothing between you and your provider",
+        "desc": "Mail connects to iCloud Mail or any standard IMAP account directly. There is no GitKittie account and no GitKittie server, and your password stays in this device's Keychain."
+      }
+    ]
+  },
+  "safety": {
+    "eyebrow": "Safe by default",
+    "title": "Mail is written by strangers. *It is read that way.*",
+    "subtitle": "Every message is treated as hostile until it has been checked, and nothing in it reaches the internet unless you say so.",
+    "items": [
+      {
+        "icon": "shield",
+        "title": "No tracking, no scripts",
+        "desc": "Remote images stay blocked until you allow them for a message or a sender, and tracking pixels are never loaded. Scripts and forms in mail never run."
+      },
+      {
+        "icon": "check",
+        "title": "Links show where they go",
+        "desc": "Clicking a link shows its real destination first, with a warning when the text says one address and the link goes to another, or when the domain imitates the sender's."
+      },
+      {
+        "icon": "users",
+        "title": "Senders shown as they are",
+        "desc": "The address is always shown beside the name, with a warning when a name pretends to be another address or the reply goes somewhere else."
+      },
+      {
+        "icon": "lock",
+        "title": "Attachments handled carefully",
+        "desc": "Files you save are marked as downloaded, so macOS checks them before they open. On the Mac, text for search is read out of PDFs by a separate, locked-down helper with no network access."
+      }
+    ]
+  },
+  "status": {
+    "badge": "In development",
+    "title": "Where GitKittie Mail is today",
+    "text": "The Mac app is built and works with iCloud Mail and standard IMAP accounts. It is tested against a local test mail server; testing with real accounts is what comes next, and it is not on the App Store yet. The iPhone and iPad app runs on the same core and is in testing. The price is not decided.",
+    "comingTitle": "Not in it yet",
+    "coming": [
+      "Gmail sign-in",
+      "Outlook and Microsoft 365",
+      "Spaces, rules and corrections synced between your devices through your own iCloud",
+      "Drafts and the outbox shared across devices"
+    ],
+    "support": "Ask about GitKittie Mail"
+  },
+  "cta": {
+    "eyebrow": "Coming to the App Store",
+    "title": "GitKittie Mail is *on the way.*",
+    "subtitle": "For Mac first, then iPhone and iPad. Be the first to know when it's available.",
+    "notify": "Notify me"
+  }
+}

@@ -9,6 +9,7 @@ import { computed } from 'vue'
 import FolderMark from '@/components/FolderMark.vue'
 import TasksMark from '@/components/TasksMark.vue'
 import BudMark from '@/components/BudMark.vue'
+import MailMark from '@/components/MailMark.vue'
 import GitKittieMark from '@/components/GitKittieMark.vue'
 import { siteOrigin } from '@/links'
 import type { ShareCardContent } from './cards'
@@ -33,6 +34,7 @@ const host = siteOrigin.replace(/^https?:\/\//, '')
         <FolderMark v-if="card.app === 'folder'" :size="52" />
         <TasksMark v-else-if="card.app === 'tasks'" :size="52" />
         <BudMark v-else-if="card.app === 'bud'" :size="52" />
+        <MailMark v-else-if="card.app === 'mail'" :size="52" />
         <GitKittieMark v-else :size="52" />
         <span class="share-card__eyebrow">{{ card.eyebrow }}</span>
       </div>

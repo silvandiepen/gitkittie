@@ -22,6 +22,6 @@ const body = usePageMarkdown('terms')
 
 <template>
   <MarketingLayout>
-    <LegalDoc title="Terms &amp; Conditions" updated="July 2026" :content="body" />
+    <LegalDoc title="Terms &amp; Conditions" updated="November 2026" :content="body" />
   </MarketingLayout>
 </template>

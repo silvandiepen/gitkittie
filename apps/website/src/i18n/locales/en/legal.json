@@ -2,13 +2,13 @@
   "privacy": {
     "meta": {
       "title": "Privacy — GitKittie",
-      "description": "GitKittie apps are local-first: no accounts, no cloud service, no telemetry. Your files move directly between your Mac and the git host you own."
+      "description": "GitKittie apps are local-first: no accounts, no cloud service, no telemetry. Your files move directly between your device and the git host you own, and GitKittie Mail talks only to your own mail provider."
     }
   },
   "terms": {
     "meta": {
       "title": "Terms & Conditions — GitKittie",
-      "description": "The terms of use for the GitKittie apps, GitKittie Folder, GitKittie Tasks and GitKittie Bud — provided as-is, using your own git repositories and accounts."
+      "description": "The terms of use for the GitKittie apps, GitKittie Folder, GitKittie Tasks, GitKittie Bud and GitKittie Mail — provided as-is, using your own git repositories, mail accounts and providers."
     }
   }
 }

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
  * @view HomePage
- * GitKittie family landing page — introduces the umbrella and all three apps.
+ * GitKittie family landing page — introduces the umbrella and all four apps.
  *
- * The page opens on the real Tasks window, then states the idea, then the three
+ * The page opens on the real Tasks window, then states the idea, then the four
  * products as panels the way the apps draw them, then the shared principles as
  * ruled rows, then the closing call on the deepest navy.
  */
@@ -86,7 +86,7 @@ function marker(i: number): string {
           </div>
         </div>
 
-        <div class="mkt__container mkt__panels">
+        <div class="mkt__container mkt__panels home__panels">
           <AppCard
             v-for="(item, i) in t.apps.items"
             :key="item.app"
@@ -144,6 +144,13 @@ function marker(i: number): string {
 
   &__hero-actions {
     padding-top: var(--space);
+  }
+
+  // Four products sit two by two rather than three and one left over.
+  &__panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    @include tablet { grid-template-columns: 1fr; }
   }
 
   // ── Statement ──────────────────────────────────────────────────────────

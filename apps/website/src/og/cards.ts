@@ -18,6 +18,7 @@ const appNames: Record<AppSlug, string> = {
   folder: 'GitKittie Folder',
   tasks: 'GitKittie Tasks',
   bud: 'GitKittie Bud',
+  mail: 'GitKittie Mail',
 }
 
 /** The device a screenshot was taken on, from its file name. */

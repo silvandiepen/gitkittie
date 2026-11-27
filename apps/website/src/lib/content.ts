@@ -15,7 +15,7 @@ export interface Step {
 }
 
 /** The products the site themes itself for — drives [data-app] and the marks. */
-export type AppSlug = 'folder' | 'tasks' | 'bud'
+export type AppSlug = 'folder' | 'tasks' | 'bud' | 'mail'
 
 /** A home-page product card. */
 export interface AppCardContent {

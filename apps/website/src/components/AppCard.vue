@@ -8,6 +8,7 @@
 import FolderMark from './FolderMark.vue'
 import TasksMark from './TasksMark.vue'
 import BudMark from './BudMark.vue'
+import MailMark from './MailMark.vue'
 import type { AppSlug } from '@/lib/content'
 
 defineProps<{
@@ -33,7 +34,8 @@ defineProps<{
     <span class="app-panel__mark" aria-hidden="true">
       <FolderMark v-if="app === 'folder'" :size="72" />
       <TasksMark v-else-if="app === 'tasks'" :size="72" />
-      <BudMark v-else :size="72" />
+      <BudMark v-else-if="app === 'bud'" :size="72" />
+      <MailMark v-else :size="72" />
     </span>
 
     <div class="app-panel__copy">
