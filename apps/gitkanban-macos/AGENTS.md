@@ -65,7 +65,15 @@ npm run gitkanban:core:test                      # test the board logic (TS sour
 npm run gitkanban:webview:build                  # rebuild the markdown-renderer webview bundle
 npm run gitkanban:run                            # build + run the macOS app (scripts/run.sh)
 cd apps/gitkanban-macos && xcodegen generate     # (re)generate the Xcode project
+# the window's own tests: the real RootView hosted offscreen (Tests/), no app launched
+cd apps/gitkanban-macos && xcodebuild test -project GitKanban.xcodeproj -scheme GitKanban -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
 ```
+
+Window layout rule: nothing under the board or in the sidebar may use
+`.fixedSize(horizontal: false, vertical: true)` on text of unbounded length. The window measures
+its content's minimum size at no width, where such text wraps per character and claims thousands
+of points; the split view then overflows the window and the sidebar looks empty (GITKITTIE-121,
+`SidebarLayoutTests`).
 
 ## Agent access (MCP server)
 
