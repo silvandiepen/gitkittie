@@ -188,6 +188,23 @@ The S3 code (`S3StorageService` in GitKittieKit) is shared with GitKittie Folder
 - **Every board of an added repository is reachable**, not only those in the sidebar; a board joins
   the sidebar on first use, and `create_board` makes a new one that inherits the repository's lanes.
 - **Tests:** `AgentAccessTests` (a real MCP conversation over HTTP against a folder board).
+- **`tasks` command-line tool** (GITKITTIE-124): the same tools from a terminal, for agents without
+  the MCP tools and for people (`tasks list --board GitKittie --lane in-progress`, `tasks show
+  GKM-123`, `tasks update GKM-123 --description "…"` or `'{"description": "…"}'`, `tasks move GKM-123
+  review`, `tasks claim`, `tasks comment`, `tasks reviews`, `tasks raw <tool> '<json>'`). Tables and
+  cards by default, `--json` for scripts; exit codes 1 refused · 2 usage · 3 app unreachable · 4 token
+  refused · 5 not set up. It reads the bridge's `connection.json`, opens Tasks in the background when
+  nothing listens, and finds a card's board from its id prefix (cached). Ships inside the app at
+  `Contents/Helpers/tasks`; Agent Access ▸ **Install Command-Line Tool…** links it into
+  `~/.local/bin` and shows the PATH line. Code: `swift/GitKanbanKit/Sources/TasksCLIKit` (+
+  `TasksCLI`, `TasksAgentTools`); tests: `TasksCLIParsingTests`, `TasksCLIIntegrationTests`.
+- **Agent guide** (GITKITTIE-124): `tasks guide` prints one complete manual for agents (how to reach
+  the boards, the start-of-work routine, the card lifecycle with claims and heartbeats, reviews,
+  docs, attachments, every command and tool, exit codes and common errors); `--board <B>` appends
+  that board's rules, `--json` gives it as a JSON string. The `get_agent_guide` tool returns the same
+  text. Agent Access shows a short prompt ("run `tasks guide` first", Copy Prompt) and **Copy Full
+  Guide**. Prose: `swift/GitKanbanKit/Sources/TasksAgentTools/AgentGuide.md`; the reference is
+  generated from the command table and tool list (`docs/Decisions.md` § 18).
 
 ---
 

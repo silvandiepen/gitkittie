@@ -1,4 +1,5 @@
 import GitKittieKit
+import TasksAgentTools
 import XCTest
 @testable import GitKanbanKit
 
@@ -6,19 +7,26 @@ import XCTest
 /// model, on a real board in a temp folder laid out like the tasks repo.
 @MainActor
 final class AgentAccessTests: XCTestCase {
-    /// The prompt for agents' instruction files names every tool it tells them to use, lists the
-    /// boards, and is about the person using the app, not one named person.
-    func testTheAgentPromptNamesRealToolsAndTheBoards() throws {
-        let prompt = AgentTools.prompt(boards: [("tasks/GitKittie", "GitKittie"), ("Notes", "Notes")])
-        XCTAssertTrue(prompt.contains("- `tasks/GitKittie` (GitKittie)"))
-        XCTAssertTrue(prompt.contains("- `Notes`\n") || prompt.hasSuffix("- `Notes`"))
+    /// The prompt for agents' instruction files is short and sends them to the guide; every tool it
+    /// names is one the server offers, and it is about the person using the app, not one named person.
+    func testTheAgentPromptSendsAgentsToTheGuide() throws {
+        let prompt = AgentTools.prompt
+        XCTAssertTrue(prompt.contains("`tasks guide`"), prompt)
+        XCTAssertTrue(prompt.contains("`get_agent_guide`"), prompt)
+        XCTAssertLessThan(prompt.count, 1_000, "the prompt is meant to stay short; the rest belongs in the guide")
         let offered = Set(AgentTools.all.map(\.name))
         let named = prompt.matches(of: try Regex<(Substring, Substring)>(#"`([a-z_]+)`"#)).map { String($0.output.1) }.filter { $0.contains("_") }
         XCTAssertFalse(named.isEmpty)
         for tool in named { XCTAssertTrue(offered.contains(tool), "the prompt names \(tool), which the server does not offer") }
-        XCTAssertFalse(AgentTools.prompt(boards: []).contains("Sil"))
+        XCTAssertFalse(prompt.contains("Sil"))
         XCTAssertFalse(AgentTools.instructions.contains("Sil"))
-        XCTAssertTrue(AgentTools.prompt(boards: []).contains("no boards yet"))
+        XCTAssertTrue(AgentTools.instructions.contains("get_agent_guide"))
+        // The app shows and copies exactly these texts.
+        let suite = "prompt-\(UUID().uuidString)"
+        let model = AppModel.testing(suite: suite, keychainService: "prompt-tests-\(UUID().uuidString)")
+        defer { AppModel.removeTestStorage(suite) }
+        XCTAssertEqual(model.agentPrompt, prompt)
+        XCTAssertEqual(model.agentGuide, AgentGuide.text())
     }
 
     private var root: URL!
@@ -185,11 +193,18 @@ final class AgentAccessTests: XCTestCase {
         let tools = try XCTUnwrap((listed["result"] as? [String: Any])?["tools"] as? [[String: Any]])
         XCTAssertEqual(Set(tools.compactMap { $0["name"] as? String }),
                        ["list_boards", "create_board", "get_board", "get_board_rules", "list_cards", "get_card", "create_card", "update_card", "claim_card", "attach_file",
-                        "list_reviews", "create_review", "handle_review_item", "close_review", "wait_for_reviews", "list_docs", "get_doc", "search_docs", "write_doc", "delete_doc"])
+                        "list_reviews", "create_review", "handle_review_item", "close_review", "wait_for_reviews", "list_docs", "get_doc", "search_docs", "write_doc", "delete_doc", "get_agent_guide"])
         for tool in tools {
             // Every schema must have parsed as a JSON Schema object, not fallen back.
             XCTAssertNotNil((tool["inputSchema"] as? [String: Any])?["properties"], "\(tool["name"] ?? "")")
         }
+
+        // The guide, as an MCP agent gets it: the same text `tasks guide` prints.
+        let (_, called) = try await post(["jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                                          "params": ["name": "get_agent_guide", "arguments": [:] as [String: Any]] as [String: Any]])
+        let guide = try XCTUnwrap(called["result"] as? [String: Any])
+        XCTAssertEqual(guide["isError"] as? Bool, false)
+        XCTAssertEqual((guide["content"] as? [[String: Any]])?.first?["text"] as? String, AgentGuide.text())
 
         let (noToken, _) = try await post(["jsonrpc": "2.0", "id": 3, "method": "tools/list"], token: "wrong")
         XCTAssertEqual(noToken, 401)

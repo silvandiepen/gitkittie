@@ -49,6 +49,15 @@ targets:
         product: GitKittieKit
       - package: git-pont
         product: GitPontCore
+      # The `tasks` command-line tool ships inside the app (Contents/Helpers/tasks), so it is
+      # always the version of the app that is installed. Agent Access ▸ Install Command-Line
+      # Tool… links it into ~/.local/bin.
+      - target: TasksCLI
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitkanban
@@ -108,6 +117,45 @@ targets:
               - public.tiff
               - public.image
 
+  # `tasks`, the command-line tool (swift/GitKanbanKit/Sources/TasksCLI + TasksCLIKit; also
+  # `swift build --product tasks` there). Every executable in an App Store app must be
+  # sandboxed: it gets its own container, may connect to the app on 127.0.0.1, and may read
+  # (only) the app's AgentAccess folder, where the port and token are.
+  TasksCLI:
+    type: tool
+    platform: macOS
+    sources:
+      - path: ../../swift/GitKanbanKit/Sources/TasksCLI
+    dependencies:
+      - package: GitKanbanKit
+        product: TasksCLIKit
+    settings:
+      base:
+        PRODUCT_NAME: tasks
+        PRODUCT_MODULE_NAME: TasksCLI
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitkanban.tasks
+        # A sandboxed tool needs a bundle id, so its Info.plist goes into the binary.
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        INFOPLIST_FILE: GitKanban/TasksCLI-Info.plist
+        CODE_SIGN_ENTITLEMENTS: GitKanban/TasksCLI.entitlements
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+    entitlements:
+      path: GitKanban/TasksCLI.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.temporary-exception.files.home-relative-path.read-only:
+          - /Library/Containers/app.hakobs.gitkanban/Data/Library/Application Support/app.hakobs.gitkanban/AgentAccess/
+    info:
+      path: GitKanban/TasksCLI-Info.plist
+      properties:
+        CFBundleIdentifier: app.hakobs.gitkanban.tasks
+        CFBundleName: tasks
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+
   # The real window (RootView and everything it shows) hosted offscreen against a real
   # folder board. The app's sources are built into the bundle, so the tests run without
   # launching the app or showing a window.
@@ -119,6 +167,8 @@ targets:
         excludes:
           - Info.plist
           - GitKanban.entitlements
+          - TasksCLI-Info.plist
+          - TasksCLI.entitlements
       - path: ../../swift/TasksUI
       - path: ../../swift/GitKittieUI
       - path: Tests

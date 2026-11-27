@@ -306,6 +306,83 @@ engine). A newer version this device can install shows a quiet "Update available
 
 **Status.** Accepted.
 
+### 17. The `tasks` command-line tool ships inside the app, sandboxed (GITKITTIE-124)
+
+**Context.** Agents without the `tasks` MCP tools were calling the agent server with raw curl
+(`POST /mcp` and the bearer token). Sil asked for a command instead.
+
+**Decision.**
+
+- **One tool list.** `MCPTool` and `AgentTools` moved into `TasksAgentTools`, a target without
+  dependencies, which both the server (GitKanbanKit) and the CLI (`TasksCLIKit`) import. Each
+  command maps to one of those tools; a test checks every command calls a tool the server offers
+  with the arguments it requires. `create_review`, `write_doc` and `delete_doc` (base64 uploads,
+  compare-and-swap text) go through `tasks raw`.
+- **Same door as the bridge.** It reads `AgentAccess/connection.json` (the sandboxed container's
+  first, then an unsandboxed build's; the newest wins; `TASKS_CONNECTION` overrides), posts JSON-RPC
+  `tools/call` to 127.0.0.1, and on "nothing listens" opens the app by its recorded path through
+  Launch Services (not activated) and waits for it, like `tasks-mcp.sh`. `TASKS_NO_WAKE=1` turns
+  that off.
+- **No `--board` for card commands.** The card's id prefix finds the board: `get_board` on each
+  board in the sidebar (its own prefix and its products'), cached in the tool's Caches folder and
+  looked at again when a remembered board turns out not to have the card. Boards outside the
+  sidebar are never asked, because asking puts them in the sidebar.
+- **Who changes a card** comes from `--agent` or `TASKS_AGENT`; there is no default, so a change is
+  never recorded under a guessed name.
+- **Bundled, not downloaded.** The tool is an XcodeGen `tool` target (`TasksCLI` in `project.yml`)
+  copied into `Tasks.app/Contents/Helpers/tasks`, so it always matches the app. Every executable in
+  an App Store app has to be sandboxed: it has its own container, `network.client`, an embedded
+  Info.plist (bundle id `app.hakobs.gitkanban.tasks`) and a read-only exception for the app's
+  `AgentAccess` folder only. Consequence: a sandboxed copy cannot read arbitrary files, so
+  `--body-file` and `attach` say to pass the file on standard input (`--body-file - < notes.md`)
+  when the read is refused. A `swift build --product tasks` copy is not sandboxed.
+- **Install** is a symbolic link the app makes in a folder the person picks in an open panel
+  (normally `~/.local/bin`; the sandboxed app may only write where it is pointed). An existing link
+  is replaced; any other file named `tasks` is left alone. The app cannot see the shell's PATH, so
+  for a folder outside the standard ones it shows the `export PATH=…` line to add.
+
+**Unverified.** The sandboxed helper (temporary exception, opening the app from the sandbox) has
+not run with a team-signed build yet; the tests and the demo ran an unsandboxed copy.
+
+**Status.** Accepted.
+
+### 18. One agent guide, printed by `tasks guide` and served as `get_agent_guide` (GITKITTIE-124)
+
+**Context.** The prompt in Agent Access had grown into a half-manual that still left agents guessing
+(heartbeats, reviews, what the app enforces versus what the contract asks). Sil asked for one prompt
+that gives an agent the full docs.
+
+**Decision.**
+
+- **One text, two doors.** `AgentGuide.text()` in `TasksAgentTools` is the manual. `tasks guide`
+  prints it (offline: no app needed) and the agent server's new `get_agent_guide` tool returns it.
+  `--board <B>` / `"board"` append that board's rules from `get_board_rules`, formatted by the same
+  function, so both doors give the same text. `--json` prints it as one JSON string.
+- **Prose in Markdown, reference generated.** The prose is `Sources/TasksAgentTools/AgentGuide.md`,
+  compiled in with SwiftPM's `.embedInCode` (the CLI ships alone in `Contents/Helpers`, so a
+  resource bundle beside it would be one more thing to get wrong; a missing bundle would also be a
+  crash in `Bundle.module`). The command, tool, exit-code and environment sections are generated
+  from `CommandTable` and `AgentTools.all`. For that, the CLI's command table (`CommandSpec`,
+  `OptionSpec`, environment, `ExitStatus`) moved from `TasksCLIKit` into `TasksAgentTools`: the app
+  serves the guide too and does not link the CLI. `CLIError` takes its exit codes and kinds from
+  `ExitStatus`, so the table the guide prints is the one the CLI exits with.
+- **Can't drift:** tests check that the guide has every command (usage, options, examples), every
+  tool (every argument), every exit code and variable; that every command line in it (the table's
+  examples and the prose's `sh` blocks) parses; and that the CLI and the MCP tool return the same
+  text, with and without a board.
+- **The guide does not hard-code one board.** It tells the agent to read the board's rules first and
+  that they win; lanes and fields are described as "the standard contract".
+- **The prompt is short:** what Tasks is, and "run `tasks guide` (or call `get_agent_guide`) first".
+  Agent Access keeps Copy Prompt and adds Copy Full Guide for agents with neither.
+- **Heartbeat.** The contract asks owners to renew `last_heartbeat_at` / `claim_expires_at`; there was
+  no clean way. Claiming your own card again now renews the lease and keeps `picked_up_at`
+  (activity "renewed the claim until …", commit `chore(tasks): heartbeat <id>`); the guide says so.
+
+**Unverified.** `.embedInCode` is exercised by `swift build` / `swift test`; the Xcode builds of the
+apps (which compile `TasksAgentTools` through the package) are left to CI.
+
+**Status.** Accepted.
+
 ---
 
 ### Open questions
