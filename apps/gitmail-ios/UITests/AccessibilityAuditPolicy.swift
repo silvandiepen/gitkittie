@@ -242,8 +242,9 @@ enum DynamicTypeAllowlist {
     /// that causes it: it stays with the footer hidden from accessibility, as a fixed literal,
     /// split, or with the rows around it changed (GKM-111 card). So it is skipped only when:
     /// - the screen shows a Form or List, and
-    /// - every Dynamic Type finding on the same screen that does name an element is Form or List
-    ///   text the containers above already skip.
+    /// - every Dynamic Type finding on the same screen that does name an element is one the
+    ///   containers above already skip (Form or List text, or the system bar's own buttons such
+    ///   as Settings' Done, which is always there).
     /// "Unsupported" (a fixed size) without an element, and anything else on such a screen, fails.
     /// Why the last element-less finding was not skipped by `formEdgeReason`, for the failure message.
     static var lastMiss: String?
@@ -252,14 +253,15 @@ enum DynamicTypeAllowlist {
         guard finding.summary == partially else { return nil }
         let window = app.windows.firstMatch.frame
         let forms = app.collectionViews.allElementsBoundByIndex.filter { $0.frame.intersects(window) }
-        let form = containers.first { $0.name == "Form or List" }!
         let named = screen.filter { $0.type == .dynamicType && $0.element != nil }
-        let unaccepted = named.filter { !($0.summary == partially && form.contains($0.element!, app)) }
+        let unaccepted = named.filter { finding in
+            !(finding.summary == partially && containers.contains { $0.contains(finding.element!, app) })
+        }
         guard !forms.isEmpty, unaccepted.isEmpty else {
             // Kept for the failure message, so a miss can be traced from the CI log (GKM-111).
             lastMiss = "not skipped: window \(window), forms \(forms.map(\.frame)), named not accepted: \(unaccepted.map(\.description))"
             return nil
         }
-        return "names no element: Form or List text, and every named finding on this screen is Form text (GKM-111)"
+        return "names no element: on a Form or List, and every named finding on this screen is one the policy skips (GKM-111)"
     }
 }
