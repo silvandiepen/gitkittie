@@ -227,11 +227,13 @@ final class MailFlowUITests: XCTestCase {
             }
             break
         }
+        DynamicTypeAllowlist.lastMiss = nil
         for finding in found {
             if let reason = AccessibilityAuditPolicy.skipReason(finding, among: found, in: app) {
                 print("audit [\(screen)] skipped (\(reason)): \(finding.description)")
             } else {
-                auditFindings.append("[\(screen)] \(finding.description)")
+                let miss = finding.type == .dynamicType && finding.element == nil ? DynamicTypeAllowlist.lastMiss : nil
+                auditFindings.append("[\(screen)] \(finding.description)" + (miss.map { " (\($0))" } ?? ""))
             }
         }
     }

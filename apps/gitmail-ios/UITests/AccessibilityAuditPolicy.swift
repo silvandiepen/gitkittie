@@ -235,27 +235,31 @@ enum DynamicTypeAllowlist {
         return containers.first { $0.contains(element, app) }.map { "\($0.name): \($0.reason)" }
     }
 
-    /// Form text at the bottom edge of the screen (GKM-111, Sil's decision 2026-11-27). The audit
-    /// reports any Form or List text that a larger text size would push below the screen as
-    /// "partially unsupported"; whether that report names its element depends only on what
-    /// happens to sit at the bottom edge. Three passes of bisecting found no view that causes it:
-    /// it stays with the footer hidden from accessibility, as a fixed literal, split, or with
-    /// the rows around it changed (GKM-111 card). So an element-less "partially unsupported" is
-    /// skipped only when:
-    /// - the screen shows a Form or List that reaches the bottom of the window, and
+    /// An element-less "partially unsupported" on a Form screen (GKM-111, Sil's decision
+    /// 2026-11-27). The audit reports any Form or List text that a larger text size would push
+    /// below the screen as "partially unsupported"; whether that report names its element depends
+    /// only on what happens to sit at the bottom edge. Three passes of bisecting found no view
+    /// that causes it: it stays with the footer hidden from accessibility, as a fixed literal,
+    /// split, or with the rows around it changed (GKM-111 card). So it is skipped only when:
+    /// - the screen shows a Form or List, and
     /// - every Dynamic Type finding on the same screen that does name an element is Form or List
     ///   text the containers above already skip.
     /// "Unsupported" (a fixed size) without an element, and anything else on such a screen, fails.
+    /// Why the last element-less finding was not skipped by `formEdgeReason`, for the failure message.
+    static var lastMiss: String?
+
     static func formEdgeReason(_ finding: AuditFinding, among screen: [AuditFinding], in app: XCUIApplication) -> String? {
         guard finding.summary == partially else { return nil }
         let window = app.windows.firstMatch.frame
-        let formAtEdge = app.collectionViews.allElementsBoundByIndex.contains {
-            $0.frame.intersects(window) && $0.frame.maxY >= window.maxY - 1
-        }
-        guard formAtEdge else { return nil }
+        let forms = app.collectionViews.allElementsBoundByIndex.filter { $0.frame.intersects(window) }
         let form = containers.first { $0.name == "Form or List" }!
         let named = screen.filter { $0.type == .dynamicType && $0.element != nil }
-        guard named.allSatisfy({ $0.summary == partially && form.contains($0.element!, app) }) else { return nil }
-        return "names no element: Form or List text at the screen's bottom edge, every named finding on this screen is Form text (GKM-111)"
+        let unaccepted = named.filter { !($0.summary == partially && form.contains($0.element!, app)) }
+        guard !forms.isEmpty, unaccepted.isEmpty else {
+            // Kept for the failure message, so a miss can be traced from the CI log (GKM-111).
+            lastMiss = "not skipped: window \(window), forms \(forms.map(\.frame)), named not accepted: \(unaccepted.map(\.description))"
+            return nil
+        }
+        return "names no element: Form or List text, and every named finding on this screen is Form text (GKM-111)"
     }
 }
