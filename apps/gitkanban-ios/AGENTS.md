@@ -26,6 +26,9 @@ when that folder exists. Reviewer writes are compare-and-swap so an agent's conc
 Both apps have review screens (`GitKanban/Review/`). Select in a request's ⋯ menu shows its files as a grid to decide or
 comment on several at once, in one write (`AppModel.decide(_:itemIDs:status:)`, `comment(_:itemIDs:text:)`); approving two options
 of a pick-one group is refused. `UITests/ReviewSelectUITests` needs `scripts/seed-select-fixture.sh <simulator-udid>` first.
+A request shows through one filter (Waiting / Answered / All, in the ⋯ menu; Decision 15 in the Mac app's `docs/Decisions.md`),
+its notes open from the header as formatted Markdown, and ⏩ goes to the next page still waiting. `UITests/ReviewLongRequestUITests`
+needs `scripts/seed-long-review-fixture.sh <simulator-udid>` first (`--from <folder>` adds real requests to look at).
 The home-screen name is **Tasks** (GITKITTIE-013 tracks the rest of the rename).
 
 ## Share extension and shared storage

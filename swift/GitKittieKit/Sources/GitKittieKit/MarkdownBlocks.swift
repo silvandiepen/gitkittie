@@ -1,8 +1,8 @@
 import Foundation
 
 /// Markdown taken apart into the blocks a page is drawn from: headings, paragraphs, code,
-/// lists with their checkboxes, note boxes, tables. Inline marks (bold, links, code) stay
-/// in each block's text for the view to style.
+/// lists with their checkboxes, note boxes, tables and pictures. Inline marks (bold, links,
+/// code) stay in each block's text for the view to style.
 public enum MarkdownBlocks {
 
     public enum Block: Equatable, Sendable {
@@ -14,6 +14,20 @@ public enum MarkdownBlocks {
         case quote(kind: String?, text: String)
         case table(header: [String], rows: [[String]])
         case rule
+        /// Pictures (`![alt](file)`, also inside a link) on lines of their own, side by side.
+        /// A picture in a line of text is taken out of it and shown after that paragraph.
+        case images([Image])
+    }
+
+    /// A picture: its alt text, where it is (relative to the document, or a URL) and, for
+    /// `[![alt](small.png)](large.png)`, what it links to.
+    public struct Image: Equatable, Sendable, Hashable {
+        public var alt: String
+        public var source: String
+        public var link: String?
+        public init(alt: String, source: String, link: String? = nil) {
+            self.alt = alt; self.source = source; self.link = link
+        }
     }
 
     public struct Item: Equatable, Sendable {
@@ -36,6 +50,15 @@ public enum MarkdownBlocks {
 
         func flush() {
             if !paragraph.isEmpty { blocks.append(.paragraph(paragraph.joined(separator: " "))); paragraph = [] }
+        }
+
+        /// Pictures go after what is above them; pictures on consecutive lines form one row.
+        func appendImages(_ images: [Image]) {
+            if case .images(let earlier)? = blocks.last {
+                blocks[blocks.count - 1] = .images(earlier + images)
+            } else {
+                blocks.append(.images(images))
+            }
         }
 
         while index < lines.count {
@@ -125,11 +148,111 @@ public enum MarkdownBlocks {
                 continue
             }
 
-            paragraph.append(trimmed)
+            let (text, images) = extractImages(trimmed)
+            if images.isEmpty {
+                paragraph.append(trimmed)
+            } else {
+                if !text.isEmpty { paragraph.append(text) }
+                flush()
+                appendImages(images)
+            }
             index += 1
         }
         flush()
         return blocks
+    }
+
+    /// The text of a line with its pictures taken out, and the pictures. Handles `![alt](src)`,
+    /// `![alt](src "title")` and a picture inside a link, `[![alt](src)](href)`.
+    public static func extractImages(_ line: String) -> (text: String, images: [Image]) {
+        guard line.contains("![") else { return (line, []) }
+        let chars = Array(line)
+        var text = ""
+        var images: [Image] = []
+        var i = 0
+
+        /// `![alt](src)` starting at `start`: the picture and the index after it.
+        func image(at start: Int) -> (Image, Int)? {
+            guard start + 1 < chars.count, chars[start] == "!", chars[start + 1] == "[" else { return nil }
+            guard let closeAlt = matching(chars, from: start + 1, open: "[", close: "]"),
+                  closeAlt + 1 < chars.count, chars[closeAlt + 1] == "(",
+                  let closeSrc = matching(chars, from: closeAlt + 1, open: "(", close: ")") else { return nil }
+            let alt = String(chars[(start + 2)..<closeAlt])
+            let target = destination(String(chars[(closeAlt + 2)..<closeSrc]))
+            guard !target.isEmpty else { return nil }
+            return (Image(alt: alt, source: target), closeSrc + 1)
+        }
+
+        while i < chars.count {
+            // A linked picture: [![alt](src)](href)
+            if chars[i] == "[", let (picture, after) = image(at: i + 1), after < chars.count, chars[after] == "]",
+               after + 1 < chars.count, chars[after + 1] == "(",
+               let closeLink = matching(chars, from: after + 1, open: "(", close: ")") {
+                var linked = picture
+                linked.link = destination(String(chars[(after + 2)..<closeLink]))
+                images.append(linked)
+                i = closeLink + 1
+                continue
+            }
+            if let (picture, after) = image(at: i) {
+                images.append(picture)
+                i = after
+                continue
+            }
+            text.append(chars[i])
+            i += 1
+        }
+        let rest = text.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
+        return (rest, images)
+    }
+
+    /// The index of the bracket that closes the one at `from`, counting nested pairs.
+    private static func matching(_ chars: [Character], from: Int, open: Character, close: Character) -> Int? {
+        var depth = 0
+        var i = from
+        while i < chars.count {
+            if chars[i] == "\\" { i += 2; continue }
+            if chars[i] == open { depth += 1 }
+            if chars[i] == close { depth -= 1; if depth == 0 { return i } }
+            i += 1
+        }
+        return nil
+    }
+
+    /// A link destination without its optional title and angle brackets.
+    private static func destination(_ raw: String) -> String {
+        var target = raw.trimmingCharacters(in: .whitespaces)
+        if target.hasPrefix("<"), let end = target.firstIndex(of: ">") {
+            return String(target[target.index(after: target.startIndex)..<end])
+        }
+        if let space = target.firstIndex(of: " ") { target = String(target[..<space]) }
+        return target
+    }
+
+    // MARK: Text as it is shown
+
+    /// Inline Markdown (bold, emphasis, code, links) parsed as the views draw it. Falls back
+    /// to the text itself when it is not valid Markdown.
+    public static func inline(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(text)
+    }
+
+    /// The words a reader sees for these blocks, one block per line: what is left of the
+    /// Markdown once it is drawn. Pictures read as their alt text in brackets.
+    public static func renderedText(_ blocks: [Block]) -> String {
+        func plain(_ text: String) -> String { String(inline(text).characters) }
+        return blocks.map { block -> String in
+            switch block {
+            case .heading(_, let text), .paragraph(let text): return plain(text)
+            case .code(_, let text): return text
+            case .list(let items): return items.map { plain($0.text) }.joined(separator: "\n")
+            case .quote(_, let text): return plain(text)
+            case .table(let header, let rows): return ([header] + rows).map { $0.map(plain).joined(separator: "\t") }.joined(separator: "\n")
+            case .rule: return ""
+            case .images(let images): return images.map { "[\($0.alt)]" }.joined(separator: " ")
+            }
+        }.joined(separator: "\n")
     }
 
     private static func headingLevel(_ line: String) -> Int? {
