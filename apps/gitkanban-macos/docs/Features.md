@@ -188,6 +188,16 @@ The S3 code (`S3StorageService` in GitKittieKit) is shared with GitKittie Folder
 - **Every board of an added repository is reachable**, not only those in the sidebar; a board joins
   the sidebar on first use, and `create_board` makes a new one that inherits the repository's lanes.
 - **Tests:** `AgentAccessTests` (a real MCP conversation over HTTP against a folder board).
+- **`tasks` command-line tool** (GITKITTIE-124): the same tools from a terminal, for agents without
+  the MCP tools and for people (`tasks list --board GitKittie --lane in-progress`, `tasks show
+  GKM-123`, `tasks update GKM-123 --description "…"` or `'{"description": "…"}'`, `tasks move GKM-123
+  review`, `tasks claim`, `tasks comment`, `tasks reviews`, `tasks raw <tool> '<json>'`). Tables and
+  cards by default, `--json` for scripts; exit codes 1 refused · 2 usage · 3 app unreachable · 4 token
+  refused · 5 not set up. It reads the bridge's `connection.json`, opens Tasks in the background when
+  nothing listens, and finds a card's board from its id prefix (cached). Ships inside the app at
+  `Contents/Helpers/tasks`; Agent Access ▸ **Install Command-Line Tool…** links it into
+  `~/.local/bin` and shows the PATH line. Code: `swift/GitKanbanKit/Sources/TasksCLIKit` (+
+  `TasksCLI`, `TasksAgentTools`); tests: `TasksCLIParsingTests`, `TasksCLIIntegrationTests`.
 
 ---
 

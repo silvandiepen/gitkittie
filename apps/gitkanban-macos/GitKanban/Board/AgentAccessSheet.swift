@@ -1,3 +1,4 @@
+import AppKit
 import GitKanbanKit
 import SwiftUI
 
@@ -10,6 +11,8 @@ struct AgentAccessSheet: View {
     @State private var isWorking = false
     @State private var token = ""
     @State private var copied: String?
+    @State private var installedLink: URL?
+    @State private var installError: String?
 
     /// Through the bridge: no token in the command, and it opens Tasks when it is closed.
     private var claudeCommand: String {
@@ -61,6 +64,34 @@ struct AgentAccessSheet: View {
                         .font(.caption).foregroundStyle(.secondary)
                     copyRow(model.agentServerURL, label: "Copy Address", key: "url")
                     copyRow("Authorization: Bearer \(token)", label: "Copy Header", key: "header")
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Command-line tool").font(.subheadline.weight(.medium))
+                    Text("`tasks` does from a terminal what the agent tools do (`tasks list`, `tasks show GKM-12`, `tasks update …`), for agents without the tools and for you. It comes with this app and is updated with it.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Button("Install Command-Line Tool…") { installCommandLineTool() }
+                            .controlSize(.small)
+                            .disabled(CommandLineTool.bundled() == nil)
+                        if let installedLink {
+                            Label("Installed as \(installedLink.path)", systemImage: "checkmark.circle.fill")
+                                .font(.caption).foregroundStyle(.green)
+                                .lineLimit(1).truncationMode(.middle)
+                        }
+                    }
+                    if let installError {
+                        Label(installError, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption).foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let installedLink, let line = CommandLineTool.pathLine(for: installedLink.deletingLastPathComponent()) {
+                        Text("If your terminal says “command not found”, add this line to ~/.zshrc (or your shell's startup file) and open a new window:")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        copyRow(line, label: "Copy Line", key: "path")
+                    }
                 }
 
                 HStack {
@@ -117,6 +148,36 @@ struct AgentAccessSheet: View {
         .onAppear {
             isOn = model.agentAccessEnabled
             token = isOn ? model.agentToken() : ""
+        }
+    }
+
+    /// Ask where to put the command (normally ~/.local/bin; the app may only write where the
+    /// person points it), then link it to the copy inside this app.
+    private func installCommandLineTool() {
+        installError = nil
+        guard let tool = CommandLineTool.bundled() else {
+            installError = CommandLineTool.InstallError.notBundled.localizedDescription
+            return
+        }
+        let suggested = CommandLineTool.suggestedFolder
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.showsHiddenFiles = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Install Here"
+        panel.message = "Choose the folder for the tasks command: normally \(suggested.path.replacingOccurrences(of: CommandLineTool.home.path, with: "~")). Create it with New Folder when it is not there yet."
+        let manager = FileManager.default
+        panel.directoryURL = [suggested, suggested.deletingLastPathComponent(), CommandLineTool.home]
+            .first { manager.fileExists(atPath: $0.path) }
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        let scoped = folder.startAccessingSecurityScopedResource()
+        defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
+        do {
+            installedLink = try CommandLineTool.install(tool, into: folder)
+        } catch {
+            installError = error.localizedDescription
         }
     }
 
