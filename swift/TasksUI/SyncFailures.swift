@@ -26,7 +26,12 @@ struct SyncFailureRow: View {
                     Text(item.message)
                     Text(item.path).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     if let note = item.note {
-                        Text(note).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        // Not fixed to its full height: a window measures how small its content
+                        // can be by offering it no width, and a fixed note then wraps after every
+                        // character. Under the Mac board a long one claimed some 2,500 pt; the
+                        // window's content overflowed the window and the sidebar showed empty
+                        // (GITKITTIE-121). It wraps to its full height anyway wherever it has a width.
+                        Text(note).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }

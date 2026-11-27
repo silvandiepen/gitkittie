@@ -37,3 +37,6 @@ jobs:
         run: xcodegen generate
       - name: Build without signing
         run: xcodebuild -project GitKanban.xcodeproj -scheme GitKanban -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
+      # The window hosted offscreen (apps/gitkanban-macos/Tests): no app is launched.
+      - name: Test
+        run: xcodebuild -project GitKanban.xcodeproj -scheme GitKanban -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO test

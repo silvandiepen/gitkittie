@@ -107,3 +107,43 @@ targets:
               - public.heic
               - public.tiff
               - public.image
+
+  # The real window (RootView and everything it shows) hosted offscreen against a real
+  # folder board. The app's sources are built into the bundle, so the tests run without
+  # launching the app or showing a window.
+  GitKanbanTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: GitKanban
+        excludes:
+          - Info.plist
+          - GitKanban.entitlements
+      - path: ../../swift/TasksUI
+      - path: ../../swift/GitKittieUI
+      - path: Tests
+    dependencies:
+      - package: GitKittieKit
+        product: AppStoreUpdates
+      - package: GitKanbanKit
+        product: GitKanbanKit
+      - package: GitKittieKit
+        product: GitKittieKit
+      - package: git-pont
+        product: GitPontCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.hakobs.gitkanban.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
+
+schemes:
+  GitKanban:
+    build:
+      targets:
+        GitKanban: all
+        GitKanbanTests: [test]
+    test:
+      targets:
+        - GitKanbanTests
