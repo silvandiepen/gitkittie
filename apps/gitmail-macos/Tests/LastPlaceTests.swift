@@ -122,6 +122,37 @@ final class LastPlaceTests: XCTestCase {
         XCTAssertNil(second.browser.selectedRowID)
     }
 
+    /// Left on a conversation older than the list's first page (GKM-112): the list loads pages
+    /// up to it and selects its row, as a notification does (GKM-085). On iPhone the reader is
+    /// pushed by the list's selection; without a row the app opened on the list.
+    func testAConversationBelowTheFirstPageComesBackSelected() async throws {
+        try await seed()
+        let store = try await MailStore.open(locations)
+        for index in 0..<MailBrowser.pageSize {
+            try await store.ingest(eml(subject: "Note \(index)", date: "Wed, 25 Nov 2026 \(String(format: "%02d:%02d", index / 60, index % 60)):00 +0000",
+                                       id: "note-\(index)@example.org"), account: home)
+        }
+        let first = await reopened()
+        await first.select(.allMail)
+        XCTAssertFalse(first.browser.rows.contains { $0.latest.subject == "Dinner on Friday" }, "the first page leaves it out")
+        while first.browser.canLoadMore, !first.browser.rows.contains(where: { $0.latest.subject == "Dinner on Friday" }) {
+            await first.browser.loadMore()
+        }
+        let row = try XCTUnwrap(first.browser.rows.first { $0.latest.subject == "Dinner on Friday" })
+        await first.browser.select(row.id)
+        XCTAssertEqual(LastPlace.load(deviceFolder: locations.deviceFolder)?.threadID, row.threadID)
+
+        let second = await reopened()
+        XCTAssertEqual(second.selection, .allMail)
+        XCTAssertEqual(second.browser.openThread?.id, row.threadID, "the conversation that was open")
+        XCTAssertEqual(second.browser.selectedRowID, row.id, "selected in the list")
+
+        // A refresh of the list (a sync, a change) keeps the row, the selection and the conversation.
+        await second.browser.reload()
+        XCTAssertEqual(second.browser.selectedRowID, row.id)
+        XCTAssertEqual(second.browser.openThread?.id, row.threadID)
+    }
+
     func testAnUnreadableFileOpensInFocused() async throws {
         try await seed()
         let url = LastPlace.url(deviceFolder: locations.deviceFolder)
