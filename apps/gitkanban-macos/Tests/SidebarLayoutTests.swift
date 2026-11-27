@@ -160,11 +160,16 @@ final class SidebarLayoutTests: XCTestCase {
     // MARK: The window
 
     /// The app's window content (`GitKanbanApp`) in a window that is never ordered in, made
-    /// the way SwiftUI makes a `WindowGroup` window: content under the title bar
-    /// (`.fullSizeContentView`) and a unified toolbar. Without them macOS 15 refuses the
-    /// sidebar-tracking separator SwiftUI puts in the toolbar for a `NavigationSplitView`
-    /// ("Cannot register more than one NSTrackingSeparatorToolbarItem that tracks the same
-    /// divider") and the test process dies.
+    /// the way SwiftUI makes a `WindowGroup` window: the hosting view is the content view, the
+    /// content runs under the title bar (`.fullSizeContentView`) and the toolbar is unified.
+    /// The hosting view hands the split view's toolbar to the window, as in the app; without
+    /// that toolbar the overflow does not show at all (checked: with `sceneBridgingOptions`
+    /// `[]` or `[.title]`, or the hosting view inside another view, these tests pass without
+    /// the fix).
+    ///
+    /// macOS 15 refuses that toolbar on a window AppKit made rather than SwiftUI ("Cannot
+    /// register more than one NSTrackingSeparatorToolbarItem that tracks the same divider") and
+    /// kills the test process, so these tests run on macOS 26 (CI: `macos-26`).
     private func host(_ model: AppModel, size: NSSize) -> NSWindow {
         let view = NSHostingView(rootView: RootView()
             .environment(model)
