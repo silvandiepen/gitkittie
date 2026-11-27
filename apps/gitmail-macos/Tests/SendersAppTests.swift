@@ -182,7 +182,7 @@ final class SendersAppTests: XCTestCase {
         XCTAssertEqual(VerdictText.summary(try XCTUnwrap(verdict)), "Muted by your rule for this sender. Still in All Mail.")
     }
 
-    func testARuleArchivesAtTheProviderOnlyWhenAskedAndThroughTheJournal() async throws {
+    func testARuleArchivesAtTheProviderOnlyWhenAskedWithActiveModeOnAndThroughTheJournal() async throws {
         let (receipts, offers) = try await seedShop()
         let model = await openModel()
         let store = try XCTUnwrap(model.mailStore)
@@ -192,12 +192,24 @@ final class SendersAppTests: XCTestCase {
         var queued = try await store.actionStatus(account: home).pending
         XCTAssertEqual(queued, 0, "without asking, nothing moves at the provider")
 
+        // Asked, but active organisation is off for the account (GKM-031, MAIL-116): still nothing.
         let rule = try XCTUnwrap(model.senders.rules.first)
         await model.senders.proposeArchiveAtProvider(true, rule: rule)
         await model.senders.apply()
         await model.senders.lastProviderArchive?.value
         queued = try await store.actionStatus(account: home).pending
+        XCTAssertEqual(queued, 0, "virtual until active mode is on for the account")
+
+        // With active mode on, applying the rule again archives through the journal.
+        await model.organisation.setActive(true, account: home)
+        await model.senders.proposeEnabled(false, rule: try XCTUnwrap(model.senders.rules.first))
+        await model.senders.apply()
+        await model.senders.proposeEnabled(true, rule: try XCTUnwrap(model.senders.rules.first))
+        await model.senders.apply()
+        await model.senders.lastProviderArchive?.value
+        queued = try await store.actionStatus(account: home).pending
         XCTAssertEqual(queued, 2, "the two older offers are archived through the journal; the newest stays")
+        XCTAssertEqual(model.organisation.audit.first?.count, 2, "and the archive is in the History")
         for offer in offers.prefix(2) {
             let boxes = try await store.effectiveMailboxes(of: offer)
             XCTAssertEqual(boxes, ["Archive"])

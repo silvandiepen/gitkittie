@@ -189,12 +189,23 @@ private struct RuleRow: View {
                 .accessibilityLabel("Rule options")
             }
             if rule.action.canArchiveAtProvider {
+                let active = model.organisation.isActive(rule.account)
                 Toggle("Also archive at your mail provider", isOn: Binding(
                     get: { rule.archiveAtProvider },
                     set: { on in Task { await model.senders.proposeArchiveAtProvider(on, rule: rule) } }))
                     .toggleStyle(.checkbox)
                     .font(.callout)
+                    // Active organisation (GKM-031): only with active mode on for the account;
+                    // a rule already set can always be turned back.
+                    .disabled(!active && !rule.archiveAtProvider)
                     .help("Off: mail stays where it is at your provider and only this app hides it.")
+                if !active {
+                    Text(rule.archiveAtProvider
+                         ? "Paused: active organisation is off for this account, so mail stays where it is at your provider. Turn it on in Settings ▸ Organisation."
+                         : "To archive at your provider, turn on active organisation for this account in Settings ▸ Organisation.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             if !rule.excluded.isEmpty {
                 Text(rule.excluded.count == 1 ? "1 message kept out of this rule" : "\(rule.excluded.count) messages kept out of this rule")

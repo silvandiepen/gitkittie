@@ -95,6 +95,8 @@ final class AppModel {
     let senders: SendersModel
     /// The cleanup dashboard: analysis and batch previews (GKM-021).
     let cleanup: CleanupModel
+    /// Active organisation and retention: active mode per account, policies, the history (GKM-031).
+    let organisation: OrganisationModel
 
     /// The message the reader is focused on (the newest expanded one in the open thread):
     /// what Reply, Reply All and Forward answer.
@@ -158,6 +160,8 @@ final class AppModel {
         self.cleanup = CleanupModel(actions: actions, browser: browser)
         self.attention = MailAttention(poster: notifications)
         self.senders = SendersModel(actions: actions, browser: browser, unsubscribe: UnsubscribeModel())
+        self.organisation = OrganisationModel(actions: actions, sync: sync)
+        senders.organisation = organisation
         sync.onStoreChanged = { [weak self] in await self?.refreshAfterSync() }
         browser.onActionsQueued = { [weak self] accounts in await self?.sync.actionsQueued(for: accounts) }
         browser.onMessagesOpened = { [weak self] ids in await self?.senders.recordOpen(ids) }
@@ -208,6 +212,7 @@ final class AppModel {
             spaces.attach(opened)
             library.attach(opened, browser: browser)
             await senders.attach(opened)
+            await organisation.attach(opened)
             // Back where the window was left (MAIL-107); `reload` falls back to Focused when
             // that view is gone, and the conversation opens again only if the view still has it.
             restoringPlace = true
@@ -408,6 +413,7 @@ final class AppModel {
         await browser.reload()
         await attention.refresh(accounts: accounts, arrivals: .notify)
         await senders.afterSync()
+        await organisation.afterSync()
     }
 
     /// After an action, its Undo or Redo: the category counts, the badge and the spaces' counts

@@ -26,6 +26,9 @@ public struct CleanupGroupID: Hashable, Sendable, Codable {
         case digest(stream: String, pattern: String)
         /// Messages whose attachments together reach the large-message size.
         case largeMessages
+        /// Mail of one category older than a number of days: what a retention policy acts on
+        /// (GKM-031, MAIL-115). Protected mail stays, as in every group.
+        case olderThan(category: MailCategory, days: Int)
     }
 
     public var account: MailAccountID

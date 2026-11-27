@@ -352,6 +352,14 @@ final class MailActions {
         await onMailChanged?()
     }
 
+    /// Journal rows written elsewhere without a step in Edit ▸ Undo (active organisation,
+    /// GKM-031: undone from its history instead): sent and shown like any action.
+    func didWrite(accounts: [MailAccountID]) async {
+        await browser.reload(keepingPlace: true)
+        await sync.actionsQueued(for: accounts)
+        await onMailChanged?()
+    }
+
     /// Writes changes a sender rule decided (GKM-072) as one journal batch, sends and shows
     /// them like any action, without an Undo of its own: the rule's Undo covers it, and a move
     /// of newly arrived mail is the rule's doing, not a step of yours.

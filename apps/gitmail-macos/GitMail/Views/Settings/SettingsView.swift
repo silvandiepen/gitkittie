@@ -20,6 +20,9 @@ struct SettingsView: View {
             StorageSettingsTab()
                 .tabItem { Label("Storage", systemImage: "internaldrive") }
                 .tag(SettingsTab.storage)
+            OrganisationSettingsTab()
+                .tabItem { Label("Organisation", systemImage: "tray.2") }
+                .tag(SettingsTab.organisation)
         }
         .scenePadding()
         .frame(width: 780)

@@ -4,7 +4,7 @@ import SwiftUI
 
 /// The tabs of Mail ▸ Settings… (GKM-066).
 enum SettingsTab: String, Hashable, CaseIterable {
-    case general, accounts, notifications, storage
+    case general, accounts, notifications, storage, organisation
 }
 
 /// Which tab the Settings window shows, and which account: the sidebar's buttons and menus set
