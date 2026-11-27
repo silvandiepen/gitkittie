@@ -245,7 +245,10 @@ engine). A newer version this device can install shows a quiet "Update available
 - The store country is the device locale's region; Apple's `Storefront` gives a three-letter code
   the lookup does not take.
 - Only a copy the App Store installed asks: `AppTransaction` must be verified and from the
-  production environment, so debug builds, TestFlight and local builds stay quiet.
+  production environment, so debug builds, TestFlight and local builds stay quiet. StoreKit is
+  only asked when the bundle holds a non-empty production receipt (`AppDistribution.receipt(at:)`):
+  asked without one, it fetches the receipt from the store, and on a Mac that shows "Sign in to
+  your Apple Account" at launch (GITKITTIE-110, a team-signed Release build of Tasks).
 - Offline or an unreadable answer is silent and is not counted as a check; an app not in the store
   (Mail, Bud today) gets no offer.
 
