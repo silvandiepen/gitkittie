@@ -228,7 +228,7 @@ final class MailFlowUITests: XCTestCase {
             break
         }
         for finding in found {
-            if let reason = AccessibilityAuditPolicy.skipReason(finding, in: app) {
+            if let reason = AccessibilityAuditPolicy.skipReason(finding, among: found, in: app) {
                 print("audit [\(screen)] skipped (\(reason)): \(finding.description)")
             } else {
                 auditFindings.append("[\(screen)] \(finding.description)")
