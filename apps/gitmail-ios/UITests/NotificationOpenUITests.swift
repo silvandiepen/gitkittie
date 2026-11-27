@@ -69,6 +69,50 @@ final class NotificationOpenUITests: XCTestCase {
         }
     }
 
+    /// Left on a conversation older than the list's first page, the app opens on it again
+    /// (GKM-112): reopening loads the list's pages up to its row and selects it, which is what
+    /// pushes the reader on iPhone. The conversation is opened by a notification's tap, the one
+    /// way here to open a row the list hasn't loaded, then the app is quit and launched again.
+    func testAConversationBelowTheFirstPageIsOpenAfterARelaunch() async throws {
+        let server = try await LocalMailServer.require()
+        let user = try await server.makeUser()
+        try await server.append(["The garden plan"], for: user, dates: ["Fri, 20 Nov 2026 09:00:00 +0000"])
+        try await server.append((1...200).map { "Note \($0)" }, for: user)
+
+        // One store for both launches.
+        let arguments = ["-uiTestFreshStore", "-uiTestStoreName", "reopen-\(UUID().uuidString)"]
+        app = XCUIApplication()
+        app.launchArguments = arguments
+        app.launchEnvironment["GKM_TEST_CA_PEM_BASE64"] = server.caPEM.base64EncodedString()
+        app.launchEnvironment["GKM_UITEST_NOTIFICATION_SUBJECT"] = "The garden plan"
+        app.launch()
+        AddAccountForm(app: app, test: self).add(user, on: server)
+
+        openMailbox("Inbox")
+        let rows = app.descendants(matching: .any).matching(identifier: "messageRow")
+        XCTAssertTrue(rows.containing(NSPredicate(format: "label CONTAINS 'Note '")).firstMatch.waitForExistence(timeout: 60),
+                      "the inbox fills")
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                             CFNotificationName("app.hakobs.gitmail.uitest.notificationTapped" as CFString),
+                                             nil, nil, true)
+        let garden = app.staticTexts.matching(identifier: "threadSubject")
+            .matching(NSPredicate(format: "label == %@", "The garden plan")).firstMatch
+        XCTAssertTrue(garden.waitForExistence(timeout: 15), "the tapped notification opens it")
+        app.terminate()
+
+        app.launch()
+        let reopened = garden.waitForExistence(timeout: 20)
+        snapshot("reopen-1-relaunched")
+        XCTAssertTrue(reopened, "the conversation the app was left on is open again")
+
+        // Back from it shows the list.
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(garden.waitForNonExistence(timeout: 10), "Back shows the list")
+            XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10))
+        }
+    }
+
     // MARK: Helpers
 
     /// On iPhone the mailboxes are a pushed column; on iPad they are on screen.
