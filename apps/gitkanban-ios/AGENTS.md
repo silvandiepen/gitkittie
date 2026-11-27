@@ -26,6 +26,9 @@ when that folder exists. Reviewer writes are compare-and-swap so an agent's conc
 Both apps have review screens (`GitKanban/Review/`). Select in a request's ⋯ menu shows its files as a grid to decide or
 comment on several at once, in one write (`AppModel.decide(_:itemIDs:status:)`, `comment(_:itemIDs:text:)`); approving two options
 of a pick-one group is refused. `UITests/ReviewSelectUITests` needs `scripts/seed-select-fixture.sh <simulator-udid>` first.
+A request shows through one filter (Waiting / Answered / All, in the ⋯ menu; Decision 15 in the Mac app's `docs/Decisions.md`),
+its notes open from the header as formatted Markdown, and ⏩ goes to the next page still waiting. `UITests/ReviewLongRequestUITests`
+needs `scripts/seed-long-review-fixture.sh <simulator-udid>` first (`--from <folder>` adds real requests to look at).
 The home-screen name is **Tasks** (GITKITTIE-013 tracks the rest of the rename).
 
 ## Share extension and shared storage
@@ -110,3 +113,7 @@ request per card.
 - Never present planned work as done; never fabricate concrete APIs. Where the plan is silent, write
   **Open**. Record any judgment call in [`docs/Decisions.md`](./docs/Decisions.md).
 - Do not modify code or other apps' files from this directory.
+
+## New task from another app
+
+`gitkittie-tasks://new?title=…&body=…` (`CFBundleURLTypes` in `project.yml`; the Mac gets it in `TasksAppDelegate.application(_:open:)`, iOS in `onOpenURL`) fills in the new-task sheet: `NewTaskRequest` and `AppModel.openTaskRequest` in GitKanbanKit (`AppModel+TaskRequests.swift`), the same path as ⌘N and opened images (open board's first open lane, else the board chooser; waits for `restore()` on a cold launch; joins a sheet that is up without replacing typed text). It never saves by itself: any app or page can open a URL. GitKittie Mail's Make Task sends it (GKM-033, MAIL-133); a card's `gitkittie-mail:` link opens the message (`RichMarkdownEditor` allows that scheme). Tests: `TaskRequestTests`.

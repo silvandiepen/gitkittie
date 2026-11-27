@@ -38,10 +38,11 @@ struct AuditFinding {
 /// reason written here. Everything else fails the test.
 @MainActor
 enum AccessibilityAuditPolicy {
-    /// The reason a finding is skipped, or nil when it counts.
-    static func skipReason(_ finding: AuditFinding, in app: XCUIApplication) -> String? {
+    /// The reason a finding is skipped, or nil when it counts. `screen` is everything the same
+    /// audit found on that screen, for the one rule that looks at the whole screen (GKM-111).
+    static func skipReason(_ finding: AuditFinding, among screen: [AuditFinding], in app: XCUIApplication) -> String? {
         if finding.type == .dynamicType {
-            return DynamicTypeAllowlist.skipReason(finding, in: app)
+            return DynamicTypeAllowlist.skipReason(finding, among: screen, in: app)
         }
         // A few reports name no element (elementDetection "Potentially inaccessible text",
         // textClipped on the list): there is nothing to check them against but the screenshot,
@@ -215,8 +216,9 @@ enum DynamicTypeAllowlist {
 
     static let unsupported = "Dynamic Type font sizes are unsupported"
 
-    static func skipReason(_ finding: AuditFinding, in app: XCUIApplication) -> String? {
+    static func skipReason(_ finding: AuditFinding, among screen: [AuditFinding], in app: XCUIApplication) -> String? {
         guard let element = finding.element else {
+            if let reason = formEdgeReason(finding, among: screen, in: app) { return reason }
             // The one finding without an element (GKM-083): "unsupported", on the iPad's Add
             // Account sheet, only while the form is scrolled down to the servers; 3 of 3 audits
             // then, none at the top or on iPhone. Bisected on iPad Pro 13-inch (M5), iOS 26.2: it
@@ -231,5 +233,35 @@ enum DynamicTypeAllowlist {
         }
         guard finding.summary == partially else { return nil }
         return containers.first { $0.contains(element, app) }.map { "\($0.name): \($0.reason)" }
+    }
+
+    /// An element-less "partially unsupported" on a Form screen (GKM-111, Sil's decision
+    /// 2026-11-27). The audit reports any Form or List text that a larger text size would push
+    /// below the screen as "partially unsupported"; whether that report names its element depends
+    /// only on what happens to sit at the bottom edge. Three passes of bisecting found no view
+    /// that causes it: it stays with the footer hidden from accessibility, as a fixed literal,
+    /// split, or with the rows around it changed (GKM-111 card). So it is skipped only when:
+    /// - the screen shows a Form or List, and
+    /// - every Dynamic Type finding on the same screen that does name an element is one the
+    ///   containers above already skip (Form or List text, or the system bar's own buttons such
+    ///   as Settings' Done, which is always there).
+    /// "Unsupported" (a fixed size) without an element, and anything else on such a screen, fails.
+    /// Why the last element-less finding was not skipped by `formEdgeReason`, for the failure message.
+    static var lastMiss: String?
+
+    static func formEdgeReason(_ finding: AuditFinding, among screen: [AuditFinding], in app: XCUIApplication) -> String? {
+        guard finding.summary == partially else { return nil }
+        let window = app.windows.firstMatch.frame
+        let forms = app.collectionViews.allElementsBoundByIndex.filter { $0.frame.intersects(window) }
+        let named = screen.filter { $0.type == .dynamicType && $0.element != nil }
+        let unaccepted = named.filter { finding in
+            !(finding.summary == partially && containers.contains { $0.contains(finding.element!, app) })
+        }
+        guard !forms.isEmpty, unaccepted.isEmpty else {
+            // Kept for the failure message, so a miss can be traced from the CI log (GKM-111).
+            lastMiss = "not skipped: window \(window), forms \(forms.map(\.frame)), named not accepted: \(unaccepted.map(\.description))"
+            return nil
+        }
+        return "names no element: on a Form or List, and every named finding on this screen is one the policy skips (GKM-111)"
     }
 }

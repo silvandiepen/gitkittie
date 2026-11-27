@@ -70,6 +70,10 @@ private struct StorageSection: View {
     @Environment(AppModel.self) private var model
     @Environment(MobileSession.self) private var session
 
+    // Each choice is its own section, with a short footer that explains just that choice (GKM-111).
+    // One footer of six sentences (158 pt on an iPhone) often ran past the bottom of the screen;
+    // the audit's "partially unsupported" on Form text is only skipped for text wholly inside the
+    // list (AccessibilityAuditPolicy), so that footer failed wherever it landed across the edge.
     var body: some View {
         Section {
             Picker("Download mail from", selection: window) {
@@ -81,37 +85,53 @@ private struct StorageSection: View {
                 LabeledContent("Not downloaded", value: "\(session.olderNotDownloaded.formatted()) older messages")
                 Button("Download Older Mail") { Task { await session.downloadOlderMail() } }
             }
+        } header: {
+            Text("Storage")
+        } footer: {
+            Text("New mail always comes in.\(windowText)")
+        }
+        Section {
             Picker("Older mail", selection: history) {
                 ForEach(StorageBudget.historyChoices, id: \.self) { choice in
                     Text(choice.map { "Up to " + bytes($0) } ?? "All of it").tag(choice)
                 }
             }
+        } footer: {
+            Text("Older mail is downloaded newest first, up to the limit, per account.")
+        }
+        Section {
             Toggle("Download Attachments Only When Opened", isOn: attachmentsWhenOpened)
+        } footer: {
+            Text(attachmentText)
+        }
+        Section {
             Picker("Cache", selection: cache) {
                 // A size chosen before these choices (200 MB) stays listed.
                 ForEach(Set(StorageBudget.cacheChoices + [session.budget.cacheBytes]).sorted(), id: \.self) { value in
                     Text(bytes(value)).tag(value)
                 }
             }
+        } footer: {
+            Text("Opened attachments and previews are kept in a cache that is never backed up and is trimmed to its size; pinned attachments stay.")
+        }
+        Section {
             if let notice = session.storageNotice {
                 NoticeLine(systemImage: "externaldrive.badge.exclamationmark", tint: .orange, text: notice)
             }
             LabeledContent("Messages", value: model.totalCount.formatted())
-        } header: {
-            Text("Storage")
         } footer: {
-            Text("New mail always comes in.\(windowText) Older mail is downloaded newest first, up to the limit, per account.\(attachmentText) Opened attachments and previews are kept in a cache that is never backed up and is trimmed to its size; pinned attachments stay. Below \(bytes(session.budget.minimumFreeBytes)) free, Mail stops downloading until there is room; it never deletes mail to make room. Your messages are files in Files ▸ On My \(DeviceWords.model) ▸ Mail ▸ Mail.")
+            Text("Below \(bytes(session.budget.minimumFreeBytes)) free, Mail stops downloading until there is room; it never deletes mail to make room. Your messages are files in Files ▸ On My \(DeviceWords.model) ▸ Mail ▸ Mail.")
         }
     }
 
-    /// What the attachment choice means, for the footer.
+    /// What the attachment choice means, for its footer.
     private var attachmentText: String {
         session.budget.attachmentsWhenOpened
-            ? " Attachments stay at the provider until you open them."
-            : " Attachments over 1 MB stay at the provider until you open them."
+            ? "Attachments stay at the provider until you open them."
+            : "Attachments over 1 MB stay at the provider until you open them."
     }
 
-    /// What the window means, in words, for the footer.
+    /// What the window means, in words, for its footer.
     private var windowText: String {
         guard let days = session.budget.historyWindow else { return "" }
         return " Mail received more than \(days == 365 ? "a year" : "\(days) days") ago stays at the provider until you download it."

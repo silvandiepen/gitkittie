@@ -93,6 +93,12 @@ targets:
       properties:
         CFBundleDisplayName: Mail
         CFBundleName: Mail
+        # `gitkittie-mail://message/<account>/<key>` opens that message: the stable link a
+        # Tasks card made with Make Task carries back (GKM-033, MAIL-131).
+        CFBundleURLTypes:
+          - CFBundleURLName: app.hakobs.gitmail.message
+            CFBundleURLSchemes:
+              - gitkittie-mail
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSRequiresIPhoneOS: true

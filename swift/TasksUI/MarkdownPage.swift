@@ -7,7 +7,7 @@ import UIKit
 #endif
 
 /// Markdown as a page: headings, paragraphs, code blocks with a copy button, note boxes,
-/// lists whose checkboxes can be ticked, tables. Shared by the Mac and iPhone apps.
+/// lists whose checkboxes can be ticked, tables and pictures. Shared by the Mac and iPhone apps.
 struct MarkdownPage: View {
     let markdown: String
     /// Called with a checkbox's number when it is ticked or unticked; nil shows them read-only.
@@ -17,21 +17,57 @@ struct MarkdownPage: View {
         let blocks = MarkdownBlocks.parse(markdown)
         VStack(alignment: .leading, spacing: 14) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                view(for: block)
+                MarkdownBlockView(block: block, onToggle: onToggle)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder private func view(for block: MarkdownBlocks.Block) -> some View {
+    /// A block's text with its inline marks (bold, code, links) styled.
+    static func inline(_ text: String) -> AttributedString {
+        var styled = MarkdownBlocks.inline(text)
+        for run in styled.runs where run.link != nil {
+            styled[run.range].underlineStyle = .single
+        }
+        return styled
+    }
+}
+
+/// Loads a picture a Markdown text points at (its path as written), for the pictures in it.
+/// Without one, a picture shows as its description.
+struct MarkdownImageLoader {
+    let load: @MainActor (String) async -> PlatformImage?
+    /// A picture that is decoded already, to draw without a placeholder.
+    var cached: @MainActor (String) -> PlatformImage? = { _ in nil }
+}
+
+private struct MarkdownImageLoaderKey: EnvironmentKey {
+    static let defaultValue: MarkdownImageLoader? = nil
+}
+
+extension EnvironmentValues {
+    var markdownImageLoader: MarkdownImageLoader? {
+        get { self[MarkdownImageLoaderKey.self] }
+        set { self[MarkdownImageLoaderKey.self] = newValue }
+    }
+}
+
+/// One block of a Markdown page. A long text is drawn block by block in a lazy stack, so
+/// only what is on screen is laid out.
+struct MarkdownBlockView: View {
+    let block: MarkdownBlocks.Block
+    var onToggle: ((Int) -> Void)?
+
+    var body: some View {
         switch block {
         case .heading(let level, let text):
-            Text(Self.inline(text))
+            Text(MarkdownPage.inline(text))
                 .font(level <= 1 ? .title.weight(.bold) : level == 2 ? .title2.weight(.bold) : level == 3 ? .title3.weight(.semibold) : .headline)
                 .padding(.top, level <= 2 ? 8 : 2)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
         case .paragraph(let text):
-            Text(Self.inline(text)).font(.body).lineSpacing(3)
+            Text(MarkdownPage.inline(text)).font(.body).lineSpacing(3)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         case .code(let language, let text):
@@ -41,11 +77,13 @@ struct MarkdownPage: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in row(item) }
             }
         case .quote(let kind, let text):
-            NoteBox(kind: kind, text: Self.inline(text))
+            NoteBox(kind: kind, text: MarkdownPage.inline(text))
         case .table(let header, let rows):
             table(header, rows)
         case .rule:
             Divider().padding(.vertical, 4)
+        case .images(let images):
+            MarkdownImages(images: images)
         }
     }
 
@@ -68,7 +106,7 @@ struct MarkdownPage: View {
             } else {
                 Text("•").font(.body).foregroundStyle(.secondary)
             }
-            Text(Self.inline(item.text)).font(.body)
+            Text(MarkdownPage.inline(item.text)).font(.body)
                 .strikethrough(item.checked == true)
                 .foregroundStyle(item.checked == true ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                 .textSelection(.enabled)
@@ -81,14 +119,14 @@ struct MarkdownPage: View {
         Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
             GridRow {
                 ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
-                    Text(Self.inline(cell)).font(.callout.weight(.semibold))
+                    Text(MarkdownPage.inline(cell)).font(.callout.weight(.semibold))
                 }
             }
             Divider()
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 GridRow {
                     ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                        Text(Self.inline(cell)).font(.callout).textSelection(.enabled)
+                        Text(MarkdownPage.inline(cell)).font(.callout).textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -98,15 +136,58 @@ struct MarkdownPage: View {
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.12)))
     }
+}
 
-    /// A block's text with its inline marks (bold, code, links) styled.
-    static func inline(_ text: String) -> AttributedString {
-        var styled = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(text)
-        for run in styled.runs where run.link != nil {
-            styled[run.range].underlineStyle = .single
+/// Pictures on lines of their own, in a grid of equal heights. Each keeps its place while
+/// it loads, so nothing below it moves. Loaded through the environment's `markdownImageLoader`.
+private struct MarkdownImages: View {
+    let images: [MarkdownBlocks.Image]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200, maximum: 560), spacing: 12, alignment: .topLeading)],
+                  alignment: .leading, spacing: 12) {
+            ForEach(Array(images.enumerated()), id: \.offset) { _, image in
+                MarkdownPicture(image: image)
+            }
         }
-        return styled
+    }
+}
+
+private struct MarkdownPicture: View {
+    @Environment(\.markdownImageLoader) private var loader
+    let image: MarkdownBlocks.Image
+    @State private var loaded: PlatformImage?
+    @State private var failed = false
+
+    var body: some View {
+        let shown = loaded ?? loader?.cached(image.source)
+        VStack(alignment: .leading, spacing: 4) {
+            Group {
+                if let shown {
+                    Image(platformImage: shown).resizable().scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .accessibilityLabel(image.alt.isEmpty ? "Picture" : image.alt)
+                } else if loader == nil || failed {
+                    Label(image.alt.isEmpty ? image.source : image.alt, systemImage: "photo")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                } else {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 220)
+            if !image.alt.isEmpty {
+                Text(image.alt).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+        }
+        .task(id: image.source) {
+            guard loaded == nil, let loader else { return }
+            if let picture = await loader.load(image.source) { loaded = picture } else { failed = true }
+        }
     }
 }
 

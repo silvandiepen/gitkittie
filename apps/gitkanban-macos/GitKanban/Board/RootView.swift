@@ -524,14 +524,19 @@ private struct WorkspaceSplit: View {
                 }
             }
             .toolbar {
-                // The app's name sits where a window title would, above the sidebar.
-                ToolbarItem(placement: .automatic) {
-                    HStack(spacing: 7) {
-                        TasksMark(animated: false).frame(width: 18, height: 18).foregroundStyle(.primary)
-                        Text("Tasks").font(.headline)
+                // The app's name sits where a window title would, above the sidebar. Only
+                // while the sidebar shows: a folded sidebar moves its toolbar items into an
+                // overflow button at the right of the window, which then offered a single
+                // disabled "Tasks" item (GITKITTIE-112).
+                if columnVisibility != .detailOnly {
+                    ToolbarItem(placement: .automatic) {
+                        HStack(spacing: 7) {
+                            TasksMark(animated: false).frame(width: 18, height: 18).foregroundStyle(.primary)
+                            Text("Tasks").font(.headline)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Tasks")
                     }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Tasks")
                 }
             }
         } detail: {

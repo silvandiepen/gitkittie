@@ -87,6 +87,8 @@ final class AppModel {
     let library = AttachmentLibraryModel()
     /// What the last export did, for a notice; cleared when shown (GKM-023).
     var exportReport: ExportReport?
+    /// The encrypted archive being written or restored, and its recovery key while it is shown (GKM-032).
+    let encryptedArchive = EncryptedArchiveModel()
     /// Everyday actions with Undo, sent through each account's action journal (GKM-015).
     let actions: MailActions
     /// Senders and lists, their rules, and unsubscribe (GKM-019, GKM-020; Models/Senders).
@@ -113,10 +115,12 @@ final class AppModel {
     /// Where "See All Mail from…" was opened from, to go back to.
     private(set) var senderReturn: SidebarSelection?
 
-    /// A notification that was opened before the store was (GKM-037): shown once it is.
-    @ObservationIgnored private var pendingNotification: MailMessageID?
-    /// Counts the conversations opened from a notification, so the iPhone can show the reader.
-    private(set) var notificationOpens = 0
+    /// A notification or a message link opened before the store was (GKM-037, GKM-033): shown
+    /// once it is. The last one wins.
+    @ObservationIgnored var pendingOpen: PendingOpen?
+    /// Counts the conversations opened from a notification or a message link, so the iPhone
+    /// can show the reader.
+    private(set) var externalOpens = 0
     /// Holds the notification centre's delegate, which it keeps only weakly.
     @ObservationIgnored var notificationResponder: AnyObject?
 
@@ -126,6 +130,9 @@ final class AppModel {
     @ObservationIgnored private var sendingFolder: URL?
 
     private let locations: StoreLocations?
+    /// The folders a mail folder's device state is placed beside (`MailFolderLocation`): the ones
+    /// this model was made with, else the app's standard ones.
+    func standardLocations() throws -> StoreLocations { try locations ?? StoreLocations.standard() }
     private var store: MailStore?
     private let extractor: (any AttachmentTextExtracting)?
     private var extraction: Task<Void, Never>?
@@ -234,9 +241,12 @@ final class AppModel {
             restoringPlace = false
             rememberPlace()
             phase = .ready
-            if let pending = pendingNotification {
-                pendingNotification = nil
-                await openFromNotification(pending)
+            if let pending = pendingOpen {
+                pendingOpen = nil
+                switch pending {
+                case .message(let id): await openFromNotification(id)
+                case .link(let link): await open(link)
+                }
             }
             await sync.start(accounts, store: opened)
             await registerForSending(accounts)
@@ -289,7 +299,7 @@ final class AppModel {
     /// the search cleared. Before the store is open, it waits for it.
     func openFromNotification(_ id: MailMessageID) async {
         guard phase == .ready, let store else {
-            pendingNotification = id
+            pendingOpen = .message(id)
             return
         }
         do {
@@ -303,7 +313,7 @@ final class AppModel {
                 await select(.category(home))
             }
             await browser.reveal(id, threadID: summary.threadID)
-            notificationOpens += 1
+            externalOpens += 1
         } catch {
             actionError = String(describing: error)
         }

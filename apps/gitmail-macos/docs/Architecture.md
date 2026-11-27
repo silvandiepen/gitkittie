@@ -52,7 +52,7 @@ Idempotent durable operations, record revisions, change tokens and tombstones. M
 
 **What exists for everyday actions (GKM-015).** Read, flag, move, archive, trash and delete-from-Trash apply in the store at once (`MailStore+Actions.swift`) as rows of the account's action journal in `state/<account-id>/sync.sqlite` (MAIL-034). The index shows the provider's state with the open rows laid over it, so a sync pass, an index rebuild or a UIDVALIDITY reset never undoes a change that has not reached the provider. `ActionReplayer` (MailSync) sends the journal over its own connection, kicked by every action and by every sync pass, backing off while offline; rows that cancel out (Undo before reconnecting) send nothing, flags go as one STORE per folder and value, moves as one MOVE per folder pair. Conflicts follow MAIL-035 (the provider wins; a message that left its folder is never brought back); archive and trash folders follow MAIL-036; Undo, and the CONDSTORE flag sync, MAIL-037. Verified against the real local server (`MailActionsIntegrationTests`): offline actions show at once, survive a sync, and reach the server once on reconnect; a replay stopped after the server acted does not act twice; COPY + UID EXPUNGE without MOVE; Undo before and after the server has it; delete permanently keeps the local file and Undo restores exactly one copy; a flag changed elsewhere is not overwritten; a message moved or deleted elsewhere is not brought back.
 
-Archive is third layer: preserved messages survive provider deletion. Local-only archives do not automatically appear elsewhere. Portable encrypted export first, encrypted archive sync or user-selected shared storage later, with integrity, key recovery, quota, deletion and restore tests. Distinguish provider deletion, archive deletion and cache eviction. Account disconnect offers keep/export or remove local files with consequences.
+Archive is third layer: preserved messages survive provider deletion. Local-only archives do not automatically appear elsewhere. Portable encrypted export first (built, GKM-032: Spaces and export, "Encrypted archive"); encrypted archive sync or user-selected shared storage later, with integrity, key recovery, quota, deletion and restore tests (not built: `ArchiveSync.md`, MAIL-130). Distinguish provider deletion, archive deletion and cache eviction. Account disconnect offers keep/export or remove local files with consequences.
 
 ## Sending and drafts
 
@@ -86,6 +86,35 @@ Rule fields that are absent are not checked; `color` is one of the Tasks board n
 *Attachment library* (`AttachmentLibrary.swift`, MAIL-045): every non-inline attachment across accounts from `message_blobs` (index schema 3), filtered by kind (media type or extension), file name, sender, date, account, space and size.
 
 *Export* (`MailStore+Export.swift`, MAIL-044): a message, conversations, a space or an account into a new folder the person picks, in the mail-folder layout, originals byte for byte. Tested by export → import into a fresh store → byte comparison, and by opening the export as a mail folder.
+
+**Encrypted archive (GKM-032, MAIL-128..130).** File ▸ Export Encrypted Archive… writes everything the person owns into one file, `<name>.gkmarchive`, that only its recovery key opens; File ▸ Restore Encrypted Archive… opens one into a new folder, "Restored Mail", that the store opens like any mail folder. Code: `ArchiveRecoveryKey.swift`, `EncryptedArchiveFormat.swift`, `MailStore+EncryptedArchive.swift` in MailStore; `swift/MailAppModel/Archive/EncryptedArchiveModel.swift`; Mac views in `GitMail/Views/Archive`.
+
+*What is in it.* The whole mail folder: originals byte for byte (each checked against the hash its Markdown recorded; a changed one is left out and reported, as export does), their Markdown, blobs, `account.json` with its servers but no password (passwords are only ever in the Keychain), spaces with their rules, drafts and `layout.json`. From the device folder, the person's own metadata: `metadata/classification.json` (rules and corrections), `metadata/sender-rules.json` and `metadata/unsubscribes.json`. Never device state: the index, sync state and mapping, the action journal, the outbox, caches, partial messages, pins and preferences. Partial messages are completed first where they can be, else left out and reported (GKM-036). The restored folder's index is rebuilt on open; its accounts meet their providers as a new device would and ask for their passwords.
+
+*Format 1* (CryptoKit only: AES-256-GCM, HKDF-SHA256, SHA-256):
+
+    "GKMARCH1"                    magic
+    UInt32 BE n, header (n bytes) JSON, not encrypted but authenticated by every record:
+        { "format": 1, "archive": <16 random bytes>, "created": "…Z", "cipher": "AES-256-GCM",
+          "chunkSize": 1048576,
+          "keys": [{ "kind": "recovery", "kdf": "HKDF-SHA256", "salt": <32 random bytes>,
+                     "wrapped": <AES-GCM(archive key) under HKDF(recovery key, salt)> }] }
+    record*                       UInt32 BE length (top bit: final record), then AES-GCM nonce ‖ ciphertext ‖ tag
+                                  over at most chunkSize plaintext bytes
+
+Each record is sealed with the archive key (256 random bits, new per archive) and authenticates "gkm-archive-v1 chunk", SHA-256 of the header bytes, its index and its final flag: a changed header, a changed, swapped, repeated or dropped record, a missing final record and bytes after it all fail. The key slot authenticates the archive id. The plaintext is a stream of entries: `"GKMP" 01`, then per file `'F'`, UInt16 path length, path, UInt64 size, the bytes, their SHA-256; then `'E'` and the number of files. Paths are `mail/<path in the mail folder>` or `device/metadata/<one of the three files>`. Writing and restoring stream: neither holds more than one record (1 MiB) and one read piece, whatever the mailbox's size. Writing reads the folder outside the store's actor, so sync and the window carry on; each file is read through one open handle, so a file replaced meanwhile is read whole, and one removed meanwhile is left out.
+
+*The recovery key* is 128 random bits, shown once as 28 Crockford base32 characters in seven groups of four (`7K2M-QX4R-…`), the last two a 10-bit check so a typo reads as a typo; typing ignores case, dashes and spaces, and reads O as 0 and I or L as 1. The sheet shows it with Copy Key and Save as Text File…; Done is enabled only when its last four characters are typed back; Delete Archive… removes the archive, which nothing can open without its key. The app keeps no copy.
+
+*Restore* checks the key against the slot, then decrypts and checks record by record and file by file into hidden folders beside the targets, and moves them into place only when the whole archive has checked out: a wrong key, a damaged or cut archive leaves nothing. A path with `..`, a hidden or empty segment, or outside `mail/` and the three metadata files is refused, as is the same path twice. The Mac restores into "Restored Mail" (or "Restored Mail 2"…) in a folder the person picks, with its device folder where `MailFolderLocation` will look for it, and offers Use Restored Mail, which switches mail folders as Use Another Mail Folder… does.
+
+*Tested* in `EncryptedArchiveTests` (MailStoreTests: round trip into a clean folder and the store opening it, with spaces, sender rules, classification rules and a correction; wrong key, typos, a flipped bit, swapped, dropped and repeated records, cut archives, a removed or added final mark, trailing bytes, a changed header, a newer format, unsafe paths and duplicates written with the real writer; nothing in the clear) and `EncryptedArchiveAppTests` (the key confirmed or the archive discarded, restore into a new folder with its own device state). Archive sync is not built: `ArchiveSync.md`.
+
+## Tasks and stable links
+
+**What exists (GKM-033; MAIL-131..133).** A message has a stable link, `gitkittie-mail://message/<account-id>/m-<sha256(Message-ID)>` (`f-<content fingerprint>` without a Message-ID), made and resolved by `MessageLink` in MailStore: the account's messages first, then every account, oldest match first. It is built from what the message carries, not from the local id, so it survives a rebuilt index, a fresh download and an account added again, and it reveals nothing about the message. Both apps open it like a notification (`AppModel.openLink`, waiting for the store when the link launched the app). **Make Task** builds `gitkittie-tasks://new?title=…&body=…` (`TaskHandoff` in MailAppModel): subject, who, the day and the link, never the text. Tasks (`NewTaskRequest` in GitKanbanKit) only fills in its new-task sheet from it.
+
+Not built yet: export of metadata to Git through GitPont (GKM-107) and read-only agent access per space or account (GKM-108); see MAIL-134 and ThreatModel §7 and §10.
 
 ## Background processing
 

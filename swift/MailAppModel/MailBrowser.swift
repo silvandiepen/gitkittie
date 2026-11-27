@@ -488,37 +488,42 @@ final class MailBrowser {
     /// when the list shows it, with that message expanded and read, as if it had been chosen.
     func reveal(_ message: MailMessageID, threadID: String) async {
         await loadRows(upTo: threadID)
+        await openSelecting(threadID, focus: message)
+    }
+
+    /// Opens a conversation again where the window was left (MAIL-107): only when the view
+    /// still holds it (not deleted, not moved out of it), selected in the list, its row loaded
+    /// like a notification's when it is below the first page (GKM-112). Opening it marks it
+    /// read, as choosing it does (MAIL-073, MAIL-108).
+    @discardableResult
+    func reopen(_ threadID: String) async -> Bool {
+        guard !isSearching, await loadRows(upTo: threadID) else { return false }
+        await openSelecting(threadID, focus: nil)
+        return openThread?.id == threadID
+    }
+
+    /// Selects the conversation's row when the list has it and opens the conversation.
+    private func openSelecting(_ threadID: String, focus: MailMessageID?) async {
         selectedRowID = rows.first { $0.threadID == threadID }?.id
-        await openThread(threadID, focus: message, rowID: selectedRowID)
+        await openThread(threadID, focus: focus, rowID: selectedRowID)
     }
 
     /// Loads pages of the list until it has the conversation's row, when the view holds it below
     /// the pages loaded so far (GKM-085). Without a row nothing is selected, and on iPhone the
-    /// reader is pushed by the list's selection: a notification for an older conversation opened
-    /// the list and not the conversation.
-    private func loadRows(upTo threadID: String) async {
-        guard let store, !isSearching, canLoadMore, !rows.contains(where: { $0.threadID == threadID }),
-              (try? await store.threadIDs(query))?.contains(threadID) == true else { return }
+    /// reader is pushed by the list's selection: a notification for an older conversation, or
+    /// the one the app was left on (GKM-112), opened the list and not the conversation.
+    /// Returns whether the view holds the conversation.
+    @discardableResult
+    private func loadRows(upTo threadID: String) async -> Bool {
+        guard !rows.contains(where: { $0.threadID == threadID }) else { return true }
+        guard let store, !isSearching, (try? await store.threadIDs(query))?.contains(threadID) == true else { return false }
         while canLoadMore, !rows.contains(where: { $0.threadID == threadID }) {
             let loaded = rows.count
             await loadMore()
             // The view changed meanwhile, or a page failed: stop rather than ask again.
-            if rows.count == loaded { return }
+            if rows.count == loaded { break }
         }
-    }
-
-    /// Opens a conversation again where the window was left (MAIL-107): only when the view
-    /// still holds it (not deleted, not moved out of it), selected in the list when its row is
-    /// loaded. Opening it marks it read, as choosing it does (MAIL-073, MAIL-108).
-    @discardableResult
-    func reopen(_ threadID: String) async -> Bool {
-        guard let store, !isSearching else { return false }
-        if !rows.contains(where: { $0.threadID == threadID }) {
-            guard (try? await store.threadIDs(query))?.contains(threadID) == true else { return false }
-        }
-        selectedRowID = rows.first { $0.threadID == threadID }?.id
-        await openThread(threadID, focus: nil, rowID: selectedRowID)
-        return openThread?.id == threadID
+        return true
     }
 
     private func open(_ row: ListRow) async {

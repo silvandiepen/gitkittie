@@ -39,6 +39,8 @@ struct GitKanbanApp: App {
                     print("AI-DIAG done")
                 }
                 #endif
+                // `gitkittie-tasks://new?…`: another app's Make Task (GitKittie Mail, GKM-033).
+                .onOpenURL { url in model.openTaskRequest(url) }
                 .tint(Theme.accent)
                 .preferredColorScheme(CaptureHooks.colorScheme ?? .dark)
                 .onChange(of: scenePhase) { _, phase in

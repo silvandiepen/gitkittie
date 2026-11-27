@@ -172,6 +172,9 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
     /// Which repository or folder the request was loaded from (the app's id for it).
     /// Two sources can hold the same folder path, so a request is told apart by both.
     public var origin: String = ""
+    /// Why the request's frontmatter could not be read (invalid YAML), in words; `nil` when
+    /// it could. Such a request has no items or questions to show, and says so.
+    public var problem: String?
 
     public var path: String { Review.join(folder, Review.fileName) }
     /// What tells this request apart from every other one the app has loaded.
@@ -202,12 +205,14 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
     public func assetPath(_ file: String) -> String? { Review.joinRelative(folder, file) }
 
     /// Whether an item still belongs on an "only what's waiting" view: it waits for a decision,
-    /// or it is another option of a group in which something still waits (a pick-one choice is
-    /// made between all its options, so they stay together).
+    /// or it is another option of a pick-one group in which something still waits (that choice
+    /// is made between all its options, so they stay together). In any other group a decided
+    /// file is settled like one on its own: a group of a hundred files with one left shows one.
     public func isStillOpen(_ item: ReviewItem) -> Bool {
         if item.status == .pending { return true }
         guard let group = item.group else { return false }
-        return items.contains { $0.group == group && $0.status == .pending }
+        let members = items.filter { $0.group == group }
+        return members.contains(where: \.pickOne) && members.contains { $0.status == .pending }
     }
 
     /// The items and questions an "only what's waiting" view hides: decided items outside an
@@ -217,6 +222,25 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
         guard summary.pending > 0 else { return ([], []) }
         return (Set(items.filter { !isStillOpen($0) }.map(\.id)),
                 Set(questions.filter(\.isAnswered).map(\.id)))
+    }
+
+    /// What a review screen hides for a filter: for `.waiting` what is settled (see
+    /// `settledIDs`), for `.answered` what still waits, for `.all` nothing. A screen fixes this
+    /// when the request opens or the filter changes, so an entry you just answered stays put.
+    public func hiddenIDs(for filter: ReviewFilter) -> (items: Set<String>, questions: Set<String>) {
+        switch filter {
+        case .all: return ([], [])
+        case .waiting: return settledIDs
+        case .answered:
+            return (Set(items.filter { $0.status == .pending }.map(\.id)),
+                    Set(questions.filter { !$0.isAnswered }.map(\.id)))
+        }
+    }
+
+    /// Every question and item in the order the screens show them: questions first (the agent
+    /// waits on them to go on), then the items group by group, as `groups` orders them.
+    public var entries: [ReviewEntry] {
+        questions.map(ReviewEntry.question) + groups.flatMap { $0.items.map(ReviewEntry.item) }
     }
 
     /// Items grouped for side-by-side display, in file order. Ungrouped items stand alone.
@@ -236,6 +260,61 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
             }
         }
         return result
+    }
+}
+
+/// Which part of a request a review screen shows.
+public enum ReviewFilter: String, CaseIterable, Sendable, Identifiable {
+    /// What still has no decision or answer (with the other options of an open pick-one group).
+    case waiting
+    /// What has a decision or an answer.
+    case answered
+    case all
+
+    public var id: String { rawValue }
+    public var title: String {
+        switch self {
+        case .waiting: return "Waiting"
+        case .answered: return "Answered"
+        case .all: return "All"
+        }
+    }
+
+    /// How many entries of the request the filter is about.
+    public func count(in summary: ReviewSummary) -> Int {
+        switch self {
+        case .waiting: return summary.pending
+        case .answered: return summary.total - summary.pending
+        case .all: return summary.total
+        }
+    }
+}
+
+/// One thing to answer in a request: a question or an item.
+public enum ReviewEntry: Identifiable, Hashable, Sendable {
+    case question(ReviewQuestion)
+    case item(ReviewItem)
+
+    public var id: String {
+        switch self {
+        case .question(let question): return "question:\(question.id)"
+        case .item(let item): return "item:\(item.id)"
+        }
+    }
+
+    /// Still waiting for the reviewer: an item without a decision, a question without an answer.
+    public var isWaiting: Bool {
+        switch self {
+        case .question(let question): return !question.isAnswered
+        case .item(let item): return item.status == .pending
+        }
+    }
+
+    /// The first waiting entry after the one with `id` (wrapping round to the start), or the
+    /// first waiting one when `id` is `nil` or not among them. `nil` when nothing waits.
+    public static func nextWaiting(after id: String?, in entries: [ReviewEntry]) -> ReviewEntry? {
+        guard let id, let index = entries.firstIndex(where: { $0.id == id }) else { return entries.first(where: \.isWaiting) }
+        return entries[(index + 1)...].first(where: \.isWaiting) ?? entries[..<index].first(where: \.isWaiting)
     }
 }
 
@@ -288,7 +367,11 @@ public enum Review {
     public static func parse(_ text: String, folder: String) -> ReviewRequest {
         let fallbackID = folder.split(separator: "/").last.map(String.init) ?? "review"
         let (yaml, body) = BoardMarkdown.splitFrontmatter(text)
-        let node = yaml.flatMap { try? Yams.compose(yaml: $0) } ?? nil
+        var problem: String?
+        var node: Node?
+        if let yaml {
+            do { node = try composeLeniently(yaml) } catch { problem = describe(error) }
+        }
         let map = node?.mapping
         let rawItems = map?["items"]?.sequence.map(Array.init) ?? []
         let items = rawItems.enumerated().compactMap { parseItem($0.element, index: $0.offset) }
@@ -306,8 +389,76 @@ public enum Review {
             requestedAt: string(map?["requested_at"]),
             items: items,
             questions: questions,
-            body: yaml == nil ? text : body
+            body: yaml == nil ? text : body,
+            problem: problem
         )
+    }
+
+    /// The frontmatter as YAML, or, when it is not valid YAML, as YAML once the slips agents
+    /// make writing it by hand are mended (see `mendedYAML`). Valid YAML is never changed.
+    static func composeLeniently(_ yaml: String) throws -> Node? {
+        do {
+            return try Yams.compose(yaml: yaml)
+        } catch {
+            let mended = mendedYAML(yaml)
+            guard mended != yaml, let node = try? Yams.compose(yaml: mended) else { throw error }
+            return node
+        }
+    }
+
+    /// Mends the two slips seen in real requests, line by line, outside block scalars:
+    /// a double-quoted value with quotes inside it (`note: "one line, "Bought 24 stone", …"`)
+    /// and a plain value with `: ` or ` #` in it (`note: Diagnostic pair: the good state.`).
+    /// Each becomes a single-quoted value with the same text.
+    static func mendedYAML(_ yaml: String) -> String {
+        var out: [String] = []
+        var blockIndent: Int?
+        for line in yaml.components(separatedBy: "\n") {
+            let indent = line.prefix { $0 == " " }.count
+            if let block = blockIndent {
+                if line.trimmingCharacters(in: .whitespaces).isEmpty || indent > block { out.append(line); continue }
+                blockIndent = nil
+            }
+            let range = NSRange(line.startIndex..., in: line)
+            guard let match = keyValueLine.firstMatch(in: line, range: range),
+                  let keyRange = Range(match.range(at: 1), in: line), let valueRange = Range(match.range(at: 2), in: line) else {
+                out.append(line)
+                continue
+            }
+            let key = String(line[keyRange]), value = String(line[valueRange])
+            guard let first = value.first else { out.append(line); continue }
+            if first == "|" || first == ">" { blockIndent = indent; out.append(line); continue }
+            var text: String?
+            if first == "\"" {
+                let inner = value.count > 1 && value.hasSuffix("\"") ? String(value.dropFirst().dropLast()) : nil
+                if let inner, inner.range(of: #"(?<!\\)""#, options: .regularExpression) != nil {
+                    text = inner.replacingOccurrences(of: "\\\"", with: "\"")
+                }
+            } else if !"'[{&*!%@`".contains(first), value.contains(": ") || value.contains(" #") {
+                text = value
+            }
+            if let text {
+                out.append("\(key): '\(text.replacingOccurrences(of: "'", with: "''"))'")
+            } else {
+                out.append(line)
+            }
+        }
+        return out.joined(separator: "\n")
+    }
+
+    /// `key: value` or `- key: value`, the key with its indent and dash.
+    private static let keyValueLine = try! NSRegularExpression(pattern: #"^(\s*(?:- )?[A-Za-z_][\w-]*):[ \t]+(.+?)\s*$"#)
+
+    /// A YAML error as one readable line, with where it is in `review.md` (the frontmatter
+    /// starts on line 2).
+    private static func describe(_ error: Error) -> String {
+        guard let yaml = error as? YamlError else { return error.localizedDescription }
+        switch yaml {
+        case .scanner(_, let problem, let mark, _), .parser(_, let problem, let mark, _), .composer(_, let problem, let mark, _):
+            return "Line \(mark.line + 1): \(problem)."
+        default:
+            return String(describing: yaml).components(separatedBy: "\n").first ?? "The frontmatter is not valid YAML."
+        }
     }
 
     private static func parseComments(_ node: Node?) -> [ReviewComment] {
@@ -630,7 +781,7 @@ public enum Review {
 
     private static func mutateFrontmatter(_ text: String, _ change: (inout Node.Mapping) throws -> Void) throws -> String {
         let (yamlText, body) = BoardMarkdown.splitFrontmatter(text)
-        guard let yamlText, let root = try Yams.compose(yaml: yamlText), var map = root.mapping else {
+        guard let yamlText, let root = try composeLeniently(yamlText), var map = root.mapping else {
             throw ReviewError.malformed
         }
         try change(&map)

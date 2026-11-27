@@ -94,3 +94,7 @@ that connects Claude Code.
   `null`, booleans or lists.
 - **Tests:** `AgentAccessTests` runs a real MCP conversation over HTTP against a real folder board.
   The provider path (GitHub/GitLab) shares the code but is not covered by a test.
+
+## New task from another app
+
+`gitkittie-tasks://new?title=…&body=…` (`CFBundleURLTypes` in `project.yml`; the Mac gets it in `TasksAppDelegate.application(_:open:)`, iOS in `onOpenURL`) fills in the new-task sheet: `NewTaskRequest` and `AppModel.openTaskRequest` in GitKanbanKit (`AppModel+TaskRequests.swift`), the same path as ⌘N and opened images (open board's first open lane, else the board chooser; waits for `restore()` on a cold launch; joins a sheet that is up without replacing typed text). It never saves by itself: any app or page can open a URL. GitKittie Mail's Make Task sends it (GKM-033, MAIL-133); a card's `gitkittie-mail:` link opens the message (`RichMarkdownEditor` allows that scheme). Tests: `TaskRequestTests`.

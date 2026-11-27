@@ -104,8 +104,9 @@ struct MailSplitView: View {
         .onChange(of: model.browser.selectedRowID) { _, id in
             if id != nil { router.compactColumn = .detail }
         }
-        // A notification was tapped (GKM-037): its conversation, even when the list doesn't show it.
-        .onChange(of: model.notificationOpens) {
+        // A notification was tapped (GKM-037) or a message link opened (GKM-033): its
+        // conversation, even when the list doesn't show it.
+        .onChange(of: model.externalOpens) {
             router.showsSettings = false
             router.compactColumn = .detail
         }

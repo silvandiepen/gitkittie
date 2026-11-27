@@ -144,7 +144,7 @@ struct ActivitySheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-                if !model.failedSyncItems.isEmpty {
+                if !model.retryableFailedSyncItems.isEmpty {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Retry All") { Task { await model.retryAllFailedSync() } }
                     }

@@ -31,12 +31,20 @@ struct SyncFailureRow: View {
                 }
             }
             HStack(spacing: 16) {
-                Button("Retry") { Task { await model.retrySync(item) } }
-                    .accessibilityIdentifier("syncRetry")
-                Button("Show What It Was") { Task { shown = await model.queuedChange(item) } }
-                    .accessibilityIdentifier("syncShow")
-                Button("Discard", role: .destructive) { confirmsDiscard = true }
-                    .accessibilityIdentifier("syncDiscard")
+                if model.isUnsendable(item) {
+                    // Nothing of it is on this device: a retry fails again, there is nothing
+                    // to show and nothing to lose, so it goes in one click.
+                    Button("Remove", role: .destructive) { Task { await model.discardSync(item) } }
+                        .accessibilityIdentifier("syncRemove")
+                        .help("Nothing of this change is on this device, so it can never be sent.")
+                } else {
+                    Button("Retry") { Task { await model.retrySync(item) } }
+                        .accessibilityIdentifier("syncRetry")
+                    Button("Show What It Was") { Task { shown = await model.queuedChange(item) } }
+                        .accessibilityIdentifier("syncShow")
+                    Button("Discard", role: .destructive) { confirmsDiscard = true }
+                        .accessibilityIdentifier("syncDiscard")
+                }
             }
             .font(.callout)
             .buttonStyle(.borderless)
@@ -66,7 +74,7 @@ struct SyncFailureList: View {
             .navigationTitle("Not Sent")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-                if model.failedSyncItems.count > 1 {
+                if model.failedSyncItems.count > 1, !model.retryableFailedSyncItems.isEmpty {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Retry All") { Task { await model.retryAllFailedSync() } }
                     }
@@ -99,7 +107,9 @@ struct SyncFailuresBanner: View {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                         Text("\(failed.count) changes were not sent")
                         Spacer(minLength: 8)
-                        Button("Retry All") { Task { await model.retryAllFailedSync() } }
+                        if !model.retryableFailedSyncItems.isEmpty {
+                            Button("Retry All") { Task { await model.retryAllFailedSync() } }
+                        }
                         Button("Show…") { showsAll = true }
                     }
                     .font(.callout)

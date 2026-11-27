@@ -87,6 +87,8 @@ Microsoft, opt-in active organisation, archive sync and integrations.
 | GKM-031 | Opt-in active organisation and retention | P2 | GKM-021, GKM-017 |
 | GKM-032 | Encrypted archive export and archive sync feasibility | P3 | GKM-023, GKM-006 |
 | GKM-033 | Tasks link, Git metadata export via GitPont, and scoped agent access | P3 | GKM-001, GKM-017 |
+| GKM-107 | Export message metadata to Git through GitPont (split from GKM-033) | P3 | GKM-033 |
+| GKM-108 | Read-only agent access per space or account (split from GKM-033) | P3 | GKM-033 |
 
 **Gate:** Each provider passes the capability tests; every automatic action is opt-in, previewed, audited and reversible.
 

@@ -735,7 +735,14 @@ struct NewTaskSheet: View {
             }
             .navigationTitle("New Task")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { if laneID.isEmpty { laneID = lane.id } }
+            .onAppear {
+                if laneID.isEmpty { laneID = lane.id }
+                fill(from: model.takeNewTaskRequest())
+            }
+            // Another app asked for a task while this sheet is up (Make Task in Mail, GKM-033).
+            .onChange(of: model.newTaskRequest) { _, request in
+                if request != nil { fill(from: model.takeNewTaskRequest()) }
+            }
             .onChange(of: pickedPhotos) { _, items in
                 guard !items.isEmpty else { return }
                 pickedPhotos = []
@@ -790,6 +797,12 @@ struct NewTaskSheet: View {
         Binding(
             get: { $images.first { $0.wrappedValue.id == annotating } },
             set: { if $0 == nil { annotating = nil } })
+    }
+
+    /// Takes in what another app asked for (Make Task in Mail, GKM-033), keeping what was typed.
+    private func fill(from request: NewTaskRequest?) {
+        guard let request else { return }
+        (title, body_) = request.filling(title: title, body: body_)
     }
 
     /// "Enhance": what is typed (and the images, if any) are pointers, and the draft
