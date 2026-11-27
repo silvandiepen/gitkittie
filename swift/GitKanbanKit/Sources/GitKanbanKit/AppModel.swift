@@ -308,6 +308,8 @@ public final class AppModel {
     @ObservationIgnored let readCache: ReadCache
     /// Writes that are waiting to be sent, being sent, or were refused. Oldest first.
     public internal(set) var syncItems: [OutboxOperation] = []
+    /// Refused writes whose content is not on this device: they can never be sent, only removed.
+    public internal(set) var unsendableSyncIDs: Set<String> = []
     /// The most recent writes that went out.
     public internal(set) var syncReceipts: [OutboxReceipt] = []
     public internal(set) var isSyncing = false
