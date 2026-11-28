@@ -1,4 +1,5 @@
 import AppKit
+import AuthenticationServices
 import GitKanbanKit
 import SwiftUI
 
@@ -7,6 +8,7 @@ struct NotificationSettingsSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.webAuthenticationSession) private var webAuthenticationSession
 
     var body: some View {
         @Bindable var model = model
@@ -33,11 +35,62 @@ struct NotificationSettingsSheet: View {
                 .disabled(model.notificationsAllowed == false)
             }
 
+            if model.notifiesReviews, model.notificationsAllowed == true, !providerRepos.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Instant review notifications").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                    SettingsPanel {
+                        ForEach(providerRepos) { repo in
+                            instantRow(repo)
+                            SettingsDivider()
+                        }
+                        SettingsToggleRow(icon: "exclamationmark.circle.fill", tint: .red, title: "Urgent requests only",
+                                          detail: "Others still count on the Dock icon.", isOn: $model.notifiesUrgentReviewsOnly)
+                    }
+                    Text("A review request reaches this Mac the moment it is asked, through the GitKittie relay, even while Tasks is closed. Urgent requests break through Focus.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
         }
         .padding(22)
         .frame(width: 480)
-        .task(id: scenePhase) { await model.refreshNotificationPermission() }
+        .task(id: scenePhase) {
+            await model.refreshNotificationPermission()
+            await model.registerForReviewPushes()
+        }
+    }
+
+    private var providerRepos: [AddedRepo] { model.addedRepos.filter { !$0.kind.isFolder } }
+
+    /// One repo: on, or the one step that turns it on.
+    @ViewBuilder private func instantRow(_ repo: AddedRepo) -> some View {
+        switch model.instantNotifications[repo.id] {
+        case .on:
+            SettingsRow(icon: "bolt.fill", tint: .green, title: repo.displayName, detail: "On") { EmptyView() }
+        case .needsInstall(let url):
+            SettingsRow(icon: "bolt.slash.fill", tint: .gray, title: repo.displayName,
+                        detail: "Install GitKittie Tasks on this repository on GitHub.") {
+                Button("Turn On…") {
+                    Task {
+                        // GitHub's page comes back to gitkittie-tasks://github-installed. Look
+                        // again either way: it may have been installed without coming back.
+                        _ = try? await webAuthenticationSession.authenticate(using: url, callbackURLScheme: "gitkittie-tasks")
+                        await model.registerForReviewPushes()
+                    }
+                }
+                .controlSize(.small)
+            }
+        case .needsChannel:
+            SettingsRow(icon: "bolt.slash.fill", tint: .gray, title: repo.displayName,
+                        detail: "Tasks adds a webhook to the repository that tells the relay about new requests.") {
+                Button("Turn On") { Task { await model.turnOnInstantNotifications(for: repo.id) } }.controlSize(.small)
+            }
+        case .unavailable(let reason):
+            SettingsRow(icon: "bolt.slash.fill", tint: .orange, title: repo.displayName, detail: reason) { EmptyView() }
+        case nil:
+            SettingsRow(icon: "bolt.fill", tint: .gray, title: repo.displayName, detail: "Checking…") { EmptyView() }
+        }
     }
 
     /// Whether macOS lets Tasks notify, and the one thing to do about it when it does not.
