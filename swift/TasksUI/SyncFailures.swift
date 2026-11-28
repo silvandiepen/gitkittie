@@ -123,7 +123,7 @@ struct SyncFailuresBanner: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .themedBar(in: RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, 16).padding(.vertical, 8)
             .accessibilityIdentifier("syncFailuresBanner")
             .sheet(isPresented: $showsAll) { SyncFailureList().environment(model) }

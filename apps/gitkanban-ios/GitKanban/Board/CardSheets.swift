@@ -391,7 +391,7 @@ struct CardDetailSheet: View {
         .font(.title3)
         .foregroundStyle(.primary)
         .padding(.horizontal, 14).padding(.vertical, 6)
-        .background(.regularMaterial, in: Capsule())
+        .themedBar(in: Capsule())
         .padding(.horizontal, 16).padding(.bottom, 4)
     }
 
@@ -500,45 +500,50 @@ struct CardDetailSheet: View {
 
     private var editForm: some View {
         Form {
-            Section("Task") { TextField("Title", text: $title) }
-            Section {
-                Picker("Lane", selection: $laneID) {
-                    ForEach(lanes) { Text($0.name).tag($0.id) }
-                }
-                if !priorities.isEmpty {
-                    Picker("Priority", selection: $priority) {
-                        Text("None").tag("")
-                        ForEach(priorities, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
+            Group {
+                Section("Task") { TextField("Title", text: $title) }
+                Section {
+                    Picker("Lane", selection: $laneID) {
+                        ForEach(lanes) { Text($0.name).tag($0.id) }
+                    }
+                    if !priorities.isEmpty {
+                        Picker("Priority", selection: $priority) {
+                            Text("None").tag("")
+                            ForEach(priorities, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
+                        }
+                    }
+                    if types.isEmpty {
+                        TextField("Type", text: $type)
+                    } else {
+                        Picker("Type", selection: $type) {
+                            Text("None").tag("")
+                            ForEach(types, id: \.self) { Text($0).tag($0) }
+                        }
+                    }
+                    if users.isEmpty {
+                        TextField("Assignee", text: $assignee)
+                    } else {
+                        Picker("Assignee", selection: $assignee) {
+                            Text("Unassigned").tag("")
+                            ForEach(users, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
+                        }
+                    }
+                    if !epics.isEmpty {
+                        Picker("Epic", selection: $epic) {
+                            Text("None").tag("")
+                            ForEach(epics, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
+                        }
                     }
                 }
-                if types.isEmpty {
-                    TextField("Type", text: $type)
-                } else {
-                    Picker("Type", selection: $type) {
-                        Text("None").tag("")
-                        ForEach(types, id: \.self) { Text($0).tag($0) }
-                    }
-                }
-                if users.isEmpty {
-                    TextField("Assignee", text: $assignee)
-                } else {
-                    Picker("Assignee", selection: $assignee) {
-                        Text("Unassigned").tag("")
-                        ForEach(users, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
-                    }
-                }
-                if !epics.isEmpty {
-                    Picker("Epic", selection: $epic) {
-                        Text("None").tag("")
-                        ForEach(epics, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
-                    }
+                Section("Description") {
+                    TextEditor(text: $body_).frame(minHeight: 160)
+                        .font(.system(.body, design: .monospaced))
                 }
             }
-            Section("Description") {
-                TextEditor(text: $body_).frame(minHeight: 160)
-                    .font(.system(.body, design: .monospaced))
-            }
+            // Rows on the navy, not the system grey (GITKITTIE-095).
+            .themedRows()
         }
+        .themedList()
     }
 
     @ToolbarContentBuilder private var editToolbar: some ToolbarContent {
@@ -622,117 +627,122 @@ struct NewTaskSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                if !images.isEmpty { NoDraftingNotice(app: model) }
-                Section {
-                    TextField("Title", text: $title)
-                    Picker("Lane", selection: $laneID) {
-                        ForEach(lanes) { Text($0.name).tag($0.id) }
+                Group {
+                    if !images.isEmpty { NoDraftingNotice(app: model) }
+                    Section {
+                        TextField("Title", text: $title)
+                        Picker("Lane", selection: $laneID) {
+                            ForEach(lanes) { Text($0.name).tag($0.id) }
+                        }
+                        if ImageTaskDrafter.provider(model) != nil {
+                            Button { Task { await enhance() } } label: {
+                                HStack {
+                                    Label("Enhance", systemImage: "wand.and.stars")
+                                    if isDrafting { Spacer(); ProgressView() }
+                                }
+                            }
+                            .disabled(isDrafting || (title.trimmingCharacters(in: .whitespaces).isEmpty
+                                                     && body_.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty))
+                            .accessibilityIdentifier("newTaskEnhanceButton")
+                        }
+                    } header: {
+                        Text("New Task")
+                    } footer: {
+                        if let draftProblem {
+                            Text(draftProblem).foregroundStyle(.red)
+                        } else if ImageTaskDrafter.provider(model) != nil {
+                            Text("Type a rough note, then Enhance writes the title and description from it.")
+                        }
                     }
-                    if ImageTaskDrafter.provider(model) != nil {
-                        Button { Task { await enhance() } } label: {
-                            HStack {
-                                Label("Enhance", systemImage: "wand.and.stars")
-                                if isDrafting { Spacer(); ProgressView() }
+                    Section {
+                        if !priorities.isEmpty {
+                            Picker("Priority", selection: $priority) {
+                                Text("None").tag("")
+                                ForEach(priorities, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
                             }
                         }
-                        .disabled(isDrafting || (title.trimmingCharacters(in: .whitespaces).isEmpty
-                                                 && body_.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty))
-                        .accessibilityIdentifier("newTaskEnhanceButton")
-                    }
-                } header: {
-                    Text("New Task")
-                } footer: {
-                    if let draftProblem {
-                        Text(draftProblem).foregroundStyle(.red)
-                    } else if ImageTaskDrafter.provider(model) != nil {
-                        Text("Type a rough note, then Enhance writes the title and description from it.")
-                    }
-                }
-                Section {
-                    if !priorities.isEmpty {
-                        Picker("Priority", selection: $priority) {
-                            Text("None").tag("")
-                            ForEach(priorities, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
+                        if types.isEmpty {
+                            TextField("Type", text: $type)
+                        } else {
+                            Picker("Type", selection: $type) {
+                                Text("None").tag("")
+                                ForEach(types, id: \.self) { Text($0).tag($0) }
+                            }
+                        }
+                        if users.isEmpty {
+                            TextField("Assignee", text: $assignee)
+                        } else {
+                            Picker("Assignee", selection: $assignee) {
+                                Text("Unassigned").tag("")
+                                ForEach(users, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
+                            }
+                        }
+                        if !epics.isEmpty {
+                            Picker("Epic", selection: $epic) {
+                                Text("None").tag("")
+                                ForEach(epics, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
+                            }
                         }
                     }
-                    if types.isEmpty {
-                        TextField("Type", text: $type)
-                    } else {
-                        Picker("Type", selection: $type) {
-                            Text("None").tag("")
-                            ForEach(types, id: \.self) { Text($0).tag($0) }
-                        }
-                    }
-                    if users.isEmpty {
-                        TextField("Assignee", text: $assignee)
-                    } else {
-                        Picker("Assignee", selection: $assignee) {
-                            Text("Unassigned").tag("")
-                            ForEach(users, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
-                        }
-                    }
-                    if !epics.isEmpty {
-                        Picker("Epic", selection: $epic) {
-                            Text("None").tag("")
-                            ForEach(epics, id: \.id) { Text($0.name ?? $0.id).tag($0.id) }
-                        }
-                    }
-                }
-                Section("Description") { TextEditor(text: $body_).frame(minHeight: 120) }
-                Section {
-                    if !images.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(images) { image in
-                                    if let thumbnail = image.thumbnail {
-                                        Button { annotating = image.id } label: {
-                                            Image(uiImage: thumbnail)
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(height: 120)
-                                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                                .overlay(alignment: .bottomTrailing) {
-                                                    Label(image.annotations.isEmpty ? "Mark up" : "\(image.annotations.count)",
-                                                          systemImage: "pencil.tip.crop.circle")
-                                                        .font(.caption2.weight(.semibold))
-                                                        .padding(.horizontal, 6).padding(.vertical, 3)
-                                                        .background(.regularMaterial, in: Capsule())
-                                                        .padding(4)
-                                                }
-                                        }
-                                        .buttonStyle(.plain)
-                                        .accessibilityLabel("Mark up image")
-                                        .overlay(alignment: .topTrailing) {
-                                            Button { images.removeAll { $0.id == image.id } } label: {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .symbolRenderingMode(.palette)
-                                                    .foregroundStyle(.white, .black.opacity(0.6))
-                                                    .font(.title3)
+                    Section("Description") { TextEditor(text: $body_).frame(minHeight: 120) }
+                    Section {
+                        if !images.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(images) { image in
+                                        if let thumbnail = image.thumbnail {
+                                            Button { annotating = image.id } label: {
+                                                Image(uiImage: thumbnail)
+                                                    .resizable()
+                                                    .scaledToFit()
+                                                    .frame(height: 120)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                    .overlay(alignment: .bottomTrailing) {
+                                                        Label(image.annotations.isEmpty ? "Mark up" : "\(image.annotations.count)",
+                                                              systemImage: "pencil.tip.crop.circle")
+                                                            .font(.caption2.weight(.semibold))
+                                                            .padding(.horizontal, 6).padding(.vertical, 3)
+                                                            .background(.regularMaterial, in: Capsule())
+                                                            .padding(4)
+                                                    }
                                             }
                                             .buttonStyle(.plain)
-                                            .padding(4)
-                                            .accessibilityLabel("Remove image")
+                                            .accessibilityLabel("Mark up image")
+                                            .overlay(alignment: .topTrailing) {
+                                                Button { images.removeAll { $0.id == image.id } } label: {
+                                                    Image(systemName: "xmark.circle.fill")
+                                                        .symbolRenderingMode(.palette)
+                                                        .foregroundStyle(.white, .black.opacity(0.6))
+                                                        .font(.title3)
+                                                }
+                                                .buttonStyle(.plain)
+                                                .padding(4)
+                                                .accessibilityLabel("Remove image")
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                    PhotosPicker(selection: $pickedPhotos, maxSelectionCount: 5, matching: .images) {
-                        Label(images.isEmpty ? "Add Images" : "Add More", systemImage: "photo.on.rectangle")
-                    }
-                    .accessibilityIdentifier("newTaskAddImages")
-                    if isDrafting {
-                        HStack(spacing: 10) { ProgressView(); Text("Writing a title and description").foregroundStyle(.secondary) }
-                    }
-                } header: {
-                    Text("Images")
-                } footer: {
-                    if !images.isEmpty {
-                        Text("Tap an image to mark what is wrong. An empty title and description are written from the image and your marks.")
+                        PhotosPicker(selection: $pickedPhotos, maxSelectionCount: 5, matching: .images) {
+                            Label(images.isEmpty ? "Add Images" : "Add More", systemImage: "photo.on.rectangle")
+                        }
+                        .accessibilityIdentifier("newTaskAddImages")
+                        if isDrafting {
+                            HStack(spacing: 10) { ProgressView(); Text("Writing a title and description").foregroundStyle(.secondary) }
+                        }
+                    } header: {
+                        Text("Images")
+                    } footer: {
+                        if !images.isEmpty {
+                            Text("Tap an image to mark what is wrong. An empty title and description are written from the image and your marks.")
+                        }
                     }
                 }
+                // Rows on the navy, not the system grey (GITKITTIE-095).
+                .themedRows()
             }
+            .themedList()
             .navigationTitle("New Task")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
@@ -888,7 +898,7 @@ struct QuickCreateSheet: View {
                         .font(.body)
                         .frame(minHeight: 100)
                         .padding(8)
-                        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+                        .background(Theme.card, in: RoundedRectangle(cornerRadius: 8))
                     Text("AI will analyze your input and create one or more tickets with appropriate fields.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -946,7 +956,7 @@ struct QuickCreateSheet: View {
                         }
                         .padding(.horizontal)
                         .padding(.vertical, 8)
-                        .background(.bar)
+                        .background(Theme.bar)
 
                         ScrollView {
                             LazyVStack(spacing: 12) {
@@ -1051,7 +1061,7 @@ private struct GeneratedTicketRow: View {
             }
         }
         .padding(12)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func chip(_ text: String, color: Color) -> some View {
@@ -1072,40 +1082,45 @@ struct AISettingsSheet: View {
         @Bindable var model = model
         NavigationStack {
             Form {
-                Section("Provider") {
-                    Picker("AI Provider", selection: $model.aiProvider) {
-                        ForEach(AIPontProvider.allCases, id: \.self) { provider in
-                            Text(provider.displayName).tag(provider)
+                Group {
+                    Section("Provider") {
+                        Picker("AI Provider", selection: $model.aiProvider) {
+                            ForEach(AIPontProvider.allCases, id: \.self) { provider in
+                                Text(provider.displayName).tag(provider)
+                            }
+                        }
+                        .onChange(of: model.aiProvider) { _, newProvider in
+                            // Auto-select default model when provider changes
+                            model.aiModel = newProvider.defaultModel
                         }
                     }
-                    .onChange(of: model.aiProvider) { _, newProvider in
-                        // Auto-select default model when provider changes
-                        model.aiModel = newProvider.defaultModel
+                    Section("Model") {
+                        Picker("Model", selection: $model.aiModel) {
+                            ForEach(model.aiProvider.recommendedModels, id: \.self) { m in
+                                Text(m).tag(m)
+                            }
+                        }
                     }
-                }
-                Section("Model") {
-                    Picker("Model", selection: $model.aiModel) {
-                        ForEach(model.aiProvider.recommendedModels, id: \.self) { m in
-                            Text(m).tag(m)
+                    if model.aiProvider.needsAPIKey {
+                        Section("API Key") {
+                            SecureField("API Key", text: $model.aiAPIKey)
+                            Text("Your API key is stored locally and never shared.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Section("On device") {
+                            Text(OnDeviceAI.unavailableReason
+                                 ?? "Runs on this device with Apple Intelligence. No API key, and nothing you type leaves the device.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
-                if model.aiProvider.needsAPIKey {
-                    Section("API Key") {
-                        SecureField("API Key", text: $model.aiAPIKey)
-                        Text("Your API key is stored locally and never shared.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Section("On device") {
-                        Text(OnDeviceAI.unavailableReason
-                             ?? "Runs on this device with Apple Intelligence. No API key, and nothing you type leaves the device.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                // Rows on the navy, not the system grey (GITKITTIE-095).
+                .themedRows()
             }
+            .themedList()
             .navigationTitle("AI Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1288,7 +1303,7 @@ struct TaskActivityView: View {
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+            .themedBar(in: RoundedRectangle(cornerRadius: 22))
             .padding(.horizontal, 12).padding(.bottom, 6)
         }
     }

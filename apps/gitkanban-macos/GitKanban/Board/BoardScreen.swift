@@ -138,7 +138,7 @@ struct BoardScreen: View {
                 Label("Drop to make a task in \(lane.name)", systemImage: "photo.badge.plus")
                     .font(.headline)
                     .padding(.horizontal, 18).padding(.vertical, 10)
-                    .background(.regularMaterial, in: Capsule())
+                    .themedBar(in: Capsule())
             }
             .padding(10)
             .allowsHitTesting(false)
@@ -150,7 +150,7 @@ struct BoardScreen: View {
         if model.isSaving {
             HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Saving…").font(.caption) }
                 .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(.regularMaterial, in: Capsule())
+                .themedBar(in: Capsule())
                 .padding(.top, 8)
         }
     }

@@ -962,7 +962,7 @@ private struct TaskImageThumbnail: View {
                       systemImage: "pencil.tip.crop.circle")
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 6).padding(.vertical, 3)
-                    .background(.regularMaterial, in: Capsule())
+                    .themedBar(in: Capsule())
                     .padding(4)
             }
         }
@@ -1073,7 +1073,7 @@ struct QuickCreateSheet: View {
                         }
                         .padding(.horizontal)
                         .padding(.vertical, 8)
-                        .background(.bar)
+                        .background(Theme.bar)
 
                         ScrollView {
                             LazyVStack(spacing: 12) {

@@ -76,7 +76,7 @@ struct SyncIndicator: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
-        .background(.regularMaterial, in: Capsule())
+        .themedBar(in: Capsule())
         .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
         .contentShape(Capsule())
     }

@@ -66,98 +66,103 @@ struct ProjectSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Project") {
-                    TextField("Name", text: $name)
-                    TextField("Description (optional)", text: $description, axis: .vertical).lineLimit(1...4)
-                }
+                Group {
+                    Section("Project") {
+                        TextField("Name", text: $name)
+                        TextField("Description (optional)", text: $description, axis: .vertical).lineLimit(1...4)
+                    }
 
-                if isEditing {
+                    if isEditing {
+                        Section {
+                            Button { detect() } label: {
+                                HStack {
+                                    Label("Detect from Folders", systemImage: "wand.and.stars")
+                                    Spacer()
+                                    if detecting { ProgressView() }
+                                }
+                            }
+                            .disabled(detecting)
+                        } footer: {
+                            Text("Read the board's folders and cards to fill in lanes, priorities, types, members, and epics. Lanes come from the subfolders; each keeps its folder + status.")
+                        }
+                    }
+
                     Section {
-                        Button { detect() } label: {
-                            HStack {
-                                Label("Detect from Folders", systemImage: "wand.and.stars")
-                                Spacer()
-                                if detecting { ProgressView() }
+                        ForEach($laneItems) { $item in
+                            let index = laneItems.firstIndex { $0.id == item.id } ?? 0
+                            HStack(spacing: 10) {
+                                Circle().fill(Self.laneColor(index)).frame(width: 11, height: 11)
+                                TextField("Lane name", text: $item.name)
+                                deleteButton { laneItems.removeAll { $0.id == item.id } }
                             }
                         }
-                        .disabled(detecting)
+                        .onDelete { laneItems.remove(atOffsets: $0) }
+                        .onMove { laneItems.move(fromOffsets: $0, toOffset: $1) }
+                        Button { laneItems.append(LaneItem(name: "", origin: nil)) } label: { Label("Add Lane", systemImage: "plus") }
+                    } header: {
+                        Text("Lanes")
                     } footer: {
-                        Text("Read the board's folders and cards to fill in lanes, priorities, types, members, and epics. Lanes come from the subfolders; each keeps its folder + status.")
+                        Text("Drag to reorder (Edit); the first lanes are the start of the workflow.")
                     }
-                }
 
-                Section {
-                    ForEach($laneItems) { $item in
-                        let index = laneItems.firstIndex { $0.id == item.id } ?? 0
-                        HStack(spacing: 10) {
-                            Circle().fill(Self.laneColor(index)).frame(width: 11, height: 11)
-                            TextField("Lane name", text: $item.name)
-                            deleteButton { laneItems.removeAll { $0.id == item.id } }
+                    Section {
+                        ForEach($priorityItems) { $item in
+                            let index = priorityItems.firstIndex { $0.id == item.id } ?? 0
+                            HStack(spacing: 10) {
+                                Image(systemName: "flag.fill").font(.caption).foregroundStyle(Self.priorityColor(index))
+                                TextField("P0", text: $item.text).textInputAutocapitalization(.characters)
+                                deleteButton { priorityItems.removeAll { $0.id == item.id } }
+                            }
                         }
+                        .onDelete { priorityItems.remove(atOffsets: $0) }
+                        Button { priorityItems.append(TextItem(text: "P\(priorityItems.count)")) } label: { Label("Add Priority", systemImage: "plus") }
+                    } header: {
+                        Text("Priorities")
+                    } footer: {
+                        Text("Ordered highest to lowest.")
                     }
-                    .onDelete { laneItems.remove(atOffsets: $0) }
-                    .onMove { laneItems.move(fromOffsets: $0, toOffset: $1) }
-                    Button { laneItems.append(LaneItem(name: "", origin: nil)) } label: { Label("Add Lane", systemImage: "plus") }
-                } header: {
-                    Text("Lanes")
-                } footer: {
-                    Text("Drag to reorder (Edit); the first lanes are the start of the workflow.")
-                }
 
-                Section {
-                    ForEach($priorityItems) { $item in
-                        let index = priorityItems.firstIndex { $0.id == item.id } ?? 0
-                        HStack(spacing: 10) {
-                            Image(systemName: "flag.fill").font(.caption).foregroundStyle(Self.priorityColor(index))
-                            TextField("P0", text: $item.text).textInputAutocapitalization(.characters)
-                            deleteButton { priorityItems.removeAll { $0.id == item.id } }
+                    Section("Members") {
+                        ForEach($memberItems) { $item in
+                            HStack {
+                                TextField("username", text: $item.text).textInputAutocapitalization(.never).autocorrectionDisabled()
+                                deleteButton { memberItems.removeAll { $0.id == item.id } }
+                            }
                         }
+                        .onDelete { memberItems.remove(atOffsets: $0) }
+                        Button { memberItems.append(TextItem(text: "")) } label: { Label("Add Member", systemImage: "plus") }
                     }
-                    .onDelete { priorityItems.remove(atOffsets: $0) }
-                    Button { priorityItems.append(TextItem(text: "P\(priorityItems.count)")) } label: { Label("Add Priority", systemImage: "plus") }
-                } header: {
-                    Text("Priorities")
-                } footer: {
-                    Text("Ordered highest to lowest.")
-                }
 
-                Section("Members") {
-                    ForEach($memberItems) { $item in
-                        HStack {
-                            TextField("username", text: $item.text).textInputAutocapitalization(.never).autocorrectionDisabled()
-                            deleteButton { memberItems.removeAll { $0.id == item.id } }
+                    Section("Types") {
+                        ForEach($typeItems) { $item in
+                            HStack {
+                                TextField("feature", text: $item.text).textInputAutocapitalization(.never)
+                                deleteButton { typeItems.removeAll { $0.id == item.id } }
+                            }
                         }
+                        .onDelete { typeItems.remove(atOffsets: $0) }
+                        Button { typeItems.append(TextItem(text: "")) } label: { Label("Add Type", systemImage: "plus") }
                     }
-                    .onDelete { memberItems.remove(atOffsets: $0) }
-                    Button { memberItems.append(TextItem(text: "")) } label: { Label("Add Member", systemImage: "plus") }
-                }
 
-                Section("Types") {
-                    ForEach($typeItems) { $item in
-                        HStack {
-                            TextField("feature", text: $item.text).textInputAutocapitalization(.never)
-                            deleteButton { typeItems.removeAll { $0.id == item.id } }
+                    Section("Epics") {
+                        ForEach($epicItems) { $item in
+                            HStack {
+                                TextField("Epic name", text: $item.name)
+                                deleteButton { epicItems.removeAll { $0.id == item.id } }
+                            }
                         }
+                        .onDelete { epicItems.remove(atOffsets: $0) }
+                        Button { epicItems.append(EpicItem(name: "", origin: nil)) } label: { Label("Add Epic", systemImage: "plus") }
                     }
-                    .onDelete { typeItems.remove(atOffsets: $0) }
-                    Button { typeItems.append(TextItem(text: "")) } label: { Label("Add Type", systemImage: "plus") }
-                }
 
-                Section("Epics") {
-                    ForEach($epicItems) { $item in
-                        HStack {
-                            TextField("Epic name", text: $item.name)
-                            deleteButton { epicItems.removeAll { $0.id == item.id } }
-                        }
+                    if let error = model.errorMessage {
+                        Section { Text(error).font(.callout).foregroundStyle(.red) }
                     }
-                    .onDelete { epicItems.remove(atOffsets: $0) }
-                    Button { epicItems.append(EpicItem(name: "", origin: nil)) } label: { Label("Add Epic", systemImage: "plus") }
                 }
-
-                if let error = model.errorMessage {
-                    Section { Text(error).font(.callout).foregroundStyle(.red) }
-                }
+                // Rows on the navy, not the system grey (GITKITTIE-095).
+                .themedRows()
             }
+            .themedList()
             .navigationTitle(prefill != nil ? "Set Up Board" : (isEditing ? "Project Settings" : "New Project"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

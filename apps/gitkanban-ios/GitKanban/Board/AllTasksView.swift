@@ -53,7 +53,7 @@ struct AllTasksView: View {
                                     Text("\(board.open.count)").foregroundStyle(.secondary)
                                 }
                             }
-                            .listRowBackground(Theme.panel)
+                            .themedRows()
                         }
                     }
                 }

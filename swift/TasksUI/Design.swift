@@ -31,7 +31,7 @@ struct CountBadge: View {
             .font(.caption2.weight(.semibold).monospacedDigit())
             .foregroundStyle(color == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.white))
             .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(color.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.quaternary), in: Capsule())
+            .background(color.map { AnyShapeStyle($0) } ?? AnyShapeStyle(Theme.stroke), in: Capsule())
     }
 }
 

@@ -122,7 +122,7 @@ struct AgentAccessSheet: View {
                             .padding(8)
                     }
                     .frame(height: 110)
-                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 6))
                     .accessibilityIdentifier("agentPrompt")
                     HStack {
                         Text("For an agent with neither the command nor the tools, paste the full guide instead.")
@@ -199,7 +199,7 @@ struct AgentAccessSheet: View {
                 .lineLimit(1).truncationMode(.middle)
                 .padding(.horizontal, 8).padding(.vertical, 5)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 6))
             Button(copied == key ? "Copied" : label) {
                 Platform.copy(text)
                 copied = key
