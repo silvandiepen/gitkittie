@@ -143,7 +143,8 @@ final class CheckWebViewTests: XCTestCase {
         let large = try XCTUnwrap(CheckSize.presets.first { $0.id == "phone-large" })
         let (controller, _, window) = host(size: large, available: CGSize(width: 1100, height: 717))
         await loaded(controller)
-        let png = try XCTUnwrap(await controller.screenshotPNG())
+        let shot = await controller.screenshotPNG()
+        let png = try XCTUnwrap(shot)
         let image = try XCTUnwrap(NSBitmapImageRep(data: png))
         XCTAssertEqual(Double(image.pixelsWide), 440 * Double(window.backingScaleFactor), accuracy: 2, "the full 440 px, at the screen's scale")
     }
