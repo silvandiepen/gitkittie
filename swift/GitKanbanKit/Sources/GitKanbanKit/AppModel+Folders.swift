@@ -160,28 +160,23 @@ extension AppModel {
         reviews.filter { $0.card == card.fields.id }
     }
 
-    /// Items across the open board still waiting on the reviewer.
-    public var pendingReviewCount: Int { reviews.reduce(0) { $0 + $1.summary.pending } }
+    /// Entries across the open board still waiting on you (requests for others left out).
+    public var pendingReviewCount: Int { reviews.filter(isForMe).reduce(0) { $0 + $1.summary.pending } }
 
     /// Who decisions and comments are recorded as: the board user matching the server's
-    /// Tailscale login or this device's account (by `github` or `id`), else that login.
-    public var reviewerID: String { reviewerID(among: board?.config.users ?? []) }
+    /// Tailscale login or this device's account (by `github` or `id`), or the one you said you
+    /// are on the board, else that login.
+    public var reviewerID: String { reviewerID(among: board?.config.users ?? [], boardKey: openReviewBoardKey) }
 
-    func reviewerID(among users: [User]) -> String {
-        let login = serverLogin ?? connection?.login ?? NSUserName()
-        let handle = login.split(separator: "@").first.map(String.init) ?? login
-        if let user = users.first(where: {
-            ($0.github?.lowercased() == handle.lowercased()) || $0.id.lowercased() == handle.lowercased()
-        }) { return user.id }
+    func reviewerID(among users: [User], boardKey: String? = nil) -> String {
+        if let user = reviewUser(among: users, boardKey: boardKey) { return user }
+        let handle = reviewLogin
         return handle.isEmpty ? "reviewer" : handle
     }
 
     /// The reviewer's name on the board a request belongs to.
     func reviewerID(for request: ReviewRequest) -> String {
-        if let entry = reviewInbox.first(where: { $0.repoID == request.origin && $0.requests.contains { $0.folder == request.folder } }) {
-            return reviewerID(among: entry.users)
-        }
-        return reviewerID
+        reviewerID(among: reviewBoardUsers(for: request), boardKey: reviewBoardKey(for: request))
     }
 
     /// The source a request's files are read from and written to: the open board's when
@@ -403,17 +398,23 @@ extension AppModel {
     /// edits travel with the write, and are applied again onto the server's copy when sent.
     func rewriteReview(_ request: ReviewRequest, _ edits: [ReviewEdit]) async {
         guard let source = reviewSource(for: request) else { return }
+        // Someone else's request: comments yes, decisions and answers no.
+        if edits.contains(where: \.isDecision), isReadOnly(request) {
+            errorMessage = readOnlyNotice(request)
+            return
+        }
         isSaving = true
         errorMessage = nil
-        defer { isSaving = false }
+        var written: (before: String, after: String)?
         do {
             if let versioned = source as? any VersionedBoardSource {
                 var attempt = 0
                 while true {
                     let (text, version) = try await versioned.readVersioned(request.path)
                     do {
-                        try await versioned.write(path: request.path, text: try Review.apply(text, edits: edits), ifVersion: version,
-                                                  message: "Review \(request.id)")
+                        let next = try Review.apply(text, edits: edits)
+                        try await versioned.write(path: request.path, text: next, ifVersion: version, message: "Review \(request.id)")
+                        written = (text, next)
                         break
                     } catch is SourceConflictError where attempt < 2 {
                         attempt += 1
@@ -421,16 +422,27 @@ extension AppModel {
                 }
             } else if let editing = source as? any ReviewEditingSource {
                 let text = try await editing.readText(request.path)
-                try await editing.writeReview(path: request.path, text: try Review.apply(text, edits: edits), edits: edits,
-                                              message: "Review \(request.id)")
+                let next = try Review.apply(text, edits: edits)
+                try await editing.writeReview(path: request.path, text: next, edits: edits, message: "Review \(request.id)")
+                written = (text, next)
             } else {
                 let text = try await source.readText(request.path)
-                try await source.write(path: request.path, text: try Review.apply(text, edits: edits), message: "Review \(request.id)")
+                let next = try Review.apply(text, edits: edits)
+                try await source.write(path: request.path, text: next, message: "Review \(request.id)")
+                written = (text, next)
             }
         } catch {
             errorMessage = error.localizedDescription
         }
+        isSaving = false
         await reloadReview(request)
+        // The decision that settles a request (or an entry) runs its actions.
+        if let written, edits.contains(where: \.isDecision) {
+            var before = Review.parse(written.before, folder: request.folder), after = Review.parse(written.after, folder: request.folder)
+            before.origin = request.origin
+            after.origin = request.origin
+            await runReviewActions(request, before: before, after: after)
+        }
     }
 
     private static func trimmed(_ text: String) -> String { text.trimmingCharacters(in: .whitespacesAndNewlines) }

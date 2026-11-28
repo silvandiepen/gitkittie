@@ -14,12 +14,16 @@ public struct BoardReviews: Identifiable, Sendable, Equatable {
     /// The board's users, to record decisions under the reviewer's name there.
     public var users: [User]
     public var requests: [ReviewRequest]
+    /// Who you are on this board (a user id), `nil` when nobody: what is counted as yours.
+    public var me: String?
 
     public var id: String { "\(repoID)|\(boardFolder)" }
-    /// Items still waiting for a decision.
-    public var pending: Int { requests.reduce(0) { $0 + $1.summary.pending } }
-    /// Requests with at least one item waiting.
-    public var open: [ReviewRequest] { requests.filter { $0.summary.pending > 0 } }
+    /// Entries waiting for a decision or an answer, in requests for you (or for everyone).
+    public var pending: Int { mine.reduce(0) { $0 + $1.summary.pending } }
+    /// Requests for you with at least one entry waiting.
+    public var open: [ReviewRequest] { mine.filter { $0.summary.pending > 0 } }
+    /// Requests for you, or for everyone.
+    public var mine: [ReviewRequest] { requests.filter { $0.isFor(me) } }
 }
 
 extension AppModel {
@@ -89,6 +93,7 @@ extension AppModel {
                         return (position, BoardReviews(
                             repoID: repoID, boardFolder: boardFolder, boardName: name,
                             icon: icon, color: color, users: config.users, requests: requests))
+
                     }
                 }
             }
@@ -102,6 +107,7 @@ extension AppModel {
             let ad = Self.newestOpenDate(a.1), bd = Self.newestOpenDate(b.1)
             return ad != bd ? ad > bd : a.0 < b.0
         }.map(\.1).filter { !$0.requests.isEmpty }
+        refreshReviewOwners()
         await reviewInboxDidLoad()
     }
 }
