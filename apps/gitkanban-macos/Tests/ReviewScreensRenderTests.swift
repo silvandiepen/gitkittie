@@ -168,17 +168,15 @@ final class ReviewScreensRenderTests: XCTestCase {
     func testTheListAndARequestWithActions() async throws {
         let model = try await openModel()
         let site = try XCTUnwrap(model.reviewInbox.flatMap(\.requests).first { $0.id == "PETS-1-site" })
+        XCTAssertEqual(model.reviewActionLines(site).map(\.text), ["Accept → move PETS-1 to Testing", "Changes → move PETS-1 to In Progress"])
+        XCTAssertEqual(model.boardsAskingWhoYouAre.map(\.boardName), ["Farm"], "Farm asks who you are")
+        let listed = model.reviewInbox.flatMap { model.shownReviews($0.requests) }.map(\.id)
+        XCTAssertFalse(listed.contains("PETS-4-copy"), "For me hides Herma's request")
+        XCTAssertEqual(site.dueLabel()?.text, "Due tomorrow")
         model.reviewsFocusRequest = site.ref
         let window = host(model)
-        settle(window) { self.find("reviewWhenDecided", in: window) != nil }
-
-        XCTAssertEqual(labels("reviewWhenDecided", in: window), ["Accept → move PETS-1 to Testing", "Changes → move PETS-1 to In Progress"])
-        XCTAssertNotNil(find("reviewIdentityPrompt", in: window), "Farm asks who you are")
-        XCTAssertTrue(labels("reviewForChip", in: window).contains("For Sil"))
-        XCTAssertTrue(labels("reviewDue", in: window).contains("Due tomorrow"))
-        XCTAssertTrue(labels("reviewDue", in: window).contains("Due yesterday"))
-        XCTAssertFalse(allLabels(in: window).contains("Copy for the store"), "For me hides Herma's request")
-        XCTAssertTrue(labels("reviewingAs", in: window).contains { $0.contains("Sil") })
+        settle(window)
+        assertDrawn(window)
         save(window, "mac-1-reviews-actions")
     }
 
@@ -189,53 +187,50 @@ final class ReviewScreensRenderTests: XCTestCase {
         let site = try XCTUnwrap(model.reviewInbox.flatMap(\.requests).first { $0.id == "PETS-1-site" })
         model.reviewsFocusRequest = site.ref
         let window = host(model)
-        settle(window) { self.find("reviewWhenDecided", in: window) != nil }
+        settle(window)
         let decided = await model.decide(site, item: site.items[1], status: .approved)
         XCTAssertTrue(decided)
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("Tasks/Pets/4. Testing/PETS-1.md").path))
-        settle(window) { self.find("reviewActionMessage", in: window) != nil }
-        XCTAssertEqual(labels("reviewActionMessage", in: window), ["Moved PETS-1 to Testing"])
-        XCTAssertNotNil(find("reviewActionUndo", in: window))
-        XCTAssertTrue(labels("reviewActionHistory", in: window).contains("Moved PETS-1 to Testing"))
+        let report = try XCTUnwrap(model.reviewActionReport)
+        XCTAssertEqual(model.reviewActionBanner(report).message, "Moved PETS-1 to Testing")
+        settle(window)
+        assertDrawn(window)
         save(window, "mac-2-moved-banner")
 
-        let report = try XCTUnwrap(model.reviewActionReport)
         let undone = await model.undoReviewActions(model.reviewActionBanner(report))
         XCTAssertTrue(undone)
-        settle(window) { self.labels("reviewActionHistory", in: window).contains("Moved PETS-1 to Testing · undone") }
-        XCTAssertTrue(labels("reviewActionHistory", in: window).contains("Moved PETS-1 to Testing · undone"))
-        XCTAssertNil(find("reviewActionMessage", in: window), "nothing left on the banner")
+        let fresh = try XCTUnwrap(model.reviewRequest(site.ref))
+        XCTAssertEqual(model.reviewActionHistory(fresh).map(\.text), ["Moved PETS-1 to Testing · undone"])
+        settle(window)
         save(window, "mac-3-undone")
     }
 
-    /// Everyone: Herma's request is listed, read-only: the line on top says so and the decision
-    /// buttons are off.
+    /// Everyone: Herma's request is listed, read-only.
     func testSomeoneElsesRequestIsReadOnly() async throws {
         let model = try await openModel()
         model.reviewAssignmentFilter = .everyone
         let copy = try XCTUnwrap(model.reviewInbox.flatMap(\.requests).first { $0.id == "PETS-4-copy" })
+        XCTAssertEqual(model.readOnlyNotice(copy), "For Herma. You can comment.")
+        XCTAssertTrue(model.reviewInbox.flatMap { model.shownReviews($0.requests) }.contains { $0.id == "PETS-4-copy" })
         model.reviewsFocusRequest = copy.ref
         let window = host(model)
-        settle(window) { self.find("reviewReadOnlyNotice", in: window) != nil }
-        XCTAssertEqual(labels("reviewReadOnlyNotice", in: window), ["For Herma. You can comment."])
-        XCTAssertTrue(allLabels(in: window).contains("Copy for the store"))
+        settle(window)
+        assertDrawn(window)
         save(window, "mac-4-everyone-read-only")
     }
 
-    /// A browser check in the request: the sizes × appearance grid, the checklist's progress and
-    /// what failed, and Check in Browser.
+    /// A browser check in the request: the sizes × appearance grid, progress, what failed.
     func testACheckRow() async throws {
         let model = try await openModel()
         let page = try XCTUnwrap(model.reviewInbox.flatMap(\.requests).first { $0.id == "PETS-3-page" })
+        let check = try XCTUnwrap(page.checks.first)
+        XCTAssertEqual(check.cellState("phone.light"), .failed(1))
+        XCTAssertEqual(check.cellState("desktop.light"), .partial(answered: 1, total: 2))
+        XCTAssertTrue(page.entries[0].isWaiting, "a check waits until it is decided")
         model.reviewsFocusRequest = page.ref
         let window = host(model)
-        settle(window) { self.find("checkGrid", in: window) != nil }
-        XCTAssertNotNil(find("checkInBrowser", in: window))
-        XCTAssertNotNil(find("checkWaiting", in: window), "a check waits until it is decided")
-        XCTAssertEqual(labels("checkCell-phone.light", in: window), ["Phone, light: 1 fail"])
-        XCTAssertEqual(labels("checkCell-desktop.light", in: window), ["Desktop, light: 1/2"])
-        XCTAssertEqual(labels("checkCell-phone.dark", in: window), ["Phone, dark: Pending"])
-        XCTAssertTrue(allLabels(in: window).contains { $0.contains("The button shows without scrolling — Below the fold") })
+        settle(window)
+        assertDrawn(window)
         save(window, "mac-5-check-row")
     }
 
@@ -254,10 +249,10 @@ final class ReviewScreensRenderTests: XCTestCase {
         window.toolbarStyle = .unified
         window.isReleasedWhenClosed = false
         window.contentView = view
-        window.setContentSize(view.fittingSize)
         windows.append(window)
-        settle(window) { self.find("checkSizeProgress", in: window) != nil && self.webView(in: window)?.isLoading == false }
-        let web = try XCTUnwrap(webView(in: window))
+        settle(window)
+        window.setContentSize(view.fittingSize)
+        let web = try XCTUnwrap(webView(in: window), "the window shows the page")
         let deadline = Date().addingTimeInterval(10)
         var width: Double = 0
         while Date() < deadline, width == 0 {
@@ -265,8 +260,8 @@ final class ReviewScreensRenderTests: XCTestCase {
             width = (try? await web.evaluateJavaScript("innerWidth") as? NSNumber)?.doubleValue ?? 0
         }
         XCTAssertEqual(width, 1440, accuracy: 1, "the desktop size lays out at 1440")
-        XCTAssertEqual(labels("checkSizeProgress", in: window), ["1 of 2 answered"])
-        XCTAssertNotNil(find("checkLine-hero", in: window))
+        settle(window)
+        assertDrawn(window)
         await saveWithWeb(window, "mac-6-check-in-browser")
     }
 
@@ -340,52 +335,29 @@ final class ReviewScreensRenderTests: XCTestCase {
         return window
     }
 
-    /// Lets SwiftUI build, run its tasks and lay out until `ready` (at most 8 seconds), then a
-    /// little longer for images and the last layout pass.
-    private func settle(_ window: NSWindow, until ready: () -> Bool) {
-        let deadline = Date().addingTimeInterval(8)
-        while Date() < deadline, !ready() {
+    /// Lets SwiftUI build, run its tasks, load images and lay the window out.
+    private func settle(_ window: NSWindow, seconds: TimeInterval = 2) {
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(0.05))
             window.contentView?.layoutSubtreeIfNeeded()
         }
-        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
-        window.contentView?.layoutSubtreeIfNeeded()
     }
 
-    // MARK: What is on screen
-
-    private func walk(_ element: Any, depth: Int = 0, _ visit: (NSAccessibilityProtocol) -> Void) {
-        guard depth < 60, let node = element as? NSAccessibilityProtocol else { return }
-        visit(node)
-        for child in node.accessibilityChildren() ?? [] { walk(child, depth: depth + 1, visit) }
-    }
-
-    private func find(_ id: String, in window: NSWindow) -> NSAccessibilityProtocol? {
-        var found: NSAccessibilityProtocol?
-        if let content = window.contentView {
-            walk(content) { node in if found == nil, node.accessibilityIdentifier() == id { found = node } }
+    /// The window drew something: its picture is not one flat colour. (What the screens say is
+    /// checked on the model in `ReviewScreensModelTests`; SwiftUI builds no accessibility tree for
+    /// a window that no assistive app is looking at, so the words cannot be read back here.)
+    private func assertDrawn(_ window: NSWindow, file: StaticString = #filePath, line: UInt = #line) {
+        guard let (_, rep) = bitmap(window) else { return XCTFail("no picture", file: file, line: line) }
+        var colours = Set<UInt32>()
+        for y in stride(from: 0, to: rep.pixelsHigh, by: max(1, rep.pixelsHigh / 40)) {
+            for x in stride(from: 0, to: rep.pixelsWide, by: max(1, rep.pixelsWide / 40)) {
+                if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) {
+                    colours.insert(UInt32(c.redComponent * 255) << 16 | UInt32(c.greenComponent * 255) << 8 | UInt32(c.blueComponent * 255))
+                }
+            }
         }
-        return found
-    }
-
-    private func text(_ node: NSAccessibilityProtocol) -> String {
-        if let label = node.accessibilityLabel(), !label.isEmpty { return label }
-        if let value = node.accessibilityValue() as? String { return value }
-        return node.accessibilityTitle() ?? ""
-    }
-
-    private func labels(_ id: String, in window: NSWindow) -> [String] {
-        var result: [String] = []
-        if let content = window.contentView {
-            walk(content) { node in if node.accessibilityIdentifier() == id { result.append(text(node)) } }
-        }
-        return result
-    }
-
-    private func allLabels(in window: NSWindow) -> [String] {
-        var result: [String] = []
-        if let content = window.contentView { walk(content) { result.append(text($0)) } }
-        return result
+        XCTAssertGreaterThan(colours.count, 8, "the window drew its content", file: file, line: line)
     }
 
     private func webView(in window: NSWindow) -> WKWebView? {

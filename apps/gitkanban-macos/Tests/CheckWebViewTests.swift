@@ -76,6 +76,10 @@ final class CheckWebViewTests: XCTestCase {
     func testAScaledViewportKeepsItsLayoutAndClicksLand() async throws {
         let large = try XCTUnwrap(CheckSize.presets.first { $0.id == "phone-large" })
         let (controller, layout, window) = host(size: large, available: CGSize(width: 1100, height: 717))
+        // WebKit only takes mouse events in a window that is ordered in: this one goes far off
+        // every screen, behind the others, and is never made key, so nothing shows or takes focus.
+        window.setFrameOrigin(NSPoint(x: -30000, y: -30000))
+        window.orderBack(nil)
         XCTAssertEqual(layout.scale, 0.75, accuracy: 0.001)
         XCTAssertEqual(layout.shown, CGSize(width: 330, height: 717))
         await loaded(controller)
@@ -103,7 +107,8 @@ final class CheckWebViewTests: XCTestCase {
             hits = (await controller.evaluate("document.body.dataset.hits") as? String) ?? ""
         }
         XCTAssertTrue(hits.hasPrefix("target@"), "the click lands on the element drawn under it: \(hits)")
-        let coordinates = hits.dropFirst("target@".count).split(separator: ";")[0].split(separator: ",").compactMap { Double($0) }
+        guard hits.hasPrefix("target@") else { return }
+        let coordinates = hits.dropFirst("target@".count).split(separator: ";").first?.split(separator: ",").compactMap { Double($0) } ?? []
         XCTAssertEqual(coordinates.count, 2)
         XCTAssertEqual(coordinates.first ?? 0, 350, accuracy: 2, "in the page's own coordinates")
         XCTAssertEqual(coordinates.last ?? 0, 650, accuracy: 2)
