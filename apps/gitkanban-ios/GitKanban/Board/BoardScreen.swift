@@ -76,7 +76,7 @@ struct BoardScreen: View {
         if model.isSaving {
             HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Saving…").font(.caption) }
                 .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(.regularMaterial, in: Capsule())
+                .themedBar(in: Capsule())
                 .padding(.top, 8)
         }
     }
@@ -408,7 +408,7 @@ private struct LaneCardCell: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
         .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.quaternary, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.stroke, lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .onTapGesture { model.selectedCard = card }
         .draggable(card.fields.id) {
@@ -475,7 +475,7 @@ private struct ListBoardView: View {
                 } header: {
                     header(group)
                 }
-                .listRowBackground(Theme.panel)
+                .themedRows()
             }
         }
         .listStyle(.insetGrouped)

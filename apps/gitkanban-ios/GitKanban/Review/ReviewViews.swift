@@ -26,18 +26,23 @@ struct ReviewListView: View {
 
     var body: some View {
         List {
-            if requests.isEmpty {
-                ContentUnavailableView("No review requests", systemImage: "checkmark.seal",
-                                       description: Text("Agents haven't asked for a review here yet."))
-                    .listRowBackground(Color.clear)
-            }
-            ForEach(requests) { request in
-                NavigationLink(value: request.ref) {
-                    ReviewRequestRow(request: request)
+            Group {
+                if requests.isEmpty {
+                    ContentUnavailableView("No review requests", systemImage: "checkmark.seal",
+                                           description: Text("Agents haven't asked for a review here yet."))
+                        .listRowBackground(Color.clear)
                 }
-                .reviewRequestActions(request)
+                ForEach(requests) { request in
+                    NavigationLink(value: request.ref) {
+                        ReviewRequestRow(request: request)
+                    }
+                    .reviewRequestActions(request)
+                }
             }
+            // Rows on the navy, not the system grey (GITKITTIE-095).
+            .themedRows()
         }
+        .themedList()
         .navigationTitle(cardID.map { "Reviews · \($0)" } ?? "Reviews")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: ReviewRef.self) { ref in
@@ -58,6 +63,7 @@ private struct ReviewRequestActions: ViewModifier {
     let request: ReviewRequest
     @State private var commenting: ReviewRequest?
     @State private var removing: ReviewRequest?
+    @State private var askingChanges: ReviewCommentRequest?
 
     func body(content: Content) -> some View {
         let waiting = request.summary.pendingItems
@@ -77,6 +83,7 @@ private struct ReviewRequestActions: ViewModifier {
                 ReviewRequestCommands(request: request, commenting: $commenting, removing: $removing)
             }
             .reviewRequestPrompts(commenting: $commenting, removing: $removing)
+            .sheet(item: $askingChanges) { ReviewCommentSheet(request: $0) }
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 if waiting > 0 {
                     Button { decide(.approved) } label: { Label("Approve All", systemImage: "checkmark") }.tint(.green)
@@ -91,6 +98,18 @@ private struct ReviewRequestActions: ViewModifier {
     }
 
     private func decide(_ status: ReviewStatus) {
+        if status.needsComment {
+            // Asking for changes says what to change: one message for every waiting file.
+            let request = request
+            askingChanges = ReviewCommentRequest(
+                purpose: .changes(files: request.summary.pendingItems), subject: request.title,
+                suggestions: request.commentSuggestions(),
+                send: { text in
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    Task { await model.decideAll(request, status: .changesRequested, comment: text) }
+                })
+            return
+        }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         Task { await model.decideAll(request, status: status) }
     }
@@ -138,22 +157,18 @@ private struct ReviewRequestPrompts: ViewModifier {
     @Binding var commenting: ReviewRequest?
     @Binding var removing: ReviewRequest?
     var onRemoved: () -> Void
-    @State private var text = ""
+    @State private var sheet: ReviewCommentRequest?
 
     func body(content: Content) -> some View {
         content
-            .alert("Comment on All Files", isPresented: Binding(get: { commenting != nil }, set: { if !$0 { commenting = nil } }),
-                   presenting: commenting) { request in
-                TextField("Comment", text: $text)
-                Button("Add to All Files") {
-                    let comment = text
-                    text = ""
-                    Task { await model.commentAll(request, text: comment) }
-                }
-                Button("Cancel", role: .cancel) { text = "" }
-            } message: { request in
-                Text("The comment is added to all \(request.summary.items) files of “\(request.title)”, for the agent to read.")
+            .onChange(of: commenting) { _, request in
+                guard let request else { return }
+                sheet = ReviewCommentRequest(
+                    purpose: .comment(files: request.summary.items), subject: request.title,
+                    suggestions: request.commentSuggestions(),
+                    send: { text in Task { await model.commentAll(request, text: text) } })
             }
+            .sheet(item: $sheet, onDismiss: { commenting = nil }) { ReviewCommentSheet(request: $0) }
             .confirmationDialog("Remove “\(removing?.title ?? "")”?",
                                 isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
                                 titleVisibility: .visible, presenting: removing) { request in
@@ -225,13 +240,6 @@ struct ReviewRequestRow: View {
 private typealias ReviewPage = ReviewEntry
 
 private extension ReviewEntry {
-    var color: Color {
-        switch self {
-        case .question(let question): return question.isAnswered ? Theme.accent : .secondary
-        case .item(let item): return ReviewColor.status(item.status)
-        }
-    }
-
     /// "2 items and 1 question have no answer yet".
     static func noAnswerTitle(_ pages: [ReviewEntry]) -> String {
         let questions = pages.filter { if case .question = $0 { return true } else { return false } }.count
@@ -264,8 +272,10 @@ struct ReviewDetailView: View {
     /// Select mode: the files on show as a grid, to choose several and act on them at once.
     @State private var selecting = false
     @State private var chosen: Set<String> = []
-    @State private var commentingSelection = false
-    @State private var selectionComment = ""
+    /// The comment sheet for the chosen files: Changes (which needs a message) or a comment.
+    @State private var selectionSheet: ReviewCommentRequest?
+    /// The full-screen viewer, open at the file whose picture was tapped.
+    @State private var fullScreen: ReviewFullScreenStart?
 
     private var request: ReviewRequest? { model.reviewRequest(ref) }
 
@@ -319,7 +329,8 @@ struct ReviewDetailView: View {
                                         // picture: a request can have dozens of large images.
                                         ReviewSlide(request: request, item: item,
                                                     isNear: abs(index - position) <= 1,
-                                                    onDecided: { advance(after: page.id) })
+                                                    onDecided: { advance(after: page.id) },
+                                                    onEnlarge: { openFullScreen(request, at: item.id) })
                                     }
                                 }
                                 .tag(page.id)
@@ -397,16 +408,9 @@ struct ReviewDetailView: View {
             }
         }
         .reviewRequestPrompts(commenting: $commenting, removing: $removing, onRemoved: { dismiss() })
-        .alert("Comment on \(chosen.count) File\(chosen.count == 1 ? "" : "s")", isPresented: $commentingSelection) {
-            TextField("Comment", text: $selectionComment)
-            Button("Add Comment") {
-                let text = selectionComment, ids = chosen
-                selectionComment = ""
-                if let request { Task { await model.comment(request, itemIDs: ids, text: text) } }
-            }
-            Button("Cancel", role: .cancel) { selectionComment = "" }
-        } message: {
-            Text("The comment is added to each selected file, for the agent to read.")
+        .sheet(item: $selectionSheet) { ReviewCommentSheet(request: $0) }
+        .fullScreenCover(item: $fullScreen) { start in
+            ReviewFullScreenView(ref: ref, start: start).environment(model)
         }
         .safeAreaInset(edge: .bottom) {
             if selecting, let request { selectionBar(request) }
@@ -456,17 +460,17 @@ struct ReviewDetailView: View {
                 .accessibilityIdentifier("reviewSelectionCount")
             HStack(spacing: 4) {
                 selectionAction("Approve", "checkmark", .green) { decideSelection(request, ids, .approved) }
-                selectionAction("Changes", "pencil", .orange) { decideSelection(request, ids, .changesRequested) }
+                selectionAction("Changes", "pencil", .orange) { commentOnSelection(request, ids, changes: true) }
                 selectionAction("Reject", "xmark", .red) { decideSelection(request, ids, .rejected) }
                 selectionAction("Waiting", "arrow.uturn.backward", .secondary) { decideSelection(request, ids, .pending) }
                     .accessibilityLabel("Back to Waiting")
-                selectionAction("Comment", "text.bubble", Theme.accent) { selectionComment = ""; commentingSelection = true }
+                selectionAction("Comment", "text.bubble", Theme.accent) { commentOnSelection(request, ids, changes: false) }
             }
             .disabled(ids.isEmpty || model.isSaving)
         }
         .padding(.horizontal, 10).padding(.top, 8).padding(.bottom, 6)
         .frame(maxWidth: .infinity)
-        .background(.bar)
+        .background(Theme.bar.ignoresSafeArea(edges: .bottom))
     }
 
     private func selectionAction(_ title: String, _ symbol: String, _ tint: Color, action: @escaping () -> Void) -> some View {
@@ -486,6 +490,29 @@ struct ReviewDetailView: View {
     private func decideSelection(_ request: ReviewRequest, _ ids: Set<String>, _ status: ReviewStatus) {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         Task { await model.decide(request, itemIDs: ids, status: status) }
+    }
+
+    /// One message for every chosen file: asking for changes (it needs one) or a comment.
+    private func commentOnSelection(_ request: ReviewRequest, _ ids: Set<String>, changes: Bool) {
+        selectionSheet = ReviewCommentRequest(
+            purpose: changes ? .changes(files: ids.count) : .comment(files: ids.count),
+            subject: ids.count == 1 ? ids.first : nil,
+            suggestions: request.commentSuggestions(),
+            send: { text in
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Task {
+                    if changes {
+                        await model.decide(request, itemIDs: ids, status: .changesRequested, comment: text)
+                    } else {
+                        await model.comment(request, itemIDs: ids, text: text)
+                    }
+                }
+            })
+    }
+
+    /// Open the full-screen viewer at a file: its pages are the files on show, in order.
+    private func openFullScreen(_ request: ReviewRequest, at itemID: String) {
+        fullScreen = ReviewFullScreenStart(pager: ReviewPager(itemIDs: shownItems(request).map(\.id)), itemID: itemID)
     }
 
     private func goToUnanswered(_ request: ReviewRequest) {
@@ -518,64 +545,72 @@ struct ReviewDetailView: View {
                         .accessibilityIdentifier("reviewNotesButton")
                 }
             }
-            progress(pages, position: position)
+            // Every page as a tick, waiting ones bright: where the files without an answer
+            // are, at a glance. Tap or drag along it to go there.
+            ReviewProgressStrip(marks: pages.map(\.mark), position: position) { index in
+                if pages.indices.contains(index) { withAnimation { selection = pages[index].id } }
+            }
             HStack(spacing: 8) {
                 Text("\(position + 1) of \(pages.count)").monospacedDigit()
-                if let current {
-                    Text(current.isWaiting ? "· waiting" : "· answered")
-                        .foregroundStyle(current.isWaiting ? Theme.accent : .secondary)
+                if let current { WaitingTag(waiting: current.isWaiting) }
+                if case .item(let item)? = current, let group = item.group {
+                    Text(ReviewGroupCount.line(request, group: group)).lineLimit(1).truncationMode(.middle)
                 }
-                Spacer()
+                Spacer(minLength: 4)
                 Text("\(answered) of \(pages.count) answered").monospacedDigit()
                     .accessibilityIdentifier("reviewAnsweredCount")
-                if let nextWaiting, nextWaiting.id != current?.id, waiting > 0 {
-                    Button {
-                        withAnimation { selection = nextWaiting.id }
-                    } label: {
-                        Label("Next waiting", systemImage: "forward.fill").labelStyle(.iconOnly)
-                            .frame(minWidth: 32, minHeight: 28)
-                    }
-                    .buttonStyle(.bordered).controlSize(.small)
-                    .accessibilityLabel("Next waiting")
-                    .accessibilityIdentifier("reviewNextWaiting")
-                }
             }
             .font(.caption).foregroundStyle(.secondary)
+            if waiting > 0, let nextWaiting, nextWaiting.id != current?.id {
+                Button {
+                    withAnimation { selection = nextWaiting.id }
+                } label: {
+                    Label("Next waiting · \(waiting) left", systemImage: "forward.fill")
+                        .font(.footnote.weight(.semibold)).monospacedDigit()
+                }
+                .buttonStyle(.borderedProminent).controlSize(.small)
+                .tint(Theme.accentFill)
+                .accessibilityLabel("Next waiting, \(waiting) left")
+                .accessibilityIdentifier("reviewNextWaiting")
+            }
         }
         .padding(.horizontal).padding(.top, 8).padding(.bottom, 6)
     }
+}
 
-    /// Where you are and what is answered. One segment per page, coloured by its answer, tap
-    /// to go there, while they are wide enough to tap; past that a bar of what is answered
-    /// with a mark where you are.
-    @ViewBuilder private func progress(_ pages: [ReviewPage], position: Int) -> some View {
-        if pages.count <= 40 {
-            HStack(spacing: 3) {
-                ForEach(pages) { page in
-                    Capsule()
-                        .fill(page.color.opacity(page.isWaiting ? 0.3 : 1))
-                        .frame(height: page.id == selection ? 7 : 4)
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle().inset(by: -8))
-                        .onTapGesture { withAnimation { selection = page.id } }
-                }
-            }
-            .frame(height: 8)
-            .accessibilityHidden(true)
-        } else {
-            let answered = Double(pages.filter { !$0.isWaiting }.count)
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.secondary.opacity(0.25)).frame(height: 4)
-                    Capsule().fill(Theme.accent).frame(width: proxy.size.width * answered / Double(pages.count), height: 4)
-                    Capsule().fill(Color.primary)
-                        .frame(width: 3, height: 10)
-                        .offset(x: max(0, proxy.size.width * Double(position) / Double(max(1, pages.count - 1)) - 1.5))
-                }
-                .frame(maxHeight: .infinity)
-            }
-            .frame(height: 10)
-            .accessibilityHidden(true)
+/// "Waiting" as a filled tag in the accent; "Answered" quiet beside it.
+struct WaitingTag: View {
+    let waiting: Bool
+
+    var body: some View {
+        Text(waiting ? "Waiting" : "Answered")
+            .font(.caption2.weight(.bold))
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(waiting ? AnyShapeStyle(Theme.accentFill) : AnyShapeStyle(Theme.stroke), in: Capsule())
+            .foregroundStyle(waiting ? Color.white : Color.secondary)
+    }
+}
+
+/// How many files of a group still wait, from the whole request (not only what is on show).
+enum ReviewGroupCount {
+    static func waiting(_ request: ReviewRequest, group: String?) -> (waiting: Int, total: Int) {
+        let members = request.items.filter { $0.group == group }
+        return (members.filter { $0.status == .pending }.count, members.count)
+    }
+
+    /// "trees · 3 of 20 waiting", or "trees · all 20 answered".
+    static func line(_ request: ReviewRequest, group: String) -> String {
+        let count = waiting(request, group: group)
+        return count.waiting == 0 ? "\(group) · all \(count.total) answered" : "\(group) · \(count.waiting) of \(count.total) waiting"
+    }
+}
+
+private extension ReviewEntry {
+    /// What the progress strip draws for this page: an answered question as answered.
+    var mark: ReviewStatus {
+        switch self {
+        case .question(let question): return question.isAnswered ? .approved : .pending
+        case .item(let item): return item.status
         }
     }
 }
@@ -587,24 +622,62 @@ private struct ReviewSelectGrid: View {
     @Binding var chosen: Set<String>
     @Environment(\.horizontalSizeClass) private var sizeClass
 
+    /// The files on show, group by group, in order.
+    private var sections: [(name: String?, items: [ReviewItem])] {
+        var result: [(name: String?, items: [ReviewItem])] = []
+        for item in items {
+            if let last = result.indices.last, result[last].name == item.group {
+                result[last].items.append(item)
+            } else {
+                result.append((item.group, [item]))
+            }
+        }
+        return result
+    }
+
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: sizeClass == .regular ? 170 : 105), spacing: 10)], spacing: 10) {
-                ForEach(items) { item in
-                    let isChosen = chosen.contains(item.id)
-                    Button {
-                        if isChosen { chosen.remove(item.id) } else { chosen.insert(item.id) }
-                    } label: {
-                        ReviewThumbnail(request: request, item: item, isChosen: isChosen)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: sizeClass == .regular ? 170 : 105), spacing: 10)], spacing: 10,
+                      pinnedViews: [.sectionHeaders]) {
+                ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                    Section {
+                        ForEach(section.items) { item in
+                            let isChosen = chosen.contains(item.id)
+                            Button {
+                                if isChosen { chosen.remove(item.id) } else { chosen.insert(item.id) }
+                            } label: {
+                                ReviewThumbnail(request: request, item: item, isChosen: isChosen)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(item.id), \(item.status == .pending ? "waiting" : item.status.title)")
+                            .accessibilityAddTraits(isChosen ? .isSelected : [])
+                            .accessibilityIdentifier("reviewSelectItem-\(item.id)")
+                        }
+                    } header: {
+                        if let name = section.name { groupHeader(name) }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(item.id), \(item.status.title)")
-                    .accessibilityAddTraits(isChosen ? .isSelected : [])
-                    .accessibilityIdentifier("reviewSelectItem-\(item.id)")
                 }
             }
             .padding(.horizontal).padding(.vertical, 8)
         }
+    }
+
+    /// The group's name and how many of its files wait, over the whole request.
+    private func groupHeader(_ name: String) -> some View {
+        let count = ReviewGroupCount.waiting(request, group: name)
+        return HStack(spacing: 8) {
+            Text(name.capitalized).font(.subheadline.weight(.semibold))
+            if count.waiting > 0 {
+                Text("\(count.waiting) waiting").font(.caption.weight(.bold)).monospacedDigit()
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(Theme.accentFill, in: Capsule()).foregroundStyle(.white)
+            }
+            Text(count.waiting == 0 ? "all \(count.total) answered" : "of \(count.total)")
+                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .background(Theme.window)
     }
 }
 
@@ -633,13 +706,21 @@ private struct ReviewThumbnail: View {
                         .shadow(radius: 1)
                         .padding(6)
                 }
+                // Answered files step back, so the ones that wait stand out in a long grid.
+                .opacity(item.status == .pending || isChosen ? 1 : 0.45)
                 .overlay(alignment: .bottomLeading) {
-                    Circle().fill(ReviewColor.status(item.status)).frame(width: 9, height: 9)
-                        .opacity(item.status == .pending ? 0 : 1)
-                        .padding(7)
+                    if item.status == .pending {
+                        WaitingTag(waiting: true).padding(6)
+                    } else {
+                        Image(systemName: ReviewColor.symbol(item.status))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white, ReviewColor.status(item.status))
+                            .symbolRenderingMode(.palette)
+                            .padding(6)
+                    }
                 }
             Text(item.id).font(.caption2.weight(.medium)).lineLimit(1).truncationMode(.middle)
-                .foregroundStyle(.primary)
+                .foregroundStyle(item.status == .pending ? .primary : .secondary)
         }
         .contentShape(Rectangle())
     }
@@ -698,6 +779,15 @@ enum ReviewColor {
         case .changesRequested: return .orange
         }
     }
+
+    static func symbol(_ status: ReviewStatus) -> String {
+        switch status {
+        case .pending: return "circle.dashed"
+        case .approved: return "checkmark.circle.fill"
+        case .rejected: return "xmark.circle.fill"
+        case .changesRequested: return "pencil.circle.fill"
+        }
+    }
 }
 
 /// One item, filling a page: the asset, what was decided, the answer buttons and comments.
@@ -708,7 +798,11 @@ private struct ReviewSlide: View {
     /// On screen or next to it: only then is the asset loaded.
     var isNear = true
     let onDecided: () -> Void
+    /// The picture was tapped: open the full-screen viewer at this file.
+    var onEnlarge: (() -> Void)?
     @State private var draft = ""
+    /// The message sheet Changes opens: asking for changes needs one.
+    @State private var askingChanges: ReviewCommentRequest?
     @State private var annotating: SharedImage?
     @State private var showsAnnotator = false
     /// The marked-up image of a comment that is shown full screen.
@@ -731,7 +825,7 @@ private struct ReviewSlide: View {
                 VStack(alignment: .leading, spacing: 12) {
                     if isChoice { choiceStrip }
                     Group {
-                        if isNear { AssetView(request: request, item: item) } else { Color.clear }
+                        if isNear { ReviewAssetView(request: request, item: item, onEnlarge: onEnlarge) } else { Color.clear }
                     }
                         .frame(maxWidth: .infinity)
                         .frame(height: max(220, proxy.size.height - (isChoice ? 330 : 270)))
@@ -777,6 +871,8 @@ private struct ReviewSlide: View {
                             .focused($composing)
                             .padding(.horizontal, 12).padding(.vertical, 8)
                             .background(Theme.panel, in: RoundedRectangle(cornerRadius: 10))
+                        // What was said on other files of this request, to say again in one tap.
+                        ReviewCommentSuggestionMenu(suggestions: request.commentSuggestions(excluding: item)) { draft = $0 }
                         Button {
                             let text = draft
                             draft = ""
@@ -809,6 +905,7 @@ private struct ReviewSlide: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
+        .sheet(item: $askingChanges) { ReviewCommentSheet(request: $0) }
         .fullScreenCover(item: Binding(get: { enlargedComment.map(QuickLookItem.init(file:)) }, set: { enlargedComment = $0?.file })) { shown in
             ImageViewer(request: request, file: shown.file ?? "").environment(model)
         }
@@ -844,8 +941,8 @@ private struct ReviewSlide: View {
             Label("Waiting for you", systemImage: "circle.dashed")
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(.regularMaterial, in: Capsule())
-                .foregroundStyle(Theme.accent)
+                .themedBar(in: Capsule())
+                .foregroundStyle(Theme.accentText)
                 .accessibilityIdentifier("reviewVerdict")
         }
     }
@@ -900,8 +997,7 @@ private struct ReviewSlide: View {
                 }
             }
             decisionButton("Changes", "pencil", .changesRequested, tint: .orange) {
-                await model.decide(request, item: item, status: .changesRequested)
-                composing = true
+                askChanges()
             }
             decisionButton("Reject", "xmark", .rejected, tint: .red) {
                 await model.decide(request, item: item, status: .rejected)
@@ -920,12 +1016,21 @@ private struct ReviewSlide: View {
 
     /// Choose this option: approve it and reject the group's others, whatever they were.
     private func pickThis() async {
-        await model.decide(request, item: item, status: .approved)
-        for other in options where other.id != item.id && other.status != .rejected {
-            if let fresh = model.reviewRequest(request.ref) {
-                await model.decide(fresh, item: other, status: .rejected)
-            }
-        }
+        await model.pick(request, item: item)
+    }
+
+    /// Changes says what to change: the message sheet first, then the decision with it.
+    private func askChanges() {
+        let request = request, item = item
+        askingChanges = ReviewCommentRequest(
+            purpose: .changes(files: 1), subject: item.id,
+            suggestions: request.commentSuggestions(excluding: item),
+            send: { text in
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Task {
+                    if await model.decide(request, item: item, status: .changesRequested, comment: text) { onDecided() }
+                }
+            })
     }
 
     private func decisionButton(
@@ -987,10 +1092,12 @@ struct StatusChip: View {
 // MARK: - Asset viewers
 
 /// Renders an item by kind: image, 3D model (Quick Look / AR), audio, video, animation.
-private struct AssetView: View {
+struct ReviewAssetView: View {
     @Environment(AppModel.self) private var model
     let request: ReviewRequest
     let item: ReviewItem
+    /// Tapping the picture opens the full-screen viewer; without it, the picture alone.
+    var onEnlarge: (() -> Void)?
     @State private var quickLook: QuickLookItem?
     @State private var isPreparing = false
     @State private var enlarged = false
@@ -1006,7 +1113,7 @@ private struct AssetView: View {
         case .image:
             ReviewImage(request: request, file: item.file)
                 .contentShape(Rectangle())
-                .onTapGesture { enlarged = true }
+                .onTapGesture { if let onEnlarge { onEnlarge() } else { enlarged = true } }
                 .accessibilityAddTraits(.isButton)
                 .accessibilityLabel("Enlarge \(item.id)")
                 .accessibilityIdentifier("reviewAssetImage")

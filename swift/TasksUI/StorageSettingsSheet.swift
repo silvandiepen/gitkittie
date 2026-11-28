@@ -40,64 +40,69 @@ struct StorageSettingsSheet: View {
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Send files to a bucket", isOn: $enabled)
-            } footer: {
-                Text("Images, audio, video and other big files of \(repo.displayName) go to the bucket. The repository keeps the tasks, the review requests and a small pointer per file. Files that are already in the repository keep working.")
-            }
-
-            Section {
-                field("Endpoint", text: $endpoint, prompt: "https://<account>.r2.cloudflarestorage.com")
-                field("Bucket", text: $bucket, prompt: "project-assets")
-                field("Region", text: $region, prompt: "auto")
-                field("Public address", text: $publicBaseURL, prompt: "https://files.example.com")
-            } header: {
-                Text("Bucket")
-            } footer: {
-                Text("Saved in the repository, so your other devices and your agents use the same bucket. With a public address, files are read without keys: anyone who has a file's link can open it. Without one, every device that reads needs the keys.")
-            }
-
-            Section {
-                field("Access key ID", text: $accessKeyID, prompt: hasKeys ? "Saved on this device" : "Access key ID")
-                SecureField("Secret access key", text: $secretAccessKey, prompt: Text(hasKeys ? "Saved on this device" : "Secret access key"))
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                    .autocorrectionDisabled()
-            } header: {
-                Text("Keys on this device")
-            } footer: {
-                Text(hasKeys
-                     ? "This device has keys for this bucket. Fill in both fields to replace them."
-                     : "Kept in the Keychain of this device only, never in the repository. A device without keys still reads files through the public address, and writes new files to the repository.")
-            }
-
-            Section {
-                Button("Test Connection") { test() }
-                    .disabled(!canSave)
-                if let message {
-                    Label(message, systemImage: messageIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(messageIsError ? .red : .green)
-                        .font(.callout)
-                }
-            }
-
-            if let stillInRepository, stillInRepository > 0, hasKeys {
+            Group {
                 Section {
-                    if let moved {
-                        ProgressView(value: Double(moved.done), total: Double(max(moved.total, 1))) {
-                            Text("Moved \(moved.done) of \(moved.total)")
-                        }
-                        Button("Stop", role: .cancel) { moveTask?.cancel() }
-                    } else {
-                        Button("Move \(stillInRepository) Existing Files to the Bucket…") { confirmsMove = true }
-                            .disabled(isWorking)
-                    }
+                    Toggle("Send files to a bucket", isOn: $enabled)
                 } footer: {
-                    Text("Each file becomes two commits: its pointer, and its removal. The files stay in the repository's history, so this stops the repository from growing; it does not make what git already holds smaller.")
+                    Text("Images, audio, video and other big files of \(repo.displayName) go to the bucket. The repository keeps the tasks, the review requests and a small pointer per file. Files that are already in the repository keep working.")
+                }
+
+                Section {
+                    field("Endpoint", text: $endpoint, prompt: "https://<account>.r2.cloudflarestorage.com")
+                    field("Bucket", text: $bucket, prompt: "project-assets")
+                    field("Region", text: $region, prompt: "auto")
+                    field("Public address", text: $publicBaseURL, prompt: "https://files.example.com")
+                } header: {
+                    Text("Bucket")
+                } footer: {
+                    Text("Saved in the repository, so your other devices and your agents use the same bucket. With a public address, files are read without keys: anyone who has a file's link can open it. Without one, every device that reads needs the keys.")
+                }
+
+                Section {
+                    field("Access key ID", text: $accessKeyID, prompt: hasKeys ? "Saved on this device" : "Access key ID")
+                    SecureField("Secret access key", text: $secretAccessKey, prompt: Text(hasKeys ? "Saved on this device" : "Secret access key"))
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Keys on this device")
+                } footer: {
+                    Text(hasKeys
+                         ? "This device has keys for this bucket. Fill in both fields to replace them."
+                         : "Kept in the Keychain of this device only, never in the repository. A device without keys still reads files through the public address, and writes new files to the repository.")
+                }
+
+                Section {
+                    Button("Test Connection") { test() }
+                        .disabled(!canSave)
+                    if let message {
+                        Label(message, systemImage: messageIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                            .foregroundStyle(messageIsError ? .red : .green)
+                            .font(.callout)
+                    }
+                }
+
+                if let stillInRepository, stillInRepository > 0, hasKeys {
+                    Section {
+                        if let moved {
+                            ProgressView(value: Double(moved.done), total: Double(max(moved.total, 1))) {
+                                Text("Moved \(moved.done) of \(moved.total)")
+                            }
+                            Button("Stop", role: .cancel) { moveTask?.cancel() }
+                        } else {
+                            Button("Move \(stillInRepository) Existing Files to the Bucket…") { confirmsMove = true }
+                                .disabled(isWorking)
+                        }
+                    } footer: {
+                        Text("Each file becomes two commits: its pointer, and its removal. The files stay in the repository's history, so this stops the repository from growing; it does not make what git already holds smaller.")
+                    }
                 }
             }
+            // Rows on the navy, not the system grey (GITKITTIE-095).
+            .themedRows()
         }
+        .themedList()
         .formStyle(.grouped)
         .navigationTitle("File Storage")
         .toolbar {

@@ -17,6 +17,10 @@ enum Theme {
     static let panel = Swatch.panel.color
     /// A task card, a step lighter than a panel.
     static let card = Swatch.card.color
+    /// A bar or a control that floats over the content (a bottom bar, a toolbar capsule, a
+    /// toast, a badge on a picture), and a row of a grouped list or form: the system draws these
+    /// in grey materials and greys (#1C1C1E, #2C2C2E), which read as grey on the navy.
+    static let bar = Swatch.bar.color
     /// The hairline around panels and cards.
     static let stroke = Swatch.stroke.color
     /// The one accent: selection, links, the primary button.
@@ -75,13 +79,15 @@ enum Theme {
         static let sidebar = Swatch(light: 0xE9ECF2, dark: 0x080C15, lightHighContrast: 0xE6E9F0, darkHighContrast: 0x020408)
         static let panel = Swatch(light: 0xFFFFFF, dark: 0x111827, lightHighContrast: 0xFFFFFF, darkHighContrast: 0x111827)
         static let card = Swatch(light: 0xFFFFFF, dark: 0x161F31, lightHighContrast: 0xFFFFFF, darkHighContrast: 0x182236)
+        /// Between a panel and a card, so a bar stands off the window and a card can still sit on it.
+        static let bar = Swatch(light: 0xFFFFFF, dark: 0x131C2C, lightHighContrast: 0xFFFFFF, darkHighContrast: 0x141D2E)
         static let stroke = Swatch(light: 0xD9DEE8, dark: 0x232D42, lightHighContrast: 0x6E7A8F, darkHighContrast: 0x6B7A99)
         static let accent = Swatch(light: 0x4F8CFF, dark: 0x4F8CFF, lightHighContrast: 0x1F5BD1, darkHighContrast: 0x4F8CFF)
         static let accentText = Swatch(light: 0x75A5FF, dark: 0x75A5FF, lightHighContrast: 0x1A4FB8, darkHighContrast: 0x9DC0FF)
         static let accentFill = Swatch(light: 0x2B68E0, dark: 0x2B68E0, lightHighContrast: 0x1A4FB8, darkHighContrast: 0x1A4FB8)
 
         /// The surfaces a stroke or an accent is drawn on.
-        static let surfaces: [Swatch] = [.window, .sidebar, .panel, .card]
+        static let surfaces: [Swatch] = [.window, .sidebar, .panel, .card, .bar]
 
         func hex(for appearance: Appearance) -> UInt32 {
             switch (appearance.isDark, appearance.isHighContrast) {
@@ -138,8 +144,20 @@ private extension UIColor {
 #endif
 
 extension View {
-    /// A list on the app's own background, in place of the system's grey.
+    /// A list or form on the app's own background, in place of the system's grey.
     func themedList() -> some View {
         scrollContentBackground(.hidden).background(Theme.window.ignoresSafeArea())
+    }
+
+    /// Rows of a grouped list or form on the navy `bar` surface, in place of the system's grey
+    /// row. Put it on a section, or on a `Group` around a list's sections to reach every row.
+    func themedRows() -> some View {
+        listRowBackground(Theme.bar)
+    }
+
+    /// A bar or control floating over the content, on the navy `bar` surface with the theme's
+    /// hairline, in place of the system's grey material.
+    func themedBar<S: InsettableShape>(in shape: S) -> some View {
+        background(Theme.bar, in: shape).overlay { shape.strokeBorder(Theme.stroke, lineWidth: 1) }
     }
 }

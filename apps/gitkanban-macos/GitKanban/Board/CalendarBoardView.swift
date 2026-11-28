@@ -192,7 +192,7 @@ private struct CalendarDayCell: View {
         .padding(6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.panel.opacity(isEvenMonth ? 1 : 0.6), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.stroke))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(day.formatted(.dateTime.weekday(.wide).month().day()))
     }

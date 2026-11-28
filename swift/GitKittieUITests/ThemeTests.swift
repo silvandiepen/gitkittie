@@ -78,11 +78,38 @@ final class ThemeTests: XCTestCase {
             contrast(card.hex(for: dark), window.hex(for: dark)))
     }
 
+    /// GITKITTIE-095: rows, bars and floating controls take the navy `bar` in place of the
+    /// system's greys; text on every dark surface still reads at WCAG AA.
+    func testTextReadsOnEveryDarkSurface() {
+        for appearance in [dark, darkHigh] {
+            for surface in Theme.Swatch.surfaces {
+                let background = surface.hex(for: appearance)
+                XCTAssertGreaterThanOrEqual(contrast(0xFFFFFF, background), 7, "white on \(hexString(background))")
+                // The system's secondary label in dark mode: #EBEBF5 at 60 % over the surface.
+                let secondary = blend(0xEBEBF5, alpha: 0.6, over: background)
+                XCTAssertGreaterThanOrEqual(contrast(secondary, background), 4.5, "secondary on \(hexString(background))")
+                XCTAssertGreaterThanOrEqual(contrast(Theme.Swatch.accentText.hex(for: appearance), background), 4.5)
+            }
+        }
+    }
+
+    func testTheBarIsNavyBetweenThePanelAndTheCard() {
+        for appearance in [dark, darkHigh] {
+            let bar = Theme.Swatch.bar.hex(for: appearance)
+            XCTAssertGreaterThan(contrast(bar, Theme.Swatch.window.hex(for: appearance)), contrast(Theme.Swatch.panel.hex(for: appearance), Theme.Swatch.window.hex(for: appearance)))
+            XCTAssertLessThan(contrast(bar, Theme.Swatch.window.hex(for: appearance)), contrast(Theme.Swatch.card.hex(for: appearance), Theme.Swatch.window.hex(for: appearance)))
+            // Blue, not grey: the blue channel leads, as in the window's navy.
+            XCTAssertGreaterThan(bar & 0xFF, ((bar >> 16) & 0xFF) + 16, hexString(bar))
+        }
+        // Darker than the system rows it replaces.
+        XCTAssertLessThan(contrast(Theme.Swatch.bar.hex(for: dark), 0x000000), contrast(0x1C1C1E, 0x000000))
+    }
+
     // MARK: Resolution
 
     /// The colours the views draw with, resolved the way the system resolves them.
     func testColoursResolveToTheirHighContrastValues() {
-        let swatches: [Theme.Swatch] = [.window, .sidebar, .panel, .card, .stroke, .accent, .accentText, .accentFill]
+        let swatches: [Theme.Swatch] = [.window, .sidebar, .panel, .card, .bar, .stroke, .accent, .accentText, .accentFill]
         for swatch in swatches {
             for appearance in [dark, darkHigh, light, lightHigh] {
                 XCTAssertEqual(resolved(swatch, appearance), swatch.hex(for: appearance), "\(swatch) for \(appearance)")
@@ -155,6 +182,15 @@ final class ThemeTests: XCTestCase {
     }
 
     private func hexString(_ value: UInt32) -> String { String(format: "#%06X", value) }
+
+    /// `top` at `alpha` drawn over `bottom`.
+    private func blend(_ top: UInt32, alpha: Double, over bottom: UInt32) -> UInt32 {
+        func channel(_ shift: UInt32) -> UInt32 {
+            let a = Double((top >> shift) & 0xFF), b = Double((bottom >> shift) & 0xFF)
+            return UInt32((a * alpha + b * (1 - alpha)).rounded())
+        }
+        return channel(16) << 16 | channel(8) << 8 | channel(0)
+    }
 
     /// WCAG 2 contrast ratio of two sRGB colours.
     private func contrast(_ first: UInt32, _ second: UInt32) -> Double {

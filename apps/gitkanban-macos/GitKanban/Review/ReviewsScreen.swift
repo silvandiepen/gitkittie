@@ -16,9 +16,9 @@ struct ReviewsScreen: View {
     @Environment(AppModel.self) private var model
     @State private var selected: ReviewRef?
     @State private var showDecided = false
-    /// The request a comment is being written for, from its menu.
-    @State private var commenting: ReviewRequest?
-    @State private var commentText = ""
+    /// The message sheet a request's menu opens: Changes on every waiting file (which needs
+    /// a message) or a comment on every file.
+    @State private var commentSheet: ReviewCommentRequest?
     /// The request about to be removed, once confirmed.
     @State private var removing: ReviewRequest?
 
@@ -83,16 +83,7 @@ struct ReviewsScreen: View {
         .onChange(of: model.reviewsFocusRequest) { _, request in
             if let request { selected = request; model.reviewsFocusRequest = nil }
         }
-        .alert("Comment on \(commenting?.title ?? "")", isPresented: Binding(get: { commenting != nil }, set: { if !$0 { commenting = nil } })) {
-            TextField("Comment", text: $commentText)
-            Button("Add to All Files") {
-                if let request = commenting { let text = commentText; Task { await model.commentAll(request, text: text) } }
-                commenting = nil
-            }
-            Button("Cancel", role: .cancel) { commenting = nil }
-        } message: {
-            Text("The comment is added to every file of this request, for the agent to read.")
-        }
+        .sheet(item: $commentSheet) { ReviewCommentSheet(request: $0) }
         .confirmationDialog("Remove “\(removing?.title ?? "")”?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             Button("Remove Request", role: .destructive) {
                 if let request = removing {
@@ -115,12 +106,20 @@ struct ReviewsScreen: View {
         if s.items > 0 {
             Button("Approve All Waiting Files (\(waiting))", systemImage: "checkmark") { Task { await model.decideAll(request, status: .approved) } }
                 .disabled(waiting == 0)
-            Button("Ask Changes on All Waiting Files", systemImage: "pencil") { Task { await model.decideAll(request, status: .changesRequested) } }
+            Button("Ask Changes on All Waiting Files…", systemImage: "pencil") {
+                commentSheet = ReviewCommentRequest(
+                    purpose: .changes(files: waiting), subject: request.title, suggestions: request.commentSuggestions(),
+                    send: { text in Task { await model.decideAll(request, status: .changesRequested, comment: text) } })
+            }
                 .disabled(waiting == 0)
             Button("Reject All Waiting Files", systemImage: "xmark") { Task { await model.decideAll(request, status: .rejected) } }
                 .disabled(waiting == 0)
             Divider()
-            Button("Comment on All Files…", systemImage: "text.bubble") { commentText = ""; commenting = request }
+            Button("Comment on All Files…", systemImage: "text.bubble") {
+                commentSheet = ReviewCommentRequest(
+                    purpose: .comment(files: s.items), subject: request.title, suggestions: request.commentSuggestions(),
+                    send: { text in Task { await model.commentAll(request, text: text) } })
+            }
             Divider()
         }
         if s.unanswered > 0 {
@@ -259,8 +258,10 @@ private struct ReviewDetailView: View {
     @State private var selection: Set<String> = []
     /// Where a ⇧-click range starts: the file last clicked without ⇧.
     @State private var anchor: String?
-    @State private var commentingSelection = false
-    @State private var selectionComment = ""
+    /// The message sheet for the selection: Changes (which needs a message) or a comment.
+    @State private var selectionSheet: ReviewCommentRequest?
+    /// Groups whose answered files are folded away, so what waits is all that shows.
+    @State private var foldedGroups: Set<String> = []
     /// The entry last worked on or jumped to: "Next Waiting" goes on from there.
     @State private var current: String?
     @State private var notesExpanded = false
@@ -292,17 +293,16 @@ private struct ReviewDetailView: View {
                                 .id("question:\(question.id)")
                         }
                         ForEach(groups) { group in
+                            let folded = foldedGroups.contains(group.id)
+                            let answeredHere = group.items.filter { $0.status != .pending }.count
                             VStack(alignment: .leading, spacing: 10) {
                                 if let name = group.name {
-                                    HStack(spacing: 8) {
-                                        Text(name.capitalized).font(.headline)
-                                        if group.pickOne { Text("Pick one").font(.caption).foregroundStyle(.secondary) }
-                                        Text(Self.groupCount(request, group.name)).font(.caption).foregroundStyle(.secondary)
-                                    }
+                                    groupHeader(request, group: group, name: name, folded: folded, answeredHere: answeredHere)
                                 }
                                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 320, maximum: 520), spacing: 18, alignment: .top)],
                                           alignment: .leading, spacing: 18) {
-                                    ForEach(group.items) { item in
+                                    // Folded: only the files that still wait.
+                                    ForEach(folded ? group.items.filter { $0.status == .pending } : group.items) { item in
                                         ReviewItemView(request: request, item: item, group: group,
                                                        isSelected: selection.contains(item.id),
                                                        select: { mode in select(item.id, mode, shown: shownIDs) },
@@ -330,7 +330,11 @@ private struct ReviewDetailView: View {
                     ToolbarItem {
                         Button {
                             jumpToNextWaiting(entries, proxy: proxy)
-                        } label: { Label("Next Waiting File", systemImage: "arrow.down.to.line") }
+                        } label: {
+                            let waiting = entries.filter(\.isWaiting).count
+                            Label(waiting == 0 ? "Next Waiting File" : "Next Waiting (\(waiting))", systemImage: "arrow.down.to.line")
+                        }
+                            .labelStyle(.titleAndIcon)
                             .keyboardShortcut("j", modifiers: .command)
                             .disabled(!entries.contains(where: \.isWaiting))
                             .help("Scroll to the next file or question that waits for you (⌘J)")
@@ -365,17 +369,7 @@ private struct ReviewDetailView: View {
                 }
                 .opacity(0).allowsHitTesting(false).accessibilityHidden(true)
             }
-            .alert("Comment on \(selection.count) File\(selection.count == 1 ? "" : "s")", isPresented: $commentingSelection) {
-                TextField("Comment", text: $selectionComment)
-                Button("Add Comment") {
-                    let text = selectionComment, ids = selection
-                    selectionComment = ""
-                    Task { await model.comment(request, itemIDs: ids, text: text) }
-                }
-                Button("Cancel", role: .cancel) { selectionComment = "" }
-            } message: {
-                Text("The comment is added to each selected file, for the agent to read.")
-            }
+            .sheet(item: $selectionSheet) { ReviewCommentSheet(request: $0) }
             .onAppear {
                 notesExpanded = notes.count <= preview
                 hide(request)
@@ -384,11 +378,34 @@ private struct ReviewDetailView: View {
         }
     }
 
-    /// "3 of 12 waiting" for a group, from the whole request (not only what is on show).
-    static func groupCount(_ request: ReviewRequest, _ name: String?) -> String {
+    /// A group's name, how many of its files wait (over the whole request, not only what is
+    /// on show) as a tag in the accent, and a way to fold its answered files away.
+    private func groupHeader(_ request: ReviewRequest, group: ReviewGroup, name: String, folded: Bool, answeredHere: Int) -> some View {
         let members = request.items.filter { $0.group == name }
         let waiting = members.filter { $0.status == .pending }.count
-        return waiting == 0 ? "all \(members.count) answered" : "\(waiting) of \(members.count) waiting"
+        return HStack(spacing: 8) {
+            Text(name.capitalized).font(.headline)
+            if group.pickOne { Text("Pick one").font(.caption).foregroundStyle(.secondary) }
+            if waiting > 0 {
+                Text("\(waiting) waiting").font(.caption.weight(.bold)).monospacedDigit()
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(Theme.accentFill, in: Capsule()).foregroundStyle(.white)
+                Text("of \(members.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            } else {
+                Label("All \(members.count) answered", systemImage: "checkmark.circle.fill")
+                    .font(.caption).foregroundStyle(.green)
+            }
+            Spacer()
+            if answeredHere > 0 {
+                Button(folded ? "Show \(answeredHere) Answered" : "Hide Answered") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        if folded { foldedGroups.remove(group.id) } else { foldedGroups.insert(group.id) }
+                    }
+                }
+                .buttonStyle(.link).font(.caption)
+                .help(folded ? "Show the files of this group you already answered" : "Show only the files of this group that wait")
+            }
+        }
     }
 
     private func hide(_ request: ReviewRequest) {
@@ -444,12 +461,12 @@ private struct ReviewDetailView: View {
             Divider().frame(height: 18)
             Button { decideSelection(request, ids, .approved) } label: { Label("Approve", systemImage: "checkmark") }
                 .tint(.green)
-            Button { decideSelection(request, ids, .changesRequested) } label: { Label("Ask Changes", systemImage: "pencil") }
+            Button { commentOnSelection(request, ids, changes: true) } label: { Label("Ask Changes…", systemImage: "pencil") }
                 .tint(.orange)
             Button { decideSelection(request, ids, .rejected) } label: { Label("Reject", systemImage: "xmark") }
                 .tint(.red)
             Button { decideSelection(request, ids, .pending) } label: { Label("Back to Waiting", systemImage: "arrow.uturn.backward") }
-            Button { selectionComment = ""; commentingSelection = true } label: { Label("Comment…", systemImage: "text.bubble") }
+            Button { commentOnSelection(request, ids, changes: false) } label: { Label("Comment…", systemImage: "text.bubble") }
             Divider().frame(height: 18)
             Button { selection = []; anchor = nil } label: { Image(systemName: "xmark.circle.fill") }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -459,13 +476,31 @@ private struct ReviewDetailView: View {
         .buttonStyle(.bordered)
         .disabled(model.isSaving)
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(.regularMaterial, in: Capsule())
-        .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+        .background(Theme.card, in: Capsule())
+        .overlay { Capsule().strokeBorder(Theme.stroke) }
+        .shadow(color: .black.opacity(0.3), radius: 8, y: 2)
         .padding(.bottom, 16)
     }
 
     private func decideSelection(_ request: ReviewRequest, _ ids: Set<String>, _ status: ReviewStatus) {
         Task { await model.decide(request, itemIDs: ids, status: status) }
+    }
+
+    /// One message for every selected file: asking for changes (it needs one) or a comment.
+    private func commentOnSelection(_ request: ReviewRequest, _ ids: Set<String>, changes: Bool) {
+        selectionSheet = ReviewCommentRequest(
+            purpose: changes ? .changes(files: ids.count) : .comment(files: ids.count),
+            subject: ids.count == 1 ? ids.first : nil,
+            suggestions: request.commentSuggestions(),
+            send: { text in
+                Task {
+                    if changes {
+                        await model.decide(request, itemIDs: ids, status: .changesRequested, comment: text)
+                    } else {
+                        await model.comment(request, itemIDs: ids, text: text)
+                    }
+                }
+            })
     }
 
     private func header(_ request: ReviewRequest) -> some View {
@@ -585,6 +620,8 @@ private struct ReviewItemView: View {
     var worked: () -> Void = {}
     @State private var draft = ""
     @State private var writing = false
+    /// The message sheet Changes opens: asking for changes needs one.
+    @State private var changeSheet: ReviewCommentRequest?
     @FocusState private var composing: Bool
 
     var body: some View {
@@ -592,8 +629,20 @@ private struct ReviewItemView: View {
             AssetView(request: request, item: item)
                 .frame(maxWidth: .infinity)
                 .frame(height: 300)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                // Answered files step back, so the ones that wait stand out in a long request.
+                .opacity(item.status == .pending || isSelected ? 1 : 0.55)
+                .overlay(alignment: .topLeading) {
+                    if item.status == .pending {
+                        Label("Waiting", systemImage: "circle.dashed")
+                            .font(.caption.weight(.bold))
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(Theme.accentFill, in: Capsule())
+                            .foregroundStyle(.white)
+                            .padding(8)
+                    }
+                }
 
             HStack(alignment: .firstTextBaseline) {
                 // A drawn checkbox rather than an AppKit one: a request shows hundreds of cards,
@@ -631,10 +680,8 @@ private struct ReviewItemView: View {
                 Label("Shipped to \(shipped)", systemImage: "shippingbox").font(.caption).foregroundStyle(.secondary)
             }
 
-            ReviewDecisionButtons(request: request, item: item, group: group, decided: { status in
-                worked()
-                if status == .changesRequested { openComment() }
-            }, comment: openComment)
+            ReviewDecisionButtons(request: request, item: item, group: group, decided: { _ in worked() },
+                                  askChanges: askChanges, comment: openComment)
 
             ForEach(Array(item.comments.enumerated()), id: \.offset) { _, comment in
                 VStack(alignment: .leading, spacing: 2) {
@@ -654,6 +701,8 @@ private struct ReviewItemView: View {
                         .focused($composing)
                         .onSubmit(send)
                         .onExitCommand { if draft.isEmpty { writing = false } }
+                    // What was said on other files of this request, to say again in one click.
+                    ReviewCommentSuggestionMenu(suggestions: request.commentSuggestions(excluding: item)) { draft = $0 }
                     ReviewSendButton(isEmpty: draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, send: send)
                 }
             }
@@ -670,7 +719,7 @@ private struct ReviewItemView: View {
         .contextMenu {
             Button("Approve", systemImage: "checkmark") { decide(.approved) }
                 .disabled(item.status == .approved)
-            Button("Ask Changes", systemImage: "pencil") { decide(.changesRequested) }
+            Button("Ask Changes…", systemImage: "pencil") { askChanges() }
                 .disabled(item.status == .changesRequested)
             Button("Reject", systemImage: "xmark") { decide(.rejected) }
                 .disabled(item.status == .rejected)
@@ -681,12 +730,25 @@ private struct ReviewItemView: View {
             Divider()
             ReviewLinkButtons(request: request, file: item.file)
         }
+        .sheet(item: $changeSheet) { ReviewCommentSheet(request: $0) }
     }
 
     private var background: AnyShapeStyle {
         if isSelected { return AnyShapeStyle(Color.accentColor.opacity(0.22)) }
-        if item.status == .pending { return AnyShapeStyle(.background.secondary) }
+        if item.status == .pending { return AnyShapeStyle(Theme.card) }
         return AnyShapeStyle(StatusChip.color(item.status).opacity(0.07))
+    }
+
+    /// Changes says what to change: the message sheet first, then the decision with it.
+    private func askChanges() {
+        let request = request, item = item
+        changeSheet = ReviewCommentRequest(
+            purpose: .changes(files: 1), subject: item.id,
+            suggestions: request.commentSuggestions(excluding: item),
+            send: { text in
+                worked()
+                Task { await model.decide(request, item: item, status: .changesRequested, comment: text) }
+            })
     }
 
     private func decide(_ status: ReviewStatus) {
@@ -733,6 +795,8 @@ private struct ReviewDecisionButtons: View {
     let item: ReviewItem
     let group: ReviewGroup
     let decided: (ReviewStatus) -> Void
+    /// Changes opens the message sheet: it is never sent without one.
+    let askChanges: () -> Void
     let comment: () -> Void
 
     var body: some View {
@@ -744,9 +808,11 @@ private struct ReviewDecisionButtons: View {
                     await model.decide(request, item: item, status: .approved)
                 }
             }
-            decisionButton("Changes", "pencil", .changesRequested, tint: .orange) {
-                await model.decide(request, item: item, status: .changesRequested)
+            Button(action: askChanges) {
+                decisionLabel("Changes", "pencil", .changesRequested, tint: .orange)
             }
+            .buttonStyle(.plain)
+            .help("Ask for changes: say what to change")
             decisionButton("Reject", "xmark", .rejected, tint: .red) {
                 await model.decide(request, item: item, status: .rejected)
             }
@@ -784,20 +850,24 @@ private struct ReviewDecisionButtons: View {
         _ title: String, _ symbol: String, _ status: ReviewStatus, tint: Color,
         action: @escaping () async -> Void
     ) -> some View {
-        let selected = item.status == status
-        return Button {
+        Button {
             decided(status)
             Task { await action() }
         } label: {
-            Label(title, systemImage: symbol)
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
-                .background(tint.opacity(selected ? 0.24 : 0.09), in: RoundedRectangle(cornerRadius: 8))
-                .foregroundStyle(selected ? tint : .primary)
-                .contentShape(Rectangle())
+            decisionLabel(title, symbol, status, tint: tint)
         }
         .buttonStyle(.plain)
+    }
+
+    private func decisionLabel(_ title: String, _ symbol: String, _ status: ReviewStatus, tint: Color) -> some View {
+        let selected = item.status == status
+        return Label(title, systemImage: symbol)
+            .font(.callout.weight(.medium))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(tint.opacity(selected ? 0.24 : 0.09), in: RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(selected ? tint : .primary)
+            .contentShape(Rectangle())
     }
 }
 

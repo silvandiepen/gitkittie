@@ -105,17 +105,17 @@ final class FolderReviewUITests: XCTestCase {
         XCTAssertTrue(answered.waitForExistence(timeout: 10))
         XCTAssertEqual(answered.label, "0 of 2 answered")
 
-        // The image opens full screen and can be closed again: swiped away, or with the cross.
+        // The image opens the full-screen viewer and can be closed again: swiped away, or with the cross.
         let enlarge = app.descendants(matching: .any)["reviewAssetImage"].firstMatch
         XCTAssertTrue(enlarge.waitForExistence(timeout: 10))
         enlarge.tap()
-        let viewer = app.images["reviewImageViewer"]
-        XCTAssertTrue(viewer.waitForExistence(timeout: 10), "Tapping the image enlarges it.\n\(app.debugDescription)")
-        viewer.swipeDown()
+        let viewer = app.otherElements["reviewFullScreen"]
+        XCTAssertTrue(viewer.waitForExistence(timeout: 10), "Tapping the image opens it full screen.\n\(app.debugDescription)")
+        app.swipeDown()
         wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: viewer)], timeout: 10)
         enlarge.tap()
-        XCTAssertTrue(app.buttons["reviewImageClose"].waitForExistence(timeout: 10))
-        app.buttons["reviewImageClose"].tap()
+        XCTAssertTrue(app.buttons["fullScreenClose"].waitForExistence(timeout: 10))
+        app.buttons["fullScreenClose"].tap()
         wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: viewer)], timeout: 10)
 
         // Mark up the first image: the marks arrive as a comment.

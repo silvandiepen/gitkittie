@@ -241,6 +241,10 @@ targets:
     platform: iOS
     sources:
       - path: Tests
+      # The shared theme and its contrast tests, as in the Mail test bundles: the theme is
+      # compiled into this bundle so the same test file runs without `@testable`.
+      - path: ../../swift/GitKittieUI/Theme.swift
+      - path: ../../swift/GitKittieUITests
     dependencies:
       - target: GitKanban
     settings:

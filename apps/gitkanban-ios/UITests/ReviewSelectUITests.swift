@@ -72,10 +72,11 @@ final class ReviewSelectUITests: XCTestCase {
         app.buttons["reviewSelectItem-icon-dog"].tap()
         XCTAssertEqual(count.label, "2 selected")
         app.buttons["reviewSelectionComment"].tap()
-        let field = app.alerts.textFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let field = app.descendants(matching: .any)["changeCommentField"].firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "The comment sheet opens.\n\(app.debugDescription)")
+        field.tap()
         field.typeText("Thinner lines")
-        app.alerts.buttons["Add Comment"].tap()
+        app.buttons["changeCommentSend"].tap()
         shot(app, "commented")
 
         // Done: back to the slides, where the comment shows on the first file.

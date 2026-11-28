@@ -14,53 +14,58 @@ struct LiveUpdatesSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                if isLoading {
-                    ProgressView()
-                } else if let config {
-                    Section {
-                        Label("Live updates are on", systemImage: "dot.radiowaves.left.and.right")
-                        LabeledContent("Relay", value: config.relay)
-                    } footer: {
-                        Text("Every device that opens this repo gets changes as they are pushed. The relay is told which files changed, never what is in them.")
-                    }
-                    Section {
-                        Button("Turn Off", role: .destructive) { run { await model.disableLiveUpdates() } }
-                            .disabled(isWorking)
-                    } footer: {
-                        Text("Removes the webhook from the repo, the channel from the relay, and the settings file from the repo.")
-                    }
-                } else if model.canEnableLiveUpdates {
-                    Section {
-                        TextField("https://your-relay.workers.dev", text: $relay)
-                            .autocorrectionDisabled()
-                            #if os(iOS)
-                            .textInputAutocapitalization(.never)
-                            .keyboardType(.URL)
-                            #endif
-                    } header: {
-                        Text("Relay address")
-                    } footer: {
-                        Text("The address of your GitKanban relay (apps/gitkanban-relay, deployed to Cloudflare).")
-                    }
-                    Section {
-                        Button("Turn On") {
-                            model.relayURL = relay
-                            run { await model.enableLiveUpdates() }
+                Group {
+                    if isLoading {
+                        ProgressView()
+                    } else if let config {
+                        Section {
+                            Label("Live updates are on", systemImage: "dot.radiowaves.left.and.right")
+                            LabeledContent("Relay", value: config.relay)
+                        } footer: {
+                            Text("Every device that opens this repo gets changes as they are pushed. The relay is told which files changed, never what is in them.")
                         }
-                        .disabled(isWorking || relay.trimmingCharacters(in: .whitespaces).isEmpty)
-                    } footer: {
-                        Text("Adds a push webhook to the repo (your account needs admin access on GitHub, or the Maintainer role on GitLab) and commits .gitkanban/relay.json so your other devices can subscribe.")
+                        Section {
+                            Button("Turn Off", role: .destructive) { run { await model.disableLiveUpdates() } }
+                                .disabled(isWorking)
+                        } footer: {
+                            Text("Removes the webhook from the repo, the channel from the relay, and the settings file from the repo.")
+                        }
+                    } else if model.canEnableLiveUpdates {
+                        Section {
+                            TextField("https://your-relay.workers.dev", text: $relay)
+                                .autocorrectionDisabled()
+                                #if os(iOS)
+                                .textInputAutocapitalization(.never)
+                                .keyboardType(.URL)
+                                #endif
+                        } header: {
+                            Text("Relay address")
+                        } footer: {
+                            Text("The address of your GitKanban relay (apps/gitkanban-relay, deployed to Cloudflare).")
+                        }
+                        Section {
+                            Button("Turn On") {
+                                model.relayURL = relay
+                                run { await model.enableLiveUpdates() }
+                            }
+                            .disabled(isWorking || relay.trimmingCharacters(in: .whitespaces).isEmpty)
+                        } footer: {
+                            Text("Adds a push webhook to the repo (your account needs admin access on GitHub, or the Maintainer role on GitLab) and commits .gitkanban/relay.json so your other devices can subscribe.")
+                        }
+                    } else {
+                        Section {
+                            Text("Live updates are for repositories on GitHub or GitLab. A folder or a folder server already updates by itself.")
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                } else {
-                    Section {
-                        Text("Live updates are for repositories on GitHub or GitLab. A folder or a folder server already updates by itself.")
-                            .foregroundStyle(.secondary)
+                    if let error = model.errorMessage {
+                        Section { Text(error).font(.callout).foregroundStyle(.red) }
                     }
                 }
-                if let error = model.errorMessage {
-                    Section { Text(error).font(.callout).foregroundStyle(.red) }
-                }
+                // Rows on the navy, not the system grey (GITKITTIE-095).
+                .themedRows()
             }
+            .themedList()
             .navigationTitle("Live Updates")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }

@@ -69,108 +69,113 @@ private struct ConnectView: View {
 
     var body: some View {
         Form {
-            Section {
-                VStack(spacing: 6) {
-                    TasksWordmark(markSize: 76, animated: false)
-                    Text("Your kanban board is a git repo.")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .listRowBackground(Color.clear)
-            }
-
-            if let device = model.deviceAuth {
-                deviceCodeSection(device)
-            } else {
-                // First thing on the screen, before any sign-in option. Someone without a
-                // GitHub account — an App Store reviewer included — otherwise hits the
-                // sign-in wall and has no way past it. The demo is the full app on an
-                // in-memory repo, not a preview, so it is worth saying so plainly.
+            Group {
                 Section {
-                    Button {
-                        Task { await model.loadDemo() }
-                    } label: {
-                        HStack {
-                            Image(systemName: "sparkles")
-                            Text("Open the demo board").fontWeight(.semibold)
-                            Spacer()
-                        }
+                    VStack(spacing: 6) {
+                        TasksWordmark(markSize: 76, animated: false)
+                        Text("Your kanban board is a git repo.")
+                            .font(.callout).foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                } header: {
-                    Text("No account?")
-                } footer: {
-                    Text("A sample board with every feature working — add, edit, move and delete cards, offline. No account, no sign-in.")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .listRowBackground(Color.clear)
                 }
 
-                Section {
-                    FolderServerPicker()
-                } header: {
-                    Text("Folder on your Mac")
-                } footer: {
-                    Text("Macs running the Tasks folder server show up here when you're on the same network. Once added, they keep working away from home over Tailscale. No git account needed.")
-                }
-
-                Section("Provider") {
-                    Picker("Provider", selection: $choice) {
-                        ForEach(ProviderChoice.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.menu)
-                    if choice.needsServerURL {
-                        TextField("GitLab server URL (e.g. git.acme.com)", text: $serverURL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                    }
-                }
-
-                if choice == .github {
+                if let device = model.deviceAuth {
+                    deviceCodeSection(device)
+                } else {
+                    // First thing on the screen, before any sign-in option. Someone without a
+                    // GitHub account — an App Store reviewer included — otherwise hits the
+                    // sign-in wall and has no way past it. The demo is the full app on an
+                    // in-memory repo, not a preview, so it is worth saying so plainly.
                     Section {
                         Button {
-                            Task { await model.startGitHubOAuth() }
+                            Task { await model.loadDemo() }
                         } label: {
                             HStack {
-                                Image(systemName: "person.badge.key.fill")
-                                Text("Sign in with GitHub")
+                                Image(systemName: "sparkles")
+                                Text("Open the demo board").fontWeight(.semibold)
                                 Spacer()
-                                if model.isConnecting { ProgressView() }
                             }
                         }
-                        .disabled(model.isConnecting)
+                        .buttonStyle(.borderedProminent)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    } header: {
+                        Text("No account?")
                     } footer: {
-                        Text("Authorise on github.com without leaving the app — no token to create.")
+                        Text("A sample board with every feature working — add, edit, move and delete cards, offline. No account, no sign-in.")
                     }
-                }
 
-                Section {
-                    SecureField("Personal access token", text: $token)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Button {
-                        Task { await model.connect(choice: choice, serverURL: serverURL, token: token) }
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if model.isConnecting && model.deviceAuth == nil { ProgressView() }
-                            else { Text("Connect with Token").fontWeight(.semibold) }
-                            Spacer()
+                    Section {
+                        FolderServerPicker()
+                    } header: {
+                        Text("Folder on your Mac")
+                    } footer: {
+                        Text("Macs running the Tasks folder server show up here when you're on the same network. Once added, they keep working away from home over Tailscale. No git account needed.")
+                    }
+
+                    Section("Provider") {
+                        Picker("Provider", selection: $choice) {
+                            ForEach(ProviderChoice.allCases) { Text($0.title).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                        if choice.needsServerURL {
+                            TextField("GitLab server URL (e.g. git.acme.com)", text: $serverURL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .keyboardType(.URL)
                         }
                     }
-                    .disabled(model.isConnecting || token.trimmingCharacters(in: .whitespaces).isEmpty)
-                } header: {
-                    Text(choice == .github ? "Or use a token" : "Personal access token")
-                } footer: {
-                    Text("Create a token with repository read/write scope in your provider's settings.")
+
+                    if choice == .github {
+                        Section {
+                            Button {
+                                Task { await model.startGitHubOAuth() }
+                            } label: {
+                                HStack {
+                                    Image(systemName: "person.badge.key.fill")
+                                    Text("Sign in with GitHub")
+                                    Spacer()
+                                    if model.isConnecting { ProgressView() }
+                                }
+                            }
+                            .disabled(model.isConnecting)
+                        } footer: {
+                            Text("Authorise on github.com without leaving the app — no token to create.")
+                        }
+                    }
+
+                    Section {
+                        SecureField("Personal access token", text: $token)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        Button {
+                            Task { await model.connect(choice: choice, serverURL: serverURL, token: token) }
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if model.isConnecting && model.deviceAuth == nil { ProgressView() }
+                                else { Text("Connect with Token").fontWeight(.semibold) }
+                                Spacer()
+                            }
+                        }
+                        .disabled(model.isConnecting || token.trimmingCharacters(in: .whitespaces).isEmpty)
+                    } header: {
+                        Text(choice == .github ? "Or use a token" : "Personal access token")
+                    } footer: {
+                        Text("Create a token with repository read/write scope in your provider's settings.")
+                    }
+
                 }
 
+                if let error = model.errorMessage {
+                    Section { Text(error).font(.callout).foregroundStyle(.red) }
+                }
             }
-
-            if let error = model.errorMessage {
-                Section { Text(error).font(.callout).foregroundStyle(.red) }
-            }
+            // Rows on the navy, not the system grey (GITKITTIE-095).
+            .themedRows()
         }
+        .themedList()
         .navigationTitle("Connect")
         // Copy the code as soon as it arrives so it is ready to paste, but do not open
         // GitHub yet — the page asks for the code immediately, and opening it first puts
@@ -357,7 +362,7 @@ private struct HomeView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis").font(.body.weight(.semibold))
-                            .frame(width: 36, height: 36).background(.quaternary, in: Circle())
+                            .frame(width: 36, height: 36).background(Theme.bar, in: Circle())
                     }
                     .accessibilityLabel("More")
                     .accessibilityIdentifier("homeMenu")
@@ -467,7 +472,7 @@ private struct HomeView: View {
             }
             .foregroundStyle(.primary)
             .padding(.horizontal, 22).padding(.vertical, 6)
-            .background(.regularMaterial, in: Capsule())
+            .themedBar(in: Capsule())
             .padding(.horizontal, 20).padding(.bottom, 4)
         }
     }
@@ -492,7 +497,7 @@ private struct HomeView: View {
         .overlay {
             if model.isLoadingBoard {
                 ProgressView("Opening board…").padding()
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .themedBar(in: RoundedRectangle(cornerRadius: 12))
             }
         }
         .navigationTitle("Boards")
@@ -546,20 +551,25 @@ private struct HomeView: View {
         .sheet(isPresented: $showAddServer) {
             NavigationStack {
                 Form {
-                    Section {
-                        FolderServerPicker { added in
-                            showAddServer = false
-                            browseRepo = added
+                    Group {
+                        Section {
+                            FolderServerPicker { added in
+                                showAddServer = false
+                                browseRepo = added
+                            }
+                        } header: {
+                            Text("On this network")
+                        } footer: {
+                            Text("Once added, a server keeps working away from home over Tailscale.")
                         }
-                    } header: {
-                        Text("On this network")
-                    } footer: {
-                        Text("Once added, a server keeps working away from home over Tailscale.")
+                        if let error = model.errorMessage {
+                            Section { Text(error).font(.callout).foregroundStyle(.red) }
+                        }
                     }
-                    if let error = model.errorMessage {
-                        Section { Text(error).font(.callout).foregroundStyle(.red) }
-                    }
+                    // Rows on the navy, not the system grey (GITKITTIE-095).
+                    .themedRows()
                 }
+                .themedList()
                 .navigationTitle("Add Folder Server")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Cancel") { showAddServer = false } } }
@@ -691,61 +701,66 @@ private struct FolderLevel: View {
 
     var body: some View {
         List {
-            Section {
-                Button { toggle(path) } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: selected[path] != nil ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(selected[path] != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                        Text(path.isEmpty ? "Use repository root as a board" : "Use \"\(title)\" as a board")
-                        Spacer()
+            Group {
+                Section {
+                    Button { toggle(path) } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: selected[path] != nil ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selected[path] != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                            Text(path.isEmpty ? "Use repository root as a board" : "Use \"\(title)\" as a board")
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-            }
-            Section {
-                if let folders {
-                    if folders.isEmpty {
-                        Text("No subfolders").foregroundStyle(.secondary)
-                    } else {
-                        ForEach(folders, id: \.path) { entry in
-                            HStack(spacing: 12) {
-                                // Larger tap target for checkbox only
-                                Button { toggle(entry.path) } label: {
-                                    Image(systemName: selected[entry.path] != nil ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(selected[entry.path] != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                                        .frame(width: 28, height: 28)
-                                }
-                                .buttonStyle(.plain)
-                                NavigationLink {
-                                    FolderLevel(repo: repo, path: entry.path, title: entry.name, selected: $selected, commit: commit)
-                                        .environment(model)
-                                } label: {
-                                    HStack(spacing: 10) {
-                                        Image(systemName: "folder.fill").foregroundStyle(.tint)
-                                        Text(entry.name)
+                Section {
+                    if let folders {
+                        if folders.isEmpty {
+                            Text("No subfolders").foregroundStyle(.secondary)
+                        } else {
+                            ForEach(folders, id: \.path) { entry in
+                                HStack(spacing: 12) {
+                                    // Larger tap target for checkbox only
+                                    Button { toggle(entry.path) } label: {
+                                        Image(systemName: selected[entry.path] != nil ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(selected[entry.path] != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                                            .frame(width: 28, height: 28)
+                                    }
+                                    .buttonStyle(.plain)
+                                    NavigationLink {
+                                        FolderLevel(repo: repo, path: entry.path, title: entry.name, selected: $selected, commit: commit)
+                                            .environment(model)
+                                    } label: {
+                                        HStack(spacing: 10) {
+                                            Image(systemName: "folder.fill").foregroundStyle(.tint)
+                                            Text(entry.name)
+                                        }
                                     }
                                 }
                             }
                         }
+                    } else {
+                        HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Loading…").foregroundStyle(.secondary) }
                     }
-                } else {
-                    HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Loading…").foregroundStyle(.secondary) }
-                }
-            } header: {
-                HStack {
-                    Text("Folders")
-                    Spacer()
-                    if let folders, !folders.isEmpty {
-                        Button(allSubfoldersSelected ? "Deselect All" : "Select All") {
-                            toggleAllSubfolders()
+                } header: {
+                    HStack {
+                        Text("Folders")
+                        Spacer()
+                        if let folders, !folders.isEmpty {
+                            Button(allSubfoldersSelected ? "Deselect All" : "Select All") {
+                                toggleAllSubfolders()
+                            }
+                            .font(.caption)
+                            .textCase(nil)
                         }
-                        .font(.caption)
-                        .textCase(nil)
                     }
                 }
             }
+            // Rows on the navy, not the system grey (GITKITTIE-095).
+            .themedRows()
         }
+        .themedList()
         .navigationTitle(path.isEmpty ? "Select Boards" : title)
         .navigationBarTitleDisplayMode(.inline)
         .task { folders = await model.listFolders(in: repo, at: path) }
