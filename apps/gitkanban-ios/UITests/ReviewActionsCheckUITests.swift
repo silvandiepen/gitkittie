@@ -29,6 +29,14 @@ final class ReviewActionsCheckUITests: XCTestCase {
         let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow"]
         if allow.waitForExistence(timeout: 3) { allow.tap() }
         row.tap()
+        // The row can be tapped while the home screen is still settling: tap again if the list
+        // did not come up.
+        if !app.buttons["reviewAssignmentMenu"].waitForExistence(timeout: 8), !app.buttons["Done"].exists {
+            // The app's notification prompt can come up late and take the tap.
+            if allow.waitForExistence(timeout: 3) { allow.tap() }
+            row.tap()
+        }
+        XCTAssertTrue(app.buttons["reviewAssignmentMenu"].waitForExistence(timeout: 10), "The Reviews list is up.\n\(app.debugDescription)")
         let sil = app.buttons["reviewIdentity-sil"]
         if sil.waitForExistence(timeout: 8) {
             shot(app, "which-one-are-you")
@@ -83,11 +91,14 @@ final class ReviewActionsCheckUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["checkWaiting"].exists, "A check waits until it is decided")
         shot(app, "check-row")
         open.tap()
+        XCTAssertTrue(app.buttons["checkClose"].waitForExistence(timeout: 10),
+                      "The check opens full screen.\n\(app.debugDescription)")
 
         // The page at the phone's own width, the checklist in a sheet.
         let width = app.webViews.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Width '")).firstMatch
         XCTAssertTrue(width.waitForExistence(timeout: 15), "The page loads.\n\(app.debugDescription)")
-        XCTAssertTrue(app.descendants(matching: .any)["checkSizeBadge"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["checkSizeBadge"].waitForExistence(timeout: 5),
+                      "The page is at this device's own size.\n\(app.debugDescription)")
         let pass = app.buttons["checkPass-hero"]
         XCTAssertTrue(pass.waitForExistence(timeout: 10), "The checklist sheet is up.\n\(app.debugDescription)")
         pass.tap()
@@ -102,11 +113,15 @@ final class ReviewActionsCheckUITests: XCTestCase {
         shot(app, "check-answered")
 
         // Desktop: a scaled preview, laid out at its true width; a tap lands on the button.
-        app.buttons["checkSizeMenu"].tap()
-        let desktop = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Desktop'")).firstMatch
-        XCTAssertTrue(desktop.waitForExistence(timeout: 5), "\(app.debugDescription)")
-        desktop.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["checkScaledPreview"].waitForExistence(timeout: 5))
+        // Next Size walks the cells: phone dark, then desktop light.
+        app.buttons["checkNextSize"].tap()
+        let current = app.staticTexts["checkCurrentSize"]
+        wait(for: [expectation(for: NSPredicate(format: "label == 'Phone, dark'"), evaluatedWith: current)], timeout: 5)
+        XCTAssertTrue(app.webViews.staticTexts["Scheme dark"].waitForExistence(timeout: 10), "dark forces prefers-color-scheme")
+        app.buttons["checkNextSize"].tap()
+        wait(for: [expectation(for: NSPredicate(format: "label == 'Desktop, light'"), evaluatedWith: current)], timeout: 5)
+        XCTAssertTrue(app.descendants(matching: .any)["checkScaledPreview"].waitForExistence(timeout: 5),
+                      "The desktop size is a scaled preview.\n\(app.debugDescription)")
         let wide = app.webViews.staticTexts["Width 1440"]
         XCTAssertTrue(wide.waitForExistence(timeout: 15), "The page lays out at 1440.\n\(app.debugDescription)")
         let button = app.webViews.buttons["Tap me"]
@@ -116,7 +131,10 @@ final class ReviewActionsCheckUITests: XCTestCase {
         shot(app, "check-desktop-scaled")
 
         // Changes, with the failed line filled in.
-        app.buttons["checkDecisionChanges"].tap()
+        // The sheet's (the request's own page, under the full-screen check, has the same buttons).
+        let changes = app.buttons.matching(identifier: "checkDecisionChanges")
+        let onSheet = (0..<changes.count).map { changes.element(boundBy: $0) }.first { $0.isHittable }
+        try XCTUnwrap(onSheet, "Changes on the checklist sheet.\n\(app.debugDescription)").tap()
         let field = app.descendants(matching: .any)["changeCommentField"].firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 5), "The message sheet opens.\n\(app.debugDescription)")
         XCTAssertTrue((field.value as? String ?? "").contains("The button shows without scrolling — Below the fold"),
@@ -134,7 +152,13 @@ final class ReviewActionsCheckUITests: XCTestCase {
     /// Someone else's request: listed under Everyone only, read-only with comments allowed.
     func testSomeoneElsesRequestIsReadOnly() throws {
         let app = try openReviews()
-        XCTAssertTrue(app.staticTexts["Site onboarding, round 1"].waitForExistence(timeout: 10))
+        let menu = app.buttons["reviewAssignmentMenu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 10), "The Reviews list is up.\n\(app.debugDescription)")
+        // Start from For me, whatever an earlier run left.
+        menu.tap()
+        let forMe = app.buttons["For Me"]
+        XCTAssertTrue(forMe.waitForExistence(timeout: 5), "\(app.debugDescription)")
+        forMe.tap()
         XCTAssertFalse(app.staticTexts["Copy for the store"].exists, "For me hides Herma's request")
         app.buttons["reviewAssignmentMenu"].tap()
         app.buttons["Everyone"].tap()

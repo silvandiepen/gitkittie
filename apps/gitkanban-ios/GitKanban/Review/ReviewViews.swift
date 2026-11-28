@@ -315,8 +315,6 @@ struct ReviewDetailView: View {
     @State private var selectionSheet: ReviewCommentRequest?
     /// The full-screen viewer, open at the file whose picture was tapped.
     @State private var fullScreen: ReviewFullScreenStart?
-    /// A browser check open full screen.
-    @State private var checking: CheckBrowserStart?
     /// The request's "When decided" and "Actions", in a sheet.
     @State private var showsActions = false
 
@@ -368,9 +366,7 @@ struct ReviewDetailView: View {
                                     case .question(let question):
                                         QuestionSlide(request: request, question: question, onAnswered: { advance(after: page.id) })
                                     case .check(let check):
-                                        CheckSlide(request: request, check: check,
-                                                   onOpen: { key in checking = CheckBrowserStart(ref: ref, checkID: check.id, key: key) },
-                                                   onDecided: { advance(after: page.id) })
+                                        CheckSlide(request: request, check: check, onDecided: { advance(after: page.id) })
                                     case .item(let item):
                                         // Only the slide on screen and its neighbours hold their
                                         // picture: a request can have dozens of large images.
@@ -462,9 +458,6 @@ struct ReviewDetailView: View {
         .sheet(item: $selectionSheet) { ReviewCommentSheet(request: $0) }
         .fullScreenCover(item: $fullScreen) { start in
             ReviewFullScreenView(ref: ref, start: start).environment(model)
-        }
-        .fullScreenCover(item: $checking) { start in
-            CheckBrowserView(start: start).environment(model)
         }
         .safeAreaInset(edge: .bottom) {
             if selecting, let request { selectionBar(request) }

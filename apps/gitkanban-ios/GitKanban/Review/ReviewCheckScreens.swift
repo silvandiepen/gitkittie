@@ -87,12 +87,17 @@ struct CheckSlide: View {
     @Environment(AppModel.self) private var model
     let request: ReviewRequest
     let check: ReviewCheck
-    /// Open the check full screen, at a cell when one was tapped.
-    let onOpen: (String?) -> Void
     let onDecided: () -> Void
     @State private var session: ReviewCheckSession?
+    /// The check open full screen (at a cell, when one was tapped).
+    @State private var browsing: CheckBrowserStart?
     @State private var draft = ""
     @FocusState private var composing: Bool
+
+    /// Open the check full screen, at a cell when one was tapped.
+    private func onOpen(_ key: String?) {
+        browsing = CheckBrowserStart(ref: request.ref, checkID: check.id, key: key)
+    }
 
     var body: some View {
         ScrollView {
@@ -216,6 +221,9 @@ struct CheckSlide: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("checkSlide-\(check.id)")
+        .fullScreenCover(item: $browsing) { start in
+            CheckBrowserView(start: start).environment(model)
+        }
         .onAppear {
             if session == nil { session = ReviewCheckSession(model: model, ref: request.ref, checkID: check.id) }
         }
@@ -269,7 +277,6 @@ struct CheckBrowserView: View {
             }
         }
         .onDisappear { Task { await session?.flush() } }
-        .accessibilityIdentifier("checkBrowser")
     }
 
     private var closeButton: some View {

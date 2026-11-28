@@ -400,6 +400,7 @@ struct CheckChecklistView: View {
     var focusedLine: String?
     @State private var notes: [String: String] = [:]
     @State private var writingNote: Set<String> = []
+    @FocusState private var noteFocus: String?
 
     var body: some View {
         let check = session.check
@@ -440,6 +441,7 @@ struct CheckChecklistView: View {
                         set: { notes[line.id] = $0 }), axis: .vertical)
                         .lineLimit(1...4)
                         .textFieldStyle(.roundedBorder)
+                        .focused($noteFocus, equals: line.id)
                         .onSubmit { saveNote(line) }
                         .accessibilityIdentifier("checkNoteField-\(line.id)")
                     Button("Save") { saveNote(line) }
@@ -468,7 +470,10 @@ struct CheckChecklistView: View {
         let text = (notes[line.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         let result: CheckAnswerResult = session.answer(line.id)?.result == .fail ? .fail : .note
-        if session.setAnswer(line.id, result, note: text) { notes[line.id] = nil }
+        if session.setAnswer(line.id, result, note: text) {
+            notes[line.id] = nil
+            noteFocus = nil
+        }
     }
 
     private func choice(_ title: String, _ symbol: String, _ tint: Color, selected: Bool, id: String,
