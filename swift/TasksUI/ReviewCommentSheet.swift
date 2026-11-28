@@ -43,6 +43,8 @@ struct ReviewCommentRequest: Identifiable {
     /// The file's name, or nil for several.
     var subject: String?
     var suggestions: [String]
+    /// What the field starts with: a check's failed lines when asking for changes on it.
+    var initialText: String = ""
     var send: (String) -> Void
 }
 
@@ -108,6 +110,7 @@ struct ReviewCommentSheet: View {
         .presentationDetents([.medium, .large])
         .presentationBackground(Theme.window)
         #endif
+        .onAppear { if text.isEmpty { text = request.initialText } }
         .task {
             // A sheet takes the focus once it is on screen; set at once it is lost on iOS.
             try? await Task.sleep(nanoseconds: 300_000_000)

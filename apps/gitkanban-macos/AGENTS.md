@@ -30,7 +30,11 @@ Requests can carry actions (`on_accept` / `on_changes` / `on_reject`), browser c
 `AgentBoard.updateCard` (`ReviewActionRunner.swift`, `AppModel+ReviewActions.swift`: `reviewActionReport`,
 `moveAnyway`, `undoReviewAction`); `AppModel+ReviewAssignment.swift` works out who you are per board, the
 For me / Everyone filter, and refuses decisions on others' requests. Review writes keep the file's text
-outside what changed (`ReviewYAMLSplice` in GitKittieKit). Decisions: `docs/Decisions.md` § 20.
+outside what changed (`ReviewYAMLSplice` in GitKittieKit). Decisions: `docs/Decisions.md` § 20. Screens (GITKITTIE-135): what they say comes from `ReviewPresentation.swift` and `ReviewCheckSession.swift`
+(GitKanbanKit), drawn by `swift/TasksUI/ReviewScreenParts.swift` and `CheckWebView.swift` (shared with iOS); the Mac's
+check row and Check in Browser window are `GitKanban/Review/ReviewCheckViews.swift` (a `WindowGroup` keyed by
+`CheckWindowValue`). Offscreen tests: `Tests/CheckWebViewTests` (viewport, scaling, clicks) and `Tests/ReviewScreensRenderTests`
+(`TEST_RUNNER_REVUI_SHOTS=<folder>` writes pictures). Decisions § 21.
 
 ## Rules specific to this app
 

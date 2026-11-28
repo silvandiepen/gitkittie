@@ -96,6 +96,20 @@ struct GitKanbanApp: App {
             }
         }
         .defaultSize(width: 920, height: 760)
+
+        // Check in Browser (GITKITTIE-135): a check's page at the exact size of each of its
+        // sizes, its checklist beside it. The window takes its content's size, so choosing
+        // another size resizes it.
+        WindowGroup("Check in Browser", id: CheckWindowValue.windowID, for: CheckWindowValue.self) { $value in
+            if let value {
+                CheckWindowView(value: value)
+                    .environment(model)
+                    .background(SolidWindow())
+                    .tint(Theme.accent)
+                    .preferredColorScheme(CaptureHooks.colorScheme ?? .dark)
+            }
+        }
+        .windowResizability(.contentSize)
     }
 }
 

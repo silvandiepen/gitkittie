@@ -103,6 +103,10 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         LSMinimumSystemVersion: "14.0"
         NSHumanReadableCopyright: "Copyright © Sil van Diepen"
+        # A browser check's page can be plain http:// on a tailnet (ReviewSpec § 3.5). This
+        # loosens App Transport Security for web views only, not the app's own requests.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsInWebContent: true
         # `gitkittie-tasks://new?title=…&body=…` starts a new task (GitKittie Mail's Make Task,
         # GKM-033). It only fills in the new-task sheet; nothing is saved without Create.
         CFBundleURLTypes:

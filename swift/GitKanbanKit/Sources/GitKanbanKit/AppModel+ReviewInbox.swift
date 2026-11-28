@@ -13,6 +13,8 @@ public struct BoardReviews: Identifiable, Sendable, Equatable {
     public var color: String?
     /// The board's users, to record decisions under the reviewer's name there.
     public var users: [User]
+    /// The board's lanes, to say where a review action moves a card ("move PETS-1 to Testing").
+    public var lanes: [Lane] = []
     public var requests: [ReviewRequest]
     /// Who you are on this board (a user id), `nil` when nobody: what is counted as yours.
     public var me: String?
@@ -30,9 +32,10 @@ extension AppModel {
     /// Items waiting for a decision, over all boards.
     public var pendingReviewTotal: Int { reviewInbox.reduce(0) { $0 + $1.pending } }
 
-    /// Requests with something waiting, over all boards, newest first: "Review All" starts
-    /// with what was asked last.
-    public var openReviewRequests: [ReviewRequest] { Self.newestFirst(reviewInbox.flatMap(\.open)) }
+    /// Requests with something waiting, over all boards: those with a due date first, the
+    /// soonest on top, then newest first ("Review All" starts with what is due, then with what
+    /// was asked last).
+    public var openReviewRequests: [ReviewRequest] { Self.inboxOrder(reviewInbox.flatMap(\.open)) }
 
     /// Requests newest first, by `requested_at`. Ones without a date go last, in the order
     /// they came in.
@@ -85,14 +88,14 @@ extension AppModel {
                     group.addTask {
                         let (_, config) = await RemoteBoardStore.loadEffectiveConfig(source: source, folder: boardFolder)
                         guard let folder = Review.reviewFolder(config.reviewPath, projectFolder: boardFolder) else { return nil }
-                        let requests = Self.newestFirst(await RemoteBoardStore.loadReviews(source: source, folder: folder).map { request -> ReviewRequest in
+                        let requests = Self.inboxOrder(await RemoteBoardStore.loadReviews(source: source, folder: folder).map { request -> ReviewRequest in
                             var request = request
                             request.origin = repoID
                             return request
                         })
                         return (position, BoardReviews(
                             repoID: repoID, boardFolder: boardFolder, boardName: name,
-                            icon: icon, color: color, users: config.users, requests: requests))
+                            icon: icon, color: color, users: config.users, lanes: config.lanes, requests: requests))
 
                     }
                 }
