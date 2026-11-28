@@ -19,7 +19,8 @@ struct GeneralSettingsTab: View {
                     HStack {
                         if model.isRebuildingIndex { ProgressView().controlSize(.small) }
                         Button("Rebuild Search Index") { Task { await model.rebuildIndex() } }
-                            .disabled(model.phase != .ready || model.isRebuildingIndex)
+                            .disabled(model.phase != .ready || model.isRebuildingIndex || !model.canWrite)
+                            .help(model.writeRefusal ?? "")
                     }
                 }
             } footer: {
@@ -29,7 +30,8 @@ struct GeneralSettingsTab: View {
             Section {
                 LabeledContent("Import") {
                     Button("Import Messages…") { Task { await Platform.importMessages(into: model) } }
-                        .disabled(model.phase != .ready || model.isImporting)
+                        .disabled(model.phase != .ready || model.isImporting || !model.canWrite)
+                        .help(model.writeRefusal ?? "")
                 }
             } footer: {
                 Text(".eml files you import arrive unread in On My Mac.")

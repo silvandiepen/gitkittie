@@ -123,6 +123,7 @@ extension MailStore {
     /// Deletes one message's files and its index row. Partial messages (GKM-036) live in the
     /// device folder; their cached parts become unreferenced and go with the next eviction.
     private func removeLocalCopy(_ id: MailMessageID, accountName: String) throws {
+        try requireWritable()
         let fileManager = FileManager.default
         let stored = try? message(id)
         try index.remove(id)

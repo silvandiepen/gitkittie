@@ -175,9 +175,17 @@ final class AccountSync {
     /// True, with `folderHold` set, when the store's mail folder is somewhere the sync must not
     /// write (GKM-103): checked on every start, so no start path can get around it.
     private func isHeld(_ store: MailStore) -> Bool {
-        let placement = services.folderPlacement(store.locations.mailFolder)
+        checkPlacement(of: store.locations.mailFolder) != nil
+    }
+
+    /// Where `folder` is, as the hold: set (and returned) when it is somewhere nothing may be
+    /// written, cleared when it is not. The app model asks before it opens the store, so the
+    /// store opens read-only (GKM-104, MAIL-135).
+    @discardableResult
+    func checkPlacement(of folder: URL) -> MailFolderPlacement? {
+        let placement = services.folderPlacement(folder)
         folderHold = placement.isSafe ? nil : placement
-        return folderHold != nil
+        return folderHold
     }
 
     /// The account's IMAP connector with its password; nil, with the account's status saying

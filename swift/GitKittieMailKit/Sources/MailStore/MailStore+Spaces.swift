@@ -89,6 +89,7 @@ extension MailStore {
 
     /// Deletes the space's file. Its messages, their files and the provider are not touched.
     public func deleteSpace(_ id: MailSpaceID) throws {
+        try requireWritable()
         let url = locations.spaceURL(id)
         guard FileManager.default.fileExists(atPath: url.path) else { throw MailStoreError.spaceNotFound(id.rawValue) }
         try FileManager.default.removeItem(at: url)
@@ -224,6 +225,7 @@ extension MailStore {
     }
 
     func write(_ space: MailSpace, now: Date) throws {
+        try requireWritable()
         var space = space
         space.format = MailSpace.formatVersion
         space.modified = Self.whole(now)

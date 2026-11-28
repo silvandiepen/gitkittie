@@ -49,6 +49,7 @@ struct AddToSpaceMenu: View {
             if let newSpace {
                 if !model.spaces.spaces.isEmpty { Divider() }
                 Button("New Space…", action: newSpace)
+                    .disabled(!model.canWrite)
             }
         }
         .disabled(model.spaces.spaces.isEmpty && newSpace == nil)

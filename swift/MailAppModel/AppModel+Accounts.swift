@@ -24,6 +24,7 @@ extension AppModel {
     @discardableResult
     func addAccount(_ draft: AccountDraft) async throws(AccountSetupError) -> MailAccount {
         guard let store = mailStore else { throw .refused(.incoming, host: "", detail: "The mail folder isn’t open.") }
+        if let reason = writeRefusal { throw .refused(.incoming, host: "", detail: reason) }
         let connection = try draft.connection()
         let address = draft.trimmedAddress
         if accounts.contains(where: { $0.connection != nil && $0.address.lowercased() == address.lowercased()
@@ -109,6 +110,8 @@ extension AppModel {
     /// device's sync state, and keeps, exports or removes its mail. Never touches the provider.
     func removeAccount(_ id: MailAccountID, _ removal: AccountRemoval) async throws {
         guard let store = mailStore else { return }
+        // Before anything stops: a read-only folder can't lose or change an account.
+        try store.requireWritable()
         await sync.stop(id)
         await unregisterFromSending(id)
         if case .exportThenRemove(let destination) = removal {

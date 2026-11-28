@@ -37,7 +37,8 @@ final class SpacesModel {
         var added = 0
         do {
             try await store.refreshSpaceIndex()
-            if applyRules { added = try await store.applySpaceRules() }
+            // Applying rules writes the spaces' files: not while the folder is read-only (GKM-104).
+            if applyRules, !store.isReadOnly { added = try await store.applySpaceRules() }
             spaces = try await store.spaces()
             unreadableFiles = try await store.unreadableSpaceFiles()
             counts = try await store.spaceCounts()

@@ -61,8 +61,19 @@ public actor MailStore {
     var mappings: [String: RemoteMapping] = [:]
     /// Classifier context, your corrections and rules (GKM-017, MailStore+Classification.swift).
     var classification = ClassificationState()
+    /// Non-nil when the store was opened read-only (GKM-104, MAIL-135): why, in words for the
+    /// person. A read-only store writes nothing into the mail folder, ever: every writer of the
+    /// folder asks ``requireWritable()`` first, and opening skips the layout write, crash
+    /// recovery and the index rebuild. The index and the device state are outside the folder and
+    /// stay writable.
+    public nonisolated let readOnlyReason: String?
+    /// True when a read-only open left work undone that a writable open does: a write a crash
+    /// interrupted, or an index that needs a rebuild. What the window lists may be incomplete.
+    public private(set) var recoveryDeferred = false
 
-    private init(locations: StoreLocations, parser: any MessageParsing, faults: WriteFaults, index: MailIndex) {
+    private init(locations: StoreLocations, parser: any MessageParsing, faults: WriteFaults, index: MailIndex,
+                 readOnlyReason: String?) {
+        self.readOnlyReason = readOnlyReason
         self.locations = locations
         self.parser = parser
         self.faults = faults
@@ -72,14 +83,21 @@ public actor MailStore {
 
     /// Opens (or creates) the store, finishes or undoes any write a crash interrupted, and
     /// rebuilds the index from the folder when it is missing, damaged or from another schema.
+    ///
+    /// With `readOnlyReason` the store is opened read-only (GKM-104, MAIL-135): the mail folder
+    /// is only read, never created, written or tidied (no layout file, no crash recovery, no
+    /// rebuild: `recoveryDeferred` says when one was skipped), and every writer of the folder
+    /// throws ``MailStoreError/readOnly(_:)`` with that text.
     public static func open(_ locations: StoreLocations, parser: any MessageParsing = MIMEMessageParser(),
-                            faults: WriteFaults = .none, classification: ClassificationOptions = ClassificationOptions()) async throws -> MailStore {
+                            faults: WriteFaults = .none, classification: ClassificationOptions = ClassificationOptions(),
+                            readOnlyReason: String? = nil) async throws -> MailStore {
         try locations.validate()
         let fileManager = FileManager.default
-        try fileManager.createDirectory(at: locations.mailFolder, withIntermediateDirectories: true)
+        if readOnlyReason == nil { try fileManager.createDirectory(at: locations.mailFolder, withIntermediateDirectories: true) }
         try fileManager.createDirectory(at: locations.deviceFolder, withIntermediateDirectories: true)
-        try checkLayout(locations)
-        let store = MailStore(locations: locations, parser: parser, faults: faults, index: try openIndex(at: locations.indexURL))
+        try checkLayout(locations, readOnly: readOnlyReason != nil)
+        let store = MailStore(locations: locations, parser: parser, faults: faults, index: try openIndex(at: locations.indexURL),
+                              readOnlyReason: readOnlyReason)
         await store.setClassificationOptions(classification)
         try await store.finishOpening()
         return store
@@ -87,7 +105,25 @@ public actor MailStore {
 
     private func setClassificationOptions(_ options: ClassificationOptions) { classification.options = options }
 
+    /// Throws ``MailStoreError/readOnly(_:)`` on a read-only store. The one gate in front of
+    /// every writer of the mail folder.
+    public nonisolated func requireWritable() throws {
+        if let readOnlyReason { throw MailStoreError.readOnly(readOnlyReason) }
+    }
+
+    /// True when the store was opened read-only.
+    public nonisolated var isReadOnly: Bool { readOnlyReason != nil }
+
     private func finishOpening() throws {
+        if isReadOnly {
+            // Recovery and a rebuild write into the mail folder (and a rebuild reads every
+            // original, which downloads the ones a File Provider evicted): neither starts here.
+            let hasJournal = (try? sortedContents(of: locations.journalFolder).isEmpty == false) ?? false
+            recoveryDeferred = hasJournal || index.needsRebuild
+            try refreshSpaceIndex()
+            try refreshTrashAndJunkOfEveryAccount()
+            return
+        }
         let journalWasReadable = try recoverInterruptedWrites()
         if index.needsRebuild || !journalWasReadable { try rebuildIndex() } else { try refreshSpaceIndex() }
         try refreshTrashAndJunkOfEveryAccount()
@@ -145,6 +181,7 @@ public actor MailStore {
     /// wholly absent — only the flushes are shared.
     func write(_ messages: [NewMessage], account: MailAccountID) throws -> [MailMessageID] {
         guard !messages.isEmpty else { return [] }
+        try requireWritable()
         let accountName = try SafePath.component(account.rawValue)
         var planned: [(id: MailMessageID, derived: Derived, directory: URL, remote: RemoteLocation?, eml: Data, completes: Bool)] = []
         for message in messages {
@@ -223,6 +260,7 @@ public actor MailStore {
     /// Records the account's description in the folder (`accounts/<id>/account.json`). No
     /// credentials: those live in the Keychain.
     public func save(_ account: MailAccount) throws {
+        try requireWritable()
         let name = try SafePath.component(account.id.rawValue)
         let url = locations.accountsFolder.appendingPathComponent(name, isDirectory: true).appendingPathComponent("account.json")
         try writer.write(JSONCoding.prettyEncoder.encode(account), to: url)
@@ -524,6 +562,7 @@ public actor MailStore {
     /// (temporary files, a `.md` without its `.eml`) and rewrites a `.md` that no longer matches
     /// what the current parser derives from its `.eml` — so a better MIME parser refreshes them.
     public func rebuildIndex() throws {
+        try requireWritable()
         let fileManager = FileManager.default
         try removePartials(in: locations.blobsFolder)
         try index.replaceAll { insert in
@@ -777,9 +816,10 @@ public actor MailStore {
 
     /// Reads `layout.json`, writes it on a new folder, and refuses a folder from a newer app.
     /// Migration hook: when the layout changes, the step from each older version goes here.
-    private static func checkLayout(_ locations: StoreLocations) throws {
+    private static func checkLayout(_ locations: StoreLocations, readOnly: Bool) throws {
         let url = locations.layoutURL
         guard FileManager.default.fileExists(atPath: url.path) else {
+            if readOnly { return }
             try AtomicWriter(faults: .none).write(JSONCoding.prettyEncoder.encode(Layout(layoutVersion: layoutVersion)), to: url)
             return
         }

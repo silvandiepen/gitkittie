@@ -57,7 +57,9 @@ struct SidebarView: View {
         HStack {
             Menu {
                 Button("Add Account…", systemImage: "at") { requests.accountSheet = .add }
+                    .disabled(!model.canWrite)
                 Button("New Space…", systemImage: "square.stack.3d.up") { requests.spaceSheet = .create }
+                    .disabled(!model.canWrite)
             } label: {
                 Label("Add", systemImage: "plus").font(.callout)
             }
