@@ -1,0 +1,80 @@
+{
+  "id": "PETS-1-models",
+  "title": "Pet models, round 1",
+  "card": "PETS-1",
+  "notify": "normal",
+  "for": [],
+  "due": null,
+  "actions": {
+    "accept": [],
+    "changes": [],
+    "reject": []
+  },
+  "items": [
+    {
+      "id": "dog-v1",
+      "status": "pending",
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      }
+    },
+    {
+      "id": "dog-v2",
+      "status": "approved",
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      }
+    },
+    {
+      "id": "bark",
+      "status": "rejected",
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      }
+    }
+  ],
+  "questions": [
+    {
+      "id": "tone",
+      "answered": false
+    }
+  ],
+  "checks": [],
+  "actions_run": [],
+  "outcome": "reject",
+  "waiting": [
+    "item:dog-v1",
+    "question:tone"
+  ],
+  "waiting_for": {
+    "sil": [
+      "item:dog-v1",
+      "question:tone"
+    ],
+    "herma": [
+      "item:dog-v1",
+      "question:tone"
+    ],
+    "nobody": [
+      "item:dog-v1",
+      "question:tone"
+    ]
+  },
+  "summary": {
+    "total": 4,
+    "pending": 2,
+    "approved": 1,
+    "rejected": 1,
+    "changes_requested": 0,
+    "awaiting_agent": 1,
+    "questions": 1,
+    "answered": 0,
+    "checks": 0
+  }
+}

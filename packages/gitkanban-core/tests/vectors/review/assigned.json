@@ -1,0 +1,51 @@
+{
+  "id": "PETS-4-copy",
+  "title": "Copy",
+  "card": null,
+  "notify": "urgent",
+  "for": [
+    "Sil"
+  ],
+  "due": "2026-12-02",
+  "actions": {
+    "accept": [],
+    "changes": [],
+    "reject": []
+  },
+  "items": [
+    {
+      "id": "copy",
+      "status": "pending",
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      }
+    }
+  ],
+  "questions": [],
+  "checks": [],
+  "actions_run": [],
+  "outcome": null,
+  "waiting": [
+    "item:copy"
+  ],
+  "waiting_for": {
+    "sil": [
+      "item:copy"
+    ],
+    "herma": [],
+    "nobody": []
+  },
+  "summary": {
+    "total": 1,
+    "pending": 1,
+    "approved": 0,
+    "rejected": 0,
+    "changes_requested": 0,
+    "awaiting_agent": 0,
+    "questions": 0,
+    "answered": 0,
+    "checks": 0
+  }
+}

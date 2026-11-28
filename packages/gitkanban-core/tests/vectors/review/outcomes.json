@@ -1,0 +1,88 @@
+{
+  "id": "PETS-6-outcome",
+  "title": "Outcome",
+  "card": null,
+  "notify": "normal",
+  "for": [],
+  "due": null,
+  "actions": {
+    "accept": [],
+    "changes": [],
+    "reject": []
+  },
+  "items": [
+    {
+      "id": "a",
+      "status": "rejected",
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      }
+    },
+    {
+      "id": "b",
+      "status": "approved",
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      }
+    },
+    {
+      "id": "c",
+      "status": "approved",
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      }
+    }
+  ],
+  "questions": [],
+  "checks": [
+    {
+      "id": "page",
+      "url": "https://example.com",
+      "title": null,
+      "note": null,
+      "sizes": [],
+      "appearance": [],
+      "checklist": [],
+      "result_keys": [
+        "default"
+      ],
+      "results": {},
+      "status": "approved",
+      "decided_by": null,
+      "decided_at": null,
+      "revises": null,
+      "comments": 0,
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      },
+      "failed": []
+    }
+  ],
+  "actions_run": [],
+  "outcome": "accept",
+  "waiting": [],
+  "waiting_for": {
+    "sil": [],
+    "herma": [],
+    "nobody": []
+  },
+  "summary": {
+    "total": 4,
+    "pending": 0,
+    "approved": 3,
+    "rejected": 1,
+    "changes_requested": 0,
+    "awaiting_agent": 4,
+    "questions": 0,
+    "answered": 0,
+    "checks": 1
+  }
+}

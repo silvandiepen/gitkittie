@@ -1,4 +1,19 @@
 import { parseFrontmatter, serializeFrontmatter } from './frontmatter.js'
+import {
+  actionRunRecord,
+  hasActions,
+  parseActions,
+  parseActionsRun,
+  type ActionRun,
+  type ReviewActions,
+  type ReviewOutcome,
+} from './review-actions.js'
+import { parseCheck, type CheckAnswerResult, type CheckAppearance, type ReviewCheck } from './review-checks.js'
+import { bool, ids, num, parseComments, str, type ReviewComment } from './review-values.js'
+
+export * from './review-actions.js'
+export * from './review-checks.js'
+export type { ReviewComment } from './review-values.js'
 
 /**
  * Review requests — the asset-review contract from
@@ -42,12 +57,6 @@ export const REVIEW_NOTIFY_LEVELS: readonly ReviewNotify[] = ['urgent', 'normal'
 export const REVIEW_STATUSES: readonly ReviewStatus[] = ['pending', 'approved', 'rejected', 'changes-requested']
 export const REVIEW_KINDS: readonly ReviewKind[] = ['image', 'model', 'audio', 'animation', 'video', 'other']
 
-export interface ReviewComment {
-  by: string
-  at: string
-  text: string
-}
-
 export interface ReviewItem {
   id: string
   file: string
@@ -65,6 +74,8 @@ export interface ReviewItem {
   shippedTo?: string
   frames?: number
   fps?: number
+  /** What happens to cards when this item is decided; `move` is required here. */
+  actions: ReviewActions
 }
 
 export type QuestionSelect = 'one' | 'many'
@@ -104,16 +115,26 @@ export interface ReviewRequest {
   requestedAt?: string
   /** How loudly the request is announced; `normal` when the frontmatter has no `notify`. */
   notify: ReviewNotify
+  /** Board user ids the request is for; empty = everyone. */
+  for: string[]
+  /** The day it is due, `YYYY-MM-DD`. */
+  due?: string
+  /** What happens to cards when the request has an outcome. */
+  actions: ReviewActions
   items: ReviewItem[]
   questions: ReviewQuestion[]
+  /** Browser checks. */
+  checks: ReviewCheck[]
+  /** What the app did on decisions (append-only). */
+  actionsRun: ActionRun[]
   /** Free-form notes below the frontmatter. */
   body: string
 }
 
 export interface ReviewSummary {
-  /** Items and questions. */
+  /** Items, questions and checks. */
   total: number
-  /** Items without a decision and questions without an answer. */
+  /** Items and checks without a decision and questions without an answer. */
   pending: number
   approved: number
   rejected: number
@@ -122,18 +143,7 @@ export interface ReviewSummary {
   awaitingAgent: number
   questions: number
   answered: number
-}
-
-function str(value: unknown): string | undefined {
-  if (value === null || value === undefined) return undefined
-  if (value instanceof Date) return value.toISOString()
-  const s = String(value).trim()
-  return s.length > 0 ? s : undefined
-}
-
-function num(value: unknown): number | undefined {
-  const n = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(n) && n > 0 ? n : undefined
+  checks: number
 }
 
 function parseStatus(value: unknown): ReviewStatus {
@@ -164,17 +174,6 @@ export function kindForFile(file: string): ReviewKind {
   return 'other'
 }
 
-function parseComments(value: unknown): ReviewComment[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap((entry) => {
-    if (!entry || typeof entry !== 'object') return []
-    const record = entry as Record<string, unknown>
-    const text = str(record.text)
-    if (!text) return []
-    return [{ by: str(record.by) ?? 'unknown', at: str(record.at) ?? '', text }]
-  })
-}
-
 function parseItem(value: unknown, index: number): ReviewItem | null {
   if (!value || typeof value !== 'object') return null
   const r = value as Record<string, unknown>
@@ -197,6 +196,7 @@ function parseItem(value: unknown, index: number): ReviewItem | null {
     shippedTo: str(r.shipped_to),
     frames: num(r.frames),
     fps: num(r.fps),
+    actions: parseActions(r),
   }
 }
 
@@ -220,7 +220,7 @@ function parseQuestion(value: unknown, index: number): ReviewQuestion | null {
   const raw = Array.isArray(r.answer) ? r.answer.map(str) : [str(r.answer)]
   let answer = raw.filter((id): id is string => id !== undefined && ids.includes(id))
   if (select === 'one') answer = answer.slice(0, 1)
-  const other = r.other === true || ['true', 'yes', 'on'].includes(str(r.other)?.toLowerCase() ?? '')
+  const other = bool(r.other)
   return {
     id: str(r.id) ?? `question-${index + 1}`,
     question,
@@ -254,7 +254,11 @@ export function parseReview(text: string, fallbackId = 'review'): ReviewRequest 
   const questions = Array.isArray(data.questions)
     ? data.questions.map(parseQuestion).filter((q): q is ReviewQuestion => q !== null)
     : []
+  const checks = Array.isArray(data.checks)
+    ? data.checks.map(parseCheck).filter((c): c is ReviewCheck => c !== null)
+    : []
   const id = str(data.id) ?? fallbackId
+  const due = str(data.due)
   return {
     id,
     project: str(data.project),
@@ -264,27 +268,47 @@ export function parseReview(text: string, fallbackId = 'review'): ReviewRequest 
     requestedBy: str(data.requested_by),
     requestedAt: str(data.requested_at),
     notify: parseNotify(data.notify),
+    for: [...new Set(ids(data.for))],
+    due: due && /^\d{4}-\d{2}-\d{2}/.test(due) ? due.slice(0, 10) : undefined,
+    actions: parseActions(data),
     items,
     questions,
+    checks,
+    actionsRun: parseActionsRun(data.actions_run),
     body,
   }
 }
 
 /**
- * What still waits for the reviewer: ids of items without a decision and of questions
- * without an answer (`item:<id>` / `question:<id>`, since the two may share an id in a
- * hand-written file). Empty when the request needs no answer.
+ * Whether a request is for `user` (a board user id): it names them in `for`, or names nobody.
+ * Without a user (identity unknown) only requests for everyone count.
  */
-export function waitingEntries(review: ReviewRequest): string[] {
+export function isReviewFor(review: Pick<ReviewRequest, 'for'>, user: string | null | undefined): boolean {
+  if (review.for.length === 0) return true
+  if (!user) return false
+  const key = user.toLowerCase()
+  return review.for.some((id) => id.toLowerCase() === key)
+}
+
+/**
+ * What still waits for the reviewer: ids of items and checks without a decision and of
+ * questions without an answer (`item:<id>` / `check:<id>` / `question:<id>`, since they may
+ * share an id in a hand-written file). Empty when the request needs no answer. With `user`,
+ * empty too when the request is for other people (`for`), so a request newly put on
+ * someone counts as new for them.
+ */
+export function waitingEntries(review: ReviewRequest, user?: string | null): string[] {
+  if (user !== undefined && !isReviewFor(review, user)) return []
   return [
     ...review.items.filter((item) => item.status === 'pending').map((item) => `item:${item.id}`),
+    ...review.checks.filter((check) => check.status === 'pending').map((check) => `check:${check.id}`),
     ...review.questions.filter((question) => !isQuestionAnswered(question)).map((question) => `question:${question.id}`),
   ]
 }
 
 export function summarizeReview(review: ReviewRequest): ReviewSummary {
   const summary: ReviewSummary = {
-    total: review.items.length,
+    total: review.items.length + review.checks.length,
     pending: 0,
     approved: 0,
     rejected: 0,
@@ -292,6 +316,7 @@ export function summarizeReview(review: ReviewRequest): ReviewSummary {
     awaitingAgent: 0,
     questions: review.questions.length,
     answered: 0,
+    checks: review.checks.length,
   }
   for (const question of review.questions) {
     summary.total += 1
@@ -302,16 +327,67 @@ export function summarizeReview(review: ReviewRequest): ReviewSummary {
       summary.pending += 1
     }
   }
-  for (const item of review.items) {
-    if (item.status === 'pending') summary.pending += 1
+  for (const entry of [...review.items, ...review.checks]) {
+    if (entry.status === 'pending') summary.pending += 1
     else {
-      if (item.status === 'approved') summary.approved += 1
-      if (item.status === 'rejected') summary.rejected += 1
-      if (item.status === 'changes-requested') summary.changesRequested += 1
-      if (!item.handledAt) summary.awaitingAgent += 1
+      if (entry.status === 'approved') summary.approved += 1
+      if (entry.status === 'rejected') summary.rejected += 1
+      if (entry.status === 'changes-requested') summary.changesRequested += 1
+      if (!entry.handledAt) summary.awaitingAgent += 1
     }
   }
   return summary
+}
+
+/**
+ * Whether an item is a losing option of a pick-one group: the group has an approved option
+ * and this is not it. Losers may stay pending and never count against the outcome.
+ */
+export function isPickLoser(review: ReviewRequest, item: ReviewItem): boolean {
+  if (!item.group || item.status === 'approved') return false
+  const members = review.items.filter((other) => other.group === item.group)
+  const pickOne = members.some((other) => other.pick === 'one')
+  return pickOne && members.some((other) => other.status === 'approved')
+}
+
+/** An item or check is settled when it is decided, or when it is a losing option of a pick. */
+export function isItemSettled(review: ReviewRequest, item: ReviewItem): boolean {
+  return item.status !== 'pending' || isPickLoser(review, item)
+}
+
+/**
+ * The request's outcome once every item and check is settled (questions don't count: they
+ * have answers, not decisions); `null` before that, and for a request without items and
+ * checks. Any changes requested → `changes`; else any rejected (pick-one losers left out)
+ * → `reject`; else `accept`.
+ */
+export function reviewOutcome(review: ReviewRequest): ReviewOutcome | null {
+  if (review.items.length + review.checks.length === 0) return null
+  if (review.items.some((item) => !isItemSettled(review, item))) return null
+  if (review.checks.some((check) => check.status === 'pending')) return null
+  const counted = [...review.items.filter((item) => !isPickLoser(review, item)), ...review.checks]
+  if (counted.some((entry) => entry.status === 'changes-requested')) return 'changes'
+  if (counted.some((entry) => entry.status === 'rejected')) return 'reject'
+  return 'accept'
+}
+
+/** The outcome a single decision means for that entry's own actions. */
+export function outcomeForStatus(status: ReviewStatus): ReviewOutcome | null {
+  switch (status) {
+    case 'approved':
+      return 'accept'
+    case 'changes-requested':
+      return 'changes'
+    case 'rejected':
+      return 'reject'
+    default:
+      return null
+  }
+}
+
+/** Whether the request, an item or a check declares any action. */
+export function reviewHasActions(review: ReviewRequest): boolean {
+  return hasActions(review.actions) || review.items.some((i) => hasActions(i.actions)) || review.checks.some((c) => hasActions(c.actions))
 }
 
 export class ReviewItemNotFoundError extends Error {
@@ -425,6 +501,119 @@ export function appendReviewComment(text: string, itemId: string, comment: Revie
     const existing = Array.isArray(item.comments) ? item.comments : []
     item.comments = [...existing, { by: comment.by, at: comment.at, text: trimmed }]
   })
+}
+
+export class ReviewCheckNotFoundError extends Error {
+  constructor(readonly checkId: string) {
+    super(`No browser check with id "${checkId}"`)
+    this.name = 'ReviewCheckNotFoundError'
+  }
+}
+
+function withRawCheck(text: string, checkId: string, mutate: (check: RawItem) => void): string {
+  const { data, body } = parseFrontmatter(text)
+  const checks = Array.isArray(data.checks) ? (data.checks as unknown[]) : []
+  const index = checks.findIndex(
+    (entry, i) => entry && typeof entry === 'object' && (str((entry as RawItem).id) ?? `check-${i + 1}`) === checkId,
+  )
+  if (index < 0) throw new ReviewCheckNotFoundError(checkId)
+  mutate(checks[index] as RawItem)
+  return serializeFrontmatter(data, body)
+}
+
+/** Decide a browser check, like an item: only `status`, `decided_by`, `decided_at` change. */
+export function applyCheckDecision(text: string, decision: { checkId: string; status: ReviewStatus; by: string; at: string }): string {
+  return withRawCheck(text, decision.checkId, (check) => {
+    check.status = decision.status
+    check.decided_by = decision.status === 'pending' ? null : decision.by
+    check.decided_at = decision.status === 'pending' ? null : decision.at
+  })
+}
+
+export interface CheckAnswerEdit {
+  checkId: string
+  /** The size key: `<size id>` or `<size id>.<appearance>`. */
+  key: string
+  line: string
+  /** `null` takes the answer back. */
+  result: CheckAnswerResult | null
+  note?: string
+  by: string
+  at: string
+  /** The viewport actually used, `390x844`. */
+  viewport?: string
+}
+
+/**
+ * Answer one checklist line at one size. A `note` answer needs a note. Only that answer and
+ * the result's `by` / `at` / `viewport` change.
+ */
+export function applyCheckAnswer(text: string, edit: CheckAnswerEdit): string {
+  const note = edit.note?.trim() || undefined
+  if (edit.result === 'note' && !note) throw new Error('A note answer needs the note')
+  return withRawCheck(text, edit.checkId, (check) => {
+    const lines = parseCheck(check, 0)?.checklist ?? []
+    if (!lines.some((line) => line.id === edit.line)) throw new Error(`"${edit.line}" is not a line of check "${edit.checkId}"`)
+    const results = (check.results && typeof check.results === 'object' && !Array.isArray(check.results) ? check.results : {}) as RawItem
+    const result = (results[edit.key] && typeof results[edit.key] === 'object' ? results[edit.key] : {}) as RawItem
+    const answers = (result.answers && typeof result.answers === 'object' ? result.answers : {}) as RawItem
+    if (edit.result === null) {
+      delete answers[edit.line]
+    } else {
+      const answer: RawItem = { result: edit.result }
+      if (note) answer.note = note
+      answer.at = edit.at
+      answers[edit.line] = answer
+    }
+    if (edit.viewport) result.viewport = edit.viewport
+    result.by = edit.by
+    result.at = edit.at
+    result.answers = answers
+    results[edit.key] = result
+    check.results = results
+  })
+}
+
+/** Record the screenshot taken at a size (already written to `path` in the request folder). */
+export function applyCheckScreenshot(text: string, edit: { checkId: string; key: string; path: string; by: string; at: string }): string {
+  return withRawCheck(text, edit.checkId, (check) => {
+    const results = (check.results && typeof check.results === 'object' && !Array.isArray(check.results) ? check.results : {}) as RawItem
+    const result = (results[edit.key] && typeof results[edit.key] === 'object' ? results[edit.key] : {}) as RawItem
+    result.screenshot = edit.path
+    result.by = edit.by
+    result.at = edit.at
+    if (!result.answers) result.answers = {}
+    results[edit.key] = result
+    check.results = results
+  })
+}
+
+/** Append a comment to a browser check. Existing comments are never rewritten. */
+export function appendCheckComment(text: string, checkId: string, comment: ReviewComment): string {
+  const trimmed = comment.text.trim()
+  if (trimmed.length === 0) throw new Error('A review comment needs text')
+  return withRawCheck(text, checkId, (check) => {
+    const existing = Array.isArray(check.comments) ? check.comments : []
+    check.comments = [...existing, { by: comment.by, at: comment.at, text: trimmed }]
+  })
+}
+
+/** Append one entry to the request's `actions_run`. Existing entries are never rewritten. */
+export function appendActionRun(text: string, run: ActionRun): string {
+  const { data, body } = parseFrontmatter(text)
+  const existing = Array.isArray(data.actions_run) ? data.actions_run : []
+  data.actions_run = [...existing, actionRunRecord(run)]
+  return serializeFrontmatter(data, body)
+}
+
+/** Mark the `index`-th `actions_run` entry undone: `undone_at`, and nothing else. */
+export function markActionRunUndone(text: string, index: number, at: string): string {
+  const { data, body } = parseFrontmatter(text)
+  const list = Array.isArray(data.actions_run) ? data.actions_run : []
+  const entry = list[index]
+  if (!entry || typeof entry !== 'object') throw new Error(`No action run ${index}`)
+  ;(entry as RawItem).undone_at = at
+  return serializeFrontmatter(data, body)
 }
 
 /**

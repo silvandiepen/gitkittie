@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
+  appendActionRun,
+  appendCheckComment,
   appendReviewComment,
+  applyCheckAnswer,
+  applyCheckDecision,
+  applyCheckScreenshot,
+  checkFailures,
+  checklistID,
+  checkScreenshotPath,
+  isLocalOnlyURL,
+  isReviewFor,
+  markActionRunUndone,
+  parseCheckSize,
+  ReviewCheckNotFoundError,
+  reviewOutcome,
+  type ActionRun,
   applyReviewAnswer,
   applyReviewDecision,
   isQuestionAnswered,
@@ -93,7 +108,7 @@ describe('parseReview', () => {
 
   it('summarizes', () => {
     expect(summarizeReview(parseReview(REVIEW))).toEqual({
-      total: 3, pending: 1, approved: 1, rejected: 1, changesRequested: 0, awaitingAgent: 1, questions: 0, answered: 0,
+      total: 3, pending: 1, approved: 1, rejected: 1, changesRequested: 0, awaitingAgent: 1, questions: 0, answered: 0, checks: 0,
     })
   })
 })
@@ -198,7 +213,7 @@ describe('questions', () => {
     expect(platforms.answer).toEqual(['mac', 'ios'])
     expect(isQuestionAnswered(platforms)).toBe(true)
     expect(summarizeReview(review)).toEqual({
-      total: 2, pending: 1, approved: 0, rejected: 0, changesRequested: 0, awaitingAgent: 1, questions: 2, answered: 1,
+      total: 2, pending: 1, approved: 0, rejected: 0, changesRequested: 0, awaitingAgent: 1, questions: 2, answered: 1, checks: 0,
     })
   })
 
@@ -222,5 +237,71 @@ describe('questions', () => {
     const own = applyReviewAnswer(next, { ...base, choices: [], other: ' Fastmail ' })
     expect(parseReview(own).questions[0].answer).toEqual([])
     expect(parseReview(own).questions[0].answerOther).toBe('Fastmail')
+  })
+})
+
+describe('browser checks and actions', () => {
+  const CHECK = `---
+id: PETS-3
+title: Page
+for: [sil]
+on_accept: { to: testing }
+checks:
+  - id: page
+    url: https://example.com
+    sizes: [phone]
+    checklist:
+      - { id: hero, text: Headline fits }
+    status: pending
+---
+`
+
+  it('answers a line per size, keeping the rest', () => {
+    let text = applyCheckAnswer(CHECK, { checkId: 'page', key: 'phone', line: 'hero', result: 'fail', note: ' Wraps ', by: 'sil', at: '2026-11-30T10:00:00Z', viewport: '402x874' })
+    let check = parseReview(text).checks[0]
+    expect(check.results.phone).toEqual({ viewport: '402x874', by: 'sil', at: '2026-11-30T10:00:00Z', answers: { hero: { result: 'fail', note: 'Wraps', at: '2026-11-30T10:00:00Z' } } })
+    expect(checkFailures(check)).toEqual([{ size: 'phone', item: 'hero', text: 'Headline fits', result: 'fail', note: 'Wraps' }])
+    expect(parseReview(text).actions.accept).toEqual([{ to: 'testing', comment: false }])
+    text = applyCheckAnswer(text, { checkId: 'page', key: 'phone', line: 'hero', result: null, by: 'sil', at: '2026-11-30T10:01:00Z' })
+    check = parseReview(text).checks[0]
+    expect(check.results.phone.answers).toEqual({})
+    expect(() => applyCheckAnswer(CHECK, { checkId: 'page', key: 'phone', line: 'hero', result: 'note', by: 'sil', at: 'x' })).toThrow()
+    expect(() => applyCheckAnswer(CHECK, { checkId: 'page', key: 'phone', line: 'nope', result: 'pass', by: 'sil', at: 'x' })).toThrow()
+    expect(() => applyCheckAnswer(CHECK, { checkId: 'gone', key: 'phone', line: 'hero', result: 'pass', by: 'sil', at: 'x' })).toThrow(ReviewCheckNotFoundError)
+  })
+
+  it('decides a check and gives the request an outcome', () => {
+    const before = parseReview(CHECK)
+    expect(waitingEntries(before)).toEqual(['check:page'])
+    expect(waitingEntries(before, 'herma')).toEqual([])
+    expect(reviewOutcome(before)).toBeNull()
+    const text = applyCheckDecision(CHECK, { checkId: 'page', status: 'approved', by: 'sil', at: '2026-11-30T10:02:00Z' })
+    const after = parseReview(text)
+    expect(after.checks[0]).toMatchObject({ status: 'approved', decidedBy: 'sil' })
+    expect(reviewOutcome(after)).toBe('accept')
+    const commented = appendCheckComment(text, 'page', { by: 'sil', at: '2026-11-30T10:03:00Z', text: 'Fine' })
+    expect(parseReview(commented).checks[0].comments).toEqual([{ by: 'sil', at: '2026-11-30T10:03:00Z', text: 'Fine' }])
+    const shot = applyCheckScreenshot(text, { checkId: 'page', key: 'phone', path: checkScreenshotPath('page', 'phone'), by: 'sil', at: 'x' })
+    expect(parseReview(shot).checks[0].results.phone.screenshot).toBe('results/page-phone.png')
+  })
+
+  it('appends action runs and marks one undone', () => {
+    const run: ActionRun = { on: 'accept', card: 'PETS-3', from: 'in-review', to: 'testing', result: 'moved', by: 'sil', at: '2026-11-30T10:02:00Z', before: { reviewer: null } }
+    const text = appendActionRun(CHECK, run)
+    expect(parseReview(text).actionsRun).toEqual([run])
+    const undone = markActionRunUndone(text, 0, '2026-11-30T10:02:05Z')
+    expect(parseReview(undone).actionsRun[0].undoneAt).toBe('2026-11-30T10:02:05Z')
+    expect(() => markActionRunUndone(text, 3, 'x')).toThrow()
+  })
+
+  it('knows sizes and local-only addresses', () => {
+    expect(parseCheckSize('wide')).toEqual({ id: 'wide', label: 'Wide', width: 1920, height: 1080, ua: 'desktop' })
+    expect(checklistID('The download button shows!')).toBe('the-download-button-shows')
+    expect(isLocalOnlyURL('http://localhost:5173/x')).toBe(true)
+    expect(isLocalOnlyURL('http://mac.local/')).toBe(true)
+    expect(isLocalOnlyURL('https://preview.example.app')).toBe(false)
+    expect(isReviewFor({ for: [] }, null)).toBe(true)
+    expect(isReviewFor({ for: ['Sil'] }, 'sil')).toBe(true)
+    expect(isReviewFor({ for: ['sil'] }, null)).toBe(false)
   })
 })
