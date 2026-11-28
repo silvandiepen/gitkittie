@@ -26,13 +26,13 @@ when that folder exists. Reviewer writes are compare-and-swap so an agent's conc
 Both apps have review screens (`GitKanban/Review/`). Select in a request's ⋯ menu shows its files as a grid to decide or
 comment on several at once, in one write (`AppModel.decide(_:itemIDs:status:)`, `comment(_:itemIDs:text:)`); approving two options
 of a pick-one group is refused. `UITests/ReviewSelectUITests` needs `scripts/seed-select-fixture.sh <simulator-udid>` first.
-A request shows through one filter (Waiting / Answered / All, in the ⋯ menu; Decision 15 in the Mac app's `docs/Decisions.md`),
+A request shows through one filter (Waiting / Answered / All, in the ⋯ menu; Decision 15 in the Mac app's `docs/decisions/TASKS-15.md`),
 its notes open from the header as formatted Markdown, and ⏩ goes to the next page still waiting. `UITests/ReviewLongRequestUITests`
 needs `scripts/seed-long-review-fixture.sh <simulator-udid>` first (`--from <folder>` adds real requests to look at).
 Actions, browser checks, `for` and due dates (GITKITTIE-136): `GitKanban/Review/ReviewCheckScreens.swift` (a check as a page,
 full-screen check with its checklist in a sheet, "When decided"), shared parts in `swift/TasksUI`. `UITests/ReviewActionsCheckUITests`
 needs `scripts/seed-review-actions-fixture.sh <simulator-udid>` first (a fresh seed per run: the tests decide). Decision 21 in the
-Mac app's `docs/Decisions.md`.
+Mac app's `docs/decisions/TASKS-21.md`.
 The home-screen name is **Tasks** (GITKITTIE-013 tracks the rest of the rename).
 
 ## Share extension and shared storage

@@ -1,0 +1,59 @@
+---
+id: MAIL-017
+title: "IMAP on Apple's swift-nio-imap codec with our own session layer"
+date: 2026-11-24
+status: proposed
+---
+
+# MAIL-017: IMAP on Apple's swift-nio-imap codec with our own session layer
+
+**Decision.** IMAP on Apple's swift-nio-imap codec with our own session layer; SMTP and MIME are our own code (SMTP on SwiftNIO, MIME on Foundation); TLS through swift-nio-ssl with the system trust store. Adapters live in `swift/GitKittieMailProviders` (macOS 15 / iOS 18, Swift 6.2); MIME in `swift/GitKittieMailKit` (MailMIME)
+
+**Why.** Maintained, Apache-2.0, Swift concurrency, iOS-ready; we control exactly when a send becomes uncertain and how hostile MIME is bounded. Details and rejected options below. GKM-002
+
+**Links.** GKM-002
+
+## Details: MAIL-017: protocol libraries (GKM-002, 2026-11-24)
+
+Checked against the repositories on 2026-11-24. Licences are all App Store compatible; the shipping app lists them in its acknowledgements (swift-nio-ssl and swift-crypto carry BoringSSL's ISC/OpenSSL-style notices).
+
+**IMAP: [apple/swift-nio-imap](https://github.com/apple/swift-nio-imap) 0.5.x (Apache-2.0), with our own session layer.** Apple maintains it (commits this week; 0.5.0 on 2026-11-13). It is a complete IMAP4rev1/rev2 parser and encoder with the extensions we need: IDLE, UIDPLUS (APPENDUID/COPYUID), MOVE, CONDSTORE/QRESYNC, LITERAL+, ESEARCH, ENABLE, ID, SPECIAL-USE, OBJECTID and Gmail's X-GM attributes; it streams FETCH bodies and handles synchronising literals itself. 0.5.0 fixed FETCH literal corruption and unquoted untrusted bytes in the encoder, so older versions are out, and 0.5 sets the floor at Swift 6.2 and macOS 15 / iOS 18. Its new `IMAPCommands` client is not used: it offers no custom trust roots (needed for the local test server and self-hosted servers), no STARTTLS and no command timeouts. Our `IMAPSession` (MailIMAP) drives the codec one command at a time and maps everything onto MailProvider's protocol-agnostic `MailboxSession`. Pinned to 0.5.x because 0.x minors may break the API.
+
+**SMTP: our own client on SwiftNIO (MailSMTP).** SMTP submission is small (EHLO, STARTTLS, AUTH, MAIL/RCPT/DATA), and the outbox needs to know exactly where a transaction stopped: failures before the end-of-data marker are `notSent`, a lost reply after it is `uncertain` and must never be resent blindly (Architecture.md, Sending and drafts). No library reports that. Ours also refuses to continue without STARTTLS when it was asked for, rejects plaintext injected ahead of the TLS handshake, normalises bare CR/LF (SMTP smuggling) and validates envelope addresses. Supports implicit TLS (465), STARTTLS (587, iCloud), AUTH PLAIN, LOGIN and XOAUTH2.
+
+**MIME: our own parser and builder on Foundation (MailMIME, in GitKittieMailKit).** No maintained Swift MIME library exists. Ours parses multipart trees, base64/quoted-printable, charsets, RFC 2047 encoded words, RFC 2231 parameters, address lists and RFC 5322 dates; it never throws on hostile input but reports problems and stops at limits (depth, part count, header size); it makes attachment names safe. The builder writes CRLF messages with encoded headers, RFC 2231 file names, QP text and base64 attachments, keeps Bcc out of the message and refuses header injection. MailStore's `MessageParsing` seam can adopt it in place of `BasicMessageParser`.
+
+**TLS: swift-nio-ssl** for both protocols. With the default trust roots it validates through the Security framework, so it trusts exactly what the OS trusts; host names are always checked; TLS 1.2 minimum. Network.framework (swift-nio-transport-services) was the alternative, but it cannot start TLS on an open connection, which SMTP STARTTLS needs; one stack for both is simpler to audit. Revisit for IMAP on iOS if Network.framework's path handling turns out to matter (GKM-027).
+
+**Why a separate package.** swift-nio-imap 0.5 needs Swift 6.2 and macOS 15 / iOS 18, while the app (GKM-009) and GitKittieMailKit still build for macOS 14 with Xcode 16. `swift/GitKittieMailProviders` carries that floor until the app starts syncing (GKM-010/011) and moves to macOS 15 / Xcode 26 itself; the ios-conventions rule (current minus one) already points there.
+
+**Rejected:**
+
+- **MailCore2** (C++/Objective-C, BSD-style): no release since 0.6.4 (2020) although the repository has new commits; a large C/C++ parsing surface for hostile mail (libetpan, ctemplate, tidy, ICU), callback/thread model with no Swift concurrency, a heavy build on iOS.
+- **Postal** (Swift over libetpan, MIT): unmaintained since 2019.
+- **Kitura/Swift-SMTP** (Apache-2.0): Kitura is no longer actively developed (last change April 2025); pre-NIO socket code and no uncertain-send state.
+- **sersoft-gmbh/swift-smtp** (Apache-2.0, maintained, NIO-based): needs swift-tools 6.4 (newer than the Swift 6.2 we build with), and it reports success or an error without saying where the transaction stopped, which the outbox needs to tell `notSent` from `uncertain`.
+- **Swift MIME parsers on GitHub** (miximka/MimeParser, bengottlieb/marcel and others): unmaintained, read-only, no RFC 2231 or limits.
+- **swift-nio-imap's `IMAPCommands`**: see above; a candidate to adopt once it supports custom trust and timeouts.
+
+**Verified** against a real local server (GreenMail 2.1.3, `swift/GitKittieMailProviders/scripts/test-mail-server.sh`): TLS with a pinned test CA, folders, incremental fetch by UID, flags, MOVE with UIDPLUS ids, attachments byte for byte, send then Sent reconciliation, uncertain sends (lost reply over TLS and a real TCP cut), STARTTLS through a TLS front, STARTTLS downgrade refused, UIDVALIDITY reset with stale UIDs refused, reconnect after a network cut, IDLE, malformed mail, and no password in any log. Not yet run against iCloud: that needs Sil's test account (GKM-004; how to run it is in the package README).
+
+Decided by Sil on 2026-11-24 (GKM-001), through the review `GitKittie/review/GKM-001-mail-decisions` on the board:
+
+- **Fit with GitKittie:** Git optional, iCloud for metadata, as proposed (MAIL-002). GitKittie Mail is a GitKittie app; on the site it is described by the files you own, not by Git.
+- **Providers:** iCloud, any IMAP account and Gmail at first release (MAIL-014). This makes the Gmail cost (GKM-008) a launch question and moves the Gmail adapter (GKM-029) to Phase 2.
+- **Pricing:** decided after the MVP tests (MAIL-012).
+- **Code:** in the gitkittie monorepo (MAIL-015).
+
+GKM-008 answered the Gmail cost question on 2026-11-24 (details and sources in ProviderAccess.md):
+
+- Every Gmail OAuth scope that can read mail is restricted. That means Google's restricted-scope verification plus a third-party security assessment (CASA) every 12 months. Reported prices: about US$540–1,800 a year at the lower tier, US$4,500–8,000+ at the higher one. Google picks the tier.
+- A local-only design probably does not avoid the assessment: Google's pages disagree, and a 2026 report says Google required it for a local-only app.
+- Gmail with an app password (IMAP, 2-Step Verification) needs no verification and costs nothing, but is unavailable for security-key-only, Advanced Protection and some work accounts.
+
+**Go/no-go, needs Sil before Phase 2:**
+
+1. Accept MAIL-016: Gmail at first release via IMAP and app password (recommended: go).
+2. Decide whether to fund Gmail OAuth (restricted-scope verification and the yearly assessment, two to three months lead time). If the higher tier's cost cannot be carried by a one-time price, Gmail stays app-password only, or OAuth needs its own pricing; this links to MAIL-012.
+
+Open technical questions: validate provider OAuth scope/approval and quotas; prototype encrypted CloudKit metadata, identity mapping and archive key recovery; determine local history/attachment storage budgets and iOS file access; measure multilingual classifier accuracy and set release thresholds; choose shared package names after repo audit; validate pricing and relay demand; complete threat model, privacy, accessibility and App Store review before launch.

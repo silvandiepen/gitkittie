@@ -134,7 +134,7 @@ UI-agnostic so the board parsing layer can back iOS unchanged.
 in place, unknown keys preserved; a lane change **moves the file** into the destination lane folder
 and sets `status`) → `ShellGitEngine.commit` one logical action → `pull --rebase` then `push`.
 Reorder currently writes an integer `order = index + 1` for the affected lane rather than minting a
-single fractional key — see [Decisions.md](./Decisions.md) §6.
+single fractional key — see [Decision 6](./decisions/TASKS-06.md).
 
 ---
 

@@ -14,6 +14,10 @@ and pushes. See [`docs/Architecture.md`](./docs/Architecture.md) for what exists
 planned, and [`docs/Features.md`](./docs/Features.md) / [`docs/Decisions.md`](./docs/Decisions.md)
 for the rest.
 
+## Decisions
+
+Each decision is its own file, `docs/decisions/TASKS-NN.md` (the old `§ N` sections keep their numbers; the second `§ 19` is `TASKS-19b.md`). To add one, create the next number: copy the last file for the shape (front matter `id`, `title`, `date`, `status`, then Decision, Context, Rationale, Status). Do not edit `docs/Decisions.md` to add it, so parallel PRs do not conflict. `node scripts/decisions-index.mjs` lists them; `npm run check` validates the front matter.
+
 ## Folder sources and review
 
 Besides provider repos, an added entry can be a **local folder** (`LocalFolderSource`, macOS folder
@@ -30,11 +34,11 @@ Requests can carry actions (`on_accept` / `on_changes` / `on_reject`), browser c
 `AgentBoard.updateCard` (`ReviewActionRunner.swift`, `AppModel+ReviewActions.swift`: `reviewActionReport`,
 `moveAnyway`, `undoReviewAction`); `AppModel+ReviewAssignment.swift` works out who you are per board, the
 For me / Everyone filter, and refuses decisions on others' requests. Review writes keep the file's text
-outside what changed (`ReviewYAMLSplice` in GitKittieKit). Decisions: `docs/Decisions.md` § 20. Screens (GITKITTIE-135): what they say comes from `ReviewPresentation.swift` and `ReviewCheckSession.swift`
+outside what changed (`ReviewYAMLSplice` in GitKittieKit). Decisions: `docs/decisions/TASKS-20.md`. Screens (GITKITTIE-135): what they say comes from `ReviewPresentation.swift` and `ReviewCheckSession.swift`
 (GitKanbanKit), drawn by `swift/TasksUI/ReviewScreenParts.swift` and `CheckWebView.swift` (shared with iOS); the Mac's
 check row and Check in Browser window are `GitKanban/Review/ReviewCheckViews.swift` (a `WindowGroup` keyed by
 `CheckWindowValue`). Offscreen tests: `Tests/CheckWebViewTests` (viewport, scaling, clicks) and `Tests/ReviewScreensRenderTests`
-(`TEST_RUNNER_REVUI_SHOTS=<folder>` writes pictures). Decisions § 21.
+(`TEST_RUNNER_REVUI_SHOTS=<folder>` writes pictures). Decision: `docs/decisions/TASKS-21.md`.
 
 ## Rules specific to this app
 
@@ -120,7 +124,7 @@ that connects Claude Code.
   how agents should work, change the guide's prose, not the prompt (which only points at the guide).
 - **`tasks` CLI:** `TasksCLIKit` (parsing, client, output) + the `TasksCLI` executable, built by
   `swift build --product tasks` in `swift/GitKanbanKit`, and bundled in the app by the `TasksCLI`
-  tool target in `project.yml` (sandboxed; see `docs/Decisions.md` § 17). Tests:
+  tool target in `project.yml` (sandboxed; see `docs/decisions/TASKS-17.md`). Tests:
   `TasksCLIParsingTests` and `TasksCLIIntegrationTests` (the real client against the app model's
   server on a random port with a test token — never port 47810 or the real token).
 
