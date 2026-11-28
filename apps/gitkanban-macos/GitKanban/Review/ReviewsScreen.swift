@@ -73,12 +73,16 @@ struct ReviewsScreen: View {
         }
         .task {
             if !model.hasLoadedReviewInbox { await model.loadReviewInbox() }
+            if let request = model.reviewsFocusRequest { selected = request; model.reviewsFocusRequest = nil }
             if selected == nil { selected = startingRequest }
         }
         .onChange(of: model.reviewInbox) { _, _ in
             if selected == nil { selected = startingRequest }
         }
         .onChange(of: model.reviewsFocusBoard) { _, _ in selected = startingRequest }
+        .onChange(of: model.reviewsFocusRequest) { _, request in
+            if let request { selected = request; model.reviewsFocusRequest = nil }
+        }
         .alert("Comment on \(commenting?.title ?? "")", isPresented: Binding(get: { commenting != nil }, set: { if !$0 { commenting = nil } })) {
             TextField("Comment", text: $commentText)
             Button("Add to All Files") {

@@ -264,6 +264,11 @@ writes their answer back to the board.
   say "(recommended)" in its label, and give the trade-off of every option in its `detail`.
 - One request per round of related work; several questions in one request read as one form. Put the
   background in the question's `detail` (Markdown).
+- **How loudly it is announced:** `"notify"` (`notify:` in the request's frontmatter). `urgent` is
+  time-sensitive and breaks through the person's Focus: use it only when work is blocked on the
+  answer. `normal` (the default, also when left out) is an ordinary notification. `silent` sends no
+  notification: the request only counts on the badge and in the Reviews list (an FYI, a decision that
+  can wait for the next look). To change it later: `create_review` with `"request"` and `"notify"`.
 
 Creating one goes through `create_review` (from the command line: `tasks raw create_review`, with
 the JSON on standard input):

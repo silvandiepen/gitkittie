@@ -1,15 +1,34 @@
 {
-  // GitKanban relay: GitHub push webhooks in, "paths changed" events out over WebSockets.
+  // GitKanban relay: push webhooks in, "paths changed" events out over WebSockets, and
+  // push notifications for review requests (the "GitKittie Tasks" GitHub App + APNs).
   "name": "gitkanban-relay",
   // Sil's main Cloudflare account, the one his other projects deploy to.
   "account_id": "8cef251b5fdcf6c6f63db98b7aa49f9a",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01",
-  // One Durable Object per channel (= one repo): it holds that channel's two secrets and
-  // its connected sockets. SQLite-backed, which the free plan allows.
+  // One Durable Object per channel (= one repo): it holds that channel's two secrets, its
+  // connected sockets and the devices that want review pushes. One per GitHub repository
+  // (`github:<repo id>`) for the devices that get review pushes through the GitHub App.
+  // SQLite-backed, which the free plan allows.
   "durable_objects": {
-    "bindings": [{ "name": "CHANNEL", "class_name": "Channel" }]
+    "bindings": [
+      { "name": "CHANNEL", "class_name": "Channel" },
+      { "name": "GITHUB_REPO", "class_name": "GitHubRepo" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Channel"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Channel"] },
+    { "tag": "v2", "new_sqlite_classes": ["GitHubRepo"] }
+  ],
+  // Not secret. The secrets (docs/Push.md, scripts/go-live.sh): GITHUB_APP_PRIVATE_KEY,
+  // GITHUB_WEBHOOK_SECRET, APNS_PRIVATE_KEY.
+  "vars": {
+    "GITHUB_APP_ID": "5963429",
+    "GITHUB_APP_SLUG": "gitkittie-tasks",
+    // The team's APNs key (~/Projects/Apple Distribution/Push/AuthKey_<id>.p8); its id is not secret.
+    "APNS_KEY_ID": "37WP9V9P6N",
+    "APNS_TEAM_ID": "38MGF83L2L",
+    "APNS_TOPIC": "app.hakobs.gitkanban"
+  },
   "observability": { "enabled": true }
 }

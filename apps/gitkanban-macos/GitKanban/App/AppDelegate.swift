@@ -23,13 +23,43 @@ final class TasksAppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         // `gitkittie-tasks://new?…` from another app (GitKittie Mail's Make Task, GKM-033)
         // arrives here too, beside the files.
-        let requests = urls.filter { !$0.isFileURL }
+        // `gitkittie-tasks://github-installed` is GitHub's page after installing GitKittie Tasks.
+        let installed = urls.contains { $0.scheme == "gitkittie-tasks" && $0.host == "github-installed" }
+        let requests = urls.filter { !$0.isFileURL && !($0.scheme == "gitkittie-tasks" && $0.host == "github-installed") }
         let files = urls.filter(\.isFileURL)
         Task {
+            if installed { await model.registerForReviewPushes() }
             // Before the model has restored (a cold launch) it keeps them until then.
             if !files.isEmpty { await model.openFiles(files) }
             if let request = requests.last { model.openTaskRequest(request) }
             showMainWindow()
+        }
+    }
+
+    // Instant review notifications (apps/gitkanban-relay/docs/Push.md).
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.registerForRemoteNotifications()
+    }
+
+    func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        #if DEBUG
+        let environment = "sandbox"
+        #else
+        let environment = "production"
+        #endif
+        Task { await model.didRegisterForRemoteNotifications(deviceToken: deviceToken, environment: environment) }
+    }
+
+    func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        // No token (no network, or no push entitlement in this build): the app's own checks still run.
+    }
+
+    /// A push reached the running app: note it and catch up the inbox and badge.
+    func application(_ application: NSApplication, didReceiveRemoteNotification userInfo: [String: Any]) {
+        Task {
+            await model.startNotifications()
+            await model.didReceiveRemoteNotification(userInfo)
         }
     }
 

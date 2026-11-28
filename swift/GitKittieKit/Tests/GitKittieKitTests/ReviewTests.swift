@@ -63,6 +63,23 @@ Made with Tripo.
         #expect(r.settledIDs.items.isEmpty)
     }
 
+    @Test func readsAndWritesTheNotifyLevel() throws {
+        #expect(Review.parse(reviewText, folder: "M/review/x").notify == .normal)
+        #expect(Review.parse("---\nnotify: urgent\n---\n", folder: "M/review/x").notify == .urgent)
+        #expect(Review.parse("---\nnotify: Silent\n---\n", folder: "M/review/x").notify == .silent)
+        #expect(Review.parse("---\nnotify: loud\n---\n", folder: "M/review/x").notify == .normal)
+
+        let rendered = try Review.render(id: "x", project: "M", card: nil, title: "X", question: nil, requestedBy: "claude",
+                                         notes: nil, items: [], questions: [], notify: .urgent)
+        #expect(rendered.contains("notify: urgent\n"))
+        let plain = try Review.render(id: "x", project: "M", card: nil, title: "X", question: nil, requestedBy: "claude",
+                                      notes: nil, items: [])
+        #expect(!plain.contains("notify"))
+        let quiet = try Review.setNotify(reviewText, .silent)
+        #expect(Review.parse(quiet, folder: "M/review/x").notify == .silent)
+        #expect(Review.parse(quiet, folder: "M/review/x").items == Review.parse(reviewText, folder: "M/review/x").items)
+    }
+
     @Test func parsesRequestAndItems() {
         let r = Review.parse(reviewText, folder: "Morrow/review/MORROW-182-pet-models")
         #expect(r.id == "MORROW-182-pet-models")

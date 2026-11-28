@@ -1,0 +1,38 @@
+// Devices that want push notifications for a repository: what a registration must look
+// like, and which devices a given alert goes to.
+
+import { DEVICE_TOKEN, type Device } from "./apns.js";
+import type { ReviewAlert } from "./review-push.js";
+
+/** A device that has not proved repo access again for this long is dropped (the app re-registers at launch). */
+export const DEVICE_LIFETIME_DAYS = 45;
+/** More devices than this on one repository is not one person's phones and Macs. */
+export const MAX_DEVICES_PER_REPO = 50;
+
+const LEVELS = ["urgent", "normal", "silent"] as const;
+
+/** A registration as the app sends it, checked; `null` when anything is off. */
+export function parseDevice(value: unknown, now: Date): Device | null {
+  if (typeof value !== "object" || value === null) return null;
+  const raw = value as Record<string, unknown>;
+  const token = typeof raw.token === "string" ? raw.token.toLowerCase() : "";
+  if (!DEVICE_TOKEN.test(token)) return null;
+  if (raw.platform !== "ios" && raw.platform !== "macos") return null;
+  if (raw.environment !== "production" && raw.environment !== "sandbox") return null;
+  const levels = Array.isArray(raw.levels)
+    ? LEVELS.filter((level) => (raw.levels as unknown[]).includes(level))
+    : [...LEVELS];
+  const appVersion = typeof raw.appVersion === "string" ? raw.appVersion.slice(0, 32) : "";
+  return { token, platform: raw.platform, environment: raw.environment, levels, appVersion, verifiedAt: now.toISOString() };
+}
+
+/** Whether `device` registered (proved access) recently enough to still be sent to. */
+export function isCurrent(device: Device, now: Date): boolean {
+  const verified = Date.parse(device.verifiedAt);
+  return Number.isFinite(verified) && now.getTime() - verified < DEVICE_LIFETIME_DAYS * 86_400_000;
+}
+
+/** The devices that want `alert`. */
+export function recipients(devices: Device[], alert: ReviewAlert, now: Date): Device[] {
+  return devices.filter((device) => isCurrent(device, now) && device.levels.includes(alert.level));
+}

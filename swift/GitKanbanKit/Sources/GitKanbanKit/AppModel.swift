@@ -219,6 +219,11 @@ public final class AppModel {
     /// The board ("repoID|folder") whose requests the reviews screen starts on, when it
     /// was opened from that board.
     public var reviewsFocusBoard: String?
+    /// The request the reviews screen opens on: a tapped notification about it (see
+    /// AppModel+Push.swift). The screen clears it once it shows the request.
+    public var reviewsFocusRequest: ReviewRef?
+    /// Instant (push) review notifications per added repo (AppModel+Push.swift).
+    public internal(set) var instantNotifications: [String: InstantNotificationState] = [:]
     public var searchText = ""
 
     public var hasActiveFilters: Bool {

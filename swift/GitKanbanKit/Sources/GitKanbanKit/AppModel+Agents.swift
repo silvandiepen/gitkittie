@@ -330,7 +330,14 @@ extension AppModel {
         case "create_review":
             let rawItems = args["items"] as? [[String: Any]] ?? []
             let rawQuestions = args["questions"] as? [[String: Any]] ?? []
-            guard !rawItems.isEmpty || !rawQuestions.isEmpty else {
+            var notify: ReviewNotify?
+            if let raw = string("notify") {
+                guard let level = ReviewNotify(rawValue: raw.lowercased()) else {
+                    throw AgentBoardError("\"notify\" is urgent, normal or silent.")
+                }
+                notify = level
+            }
+            guard !rawItems.isEmpty || !rawQuestions.isEmpty || (string("request") != nil && notify != nil) else {
                 throw AgentBoardError("Give \"items\" (files to judge) or \"questions\" (choices to make), with at least one entry.")
             }
             let uploads = try rawItems.map { raw -> AgentBoard.ReviewUpload in
@@ -354,7 +361,7 @@ extension AppModel {
             let questions = try rawQuestions.map(Self.agentQuestion)
             let result = try await board.createReview(request: string("request"), card: string("card"), title: string("title"),
                                                       question: string("question"), notes: string("notes"), uploads: uploads,
-                                                      questions: questions, agent: try required("agent"))
+                                                      questions: questions, notify: notify, agent: try required("agent"))
             await agentReviewsDidChange(repo, selected.folder)
             return json(result)
         case "handle_review_item":
