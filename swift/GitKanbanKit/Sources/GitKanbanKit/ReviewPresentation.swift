@@ -390,6 +390,10 @@ public struct CheckViewportLayout: Equatable, Sendable {
     /// The device's own viewport stands in for the size (a phone shows `phone` at its own width).
     public var isNative: Bool
 
+    public init(css: CGSize, shown: CGSize, scale: CGFloat, isNative: Bool) {
+        self.css = css; self.shown = shown; self.scale = scale; self.isNative = isNative
+    }
+
     public var isScaled: Bool { scale < 0.999 }
     /// "390x844": what the results record.
     public var viewport: String { "\(Int(css.width.rounded()))x\(Int(css.height.rounded()))" }
