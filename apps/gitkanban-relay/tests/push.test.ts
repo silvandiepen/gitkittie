@@ -349,6 +349,11 @@ describe("APNs requests", () => {
     expect(body.review).toEqual({ repo: "octo/tasks", folder: ALERT.folder, path: PATH, id: ALERT.id, board: "Morrow", level: "urgent" });
   });
 
+  it("makes the same collapse id as the app's own notifications", async () => {
+    // The same vector as ReviewPushTests in swift/GitKanbanKit (reviewNotificationID).
+    expect(await collapseID("octo/tasks", "Morrow/review/MORROW-182-pet-models")).toBe("review-7c36cbb94ad4b1625df16e2c72184938");
+  });
+
   it("makes a normal alert active, and a silent one a background wake with no alert", async () => {
     const normal = (await (await alertRequest({ ...ALERT, level: "normal" }, DEVICE, "jwt", "t")).json()) as { aps: Record<string, unknown> };
     expect(normal.aps["interruption-level"]).toBe("active");
