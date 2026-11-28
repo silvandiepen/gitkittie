@@ -3,7 +3,7 @@ import MailCore
 
 // Everyday actions (GKM-015): read/unread, flag, move, archive, trash, delete from Trash, and
 // Undo — applied here at once, queued in the account's action journal, and replayed against the
-// provider by MailSync's `ActionReplayer`. Decisions MAIL-034..037 (docs/Decisions.md).
+// provider by MailSync's `ActionReplayer`. Decisions MAIL-034..037 (docs/decisions/MAIL-034.md..MAIL-037.md).
 //
 // What the window shows for a message is the provider's state as last synced (the mapping and
 // the `flags` table) with the journal's open rows laid over it, in order. The overlay is applied

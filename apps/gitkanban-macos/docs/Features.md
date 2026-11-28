@@ -204,7 +204,7 @@ The S3 code (`S3StorageService` in GitKittieKit) is shared with GitKittie Folder
   that board's rules, `--json` gives it as a JSON string. The `get_agent_guide` tool returns the same
   text. Agent Access shows a short prompt ("run `tasks guide` first", Copy Prompt) and **Copy Full
   Guide**. Prose: `swift/GitKanbanKit/Sources/TasksAgentTools/AgentGuide.md`; the reference is
-  generated from the command table and tool list (`docs/Decisions.md` § 18).
+  generated from the command table and tool list (`docs/decisions/TASKS-18.md`).
 
 ---
 

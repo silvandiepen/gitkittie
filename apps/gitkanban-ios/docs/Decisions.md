@@ -162,7 +162,7 @@ zoom, swipe-down to close and Approve / Changes / Reject in the thumb zone; a de
 the next waiting file with Undo. Changes is never sent without a comment, and earlier comments of
 the request are offered to reuse. Rows, bars and floating controls take the theme's navy `bar`
 instead of the system greys. The rules and the reasons are shared with the Mac app: see the Mac's
-[Decision 19](../../gitkanban-macos/docs/Decisions.md).
+[Decision 19](../../gitkanban-macos/docs/decisions/TASKS-19b.md).
 
 **Status.** Accepted.
 
