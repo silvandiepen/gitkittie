@@ -187,7 +187,7 @@ final class ReviewSelectionTests: XCTestCase {
 
     func testEveryDecisionWorksOnASelectionAndSkipsFilesThatAlreadyHaveIt() async throws {
         let model = try await open()
-        await model.decide(try request(model, "MAIL-1-icons"), itemIDs: ["icon-a", "icon-b"], status: .changesRequested)
+        await model.decide(try request(model, "MAIL-1-icons"), itemIDs: ["icon-a", "icon-b"], status: .changesRequested, comment: "Rounder")
         await model.decide(try request(model, "MAIL-1-icons"), itemIDs: ["icon-b", "icon-c"], status: .rejected)
         XCTAssertEqual(try request(model, "MAIL-1-icons").items.map(\.status), [.changesRequested, .rejected, .rejected, .approved])
         // Back to Waiting on everything: icon-old goes back too; nothing to change is no write.
@@ -260,7 +260,7 @@ final class ReviewSelectionTests: XCTestCase {
     func testTheQueuedSelectionMergesOntoAServerFileThatChanged() async throws {
         let model = try await open()
         let icons = try request(model, "MAIL-1-icons")
-        await model.decide(icons, itemIDs: ["icon-a", "icon-b", "icon-c"], status: .changesRequested)
+        await model.decide(icons, itemIDs: ["icon-a", "icon-b", "icon-c"], status: .changesRequested, comment: "Smaller")
         await model.comment(try request(model, "MAIL-1-icons"), itemIDs: ["icon-a", "icon-b"], text: "Rounder")
         let queued = await model.outbox.operations()
         XCTAssertEqual(queued.count, 2)
@@ -279,9 +279,9 @@ final class ReviewSelectionTests: XCTestCase {
         let result = try server(self.icons)
         XCTAssertEqual(result.items.map(\.id), ["icon-a", "icon-b", "icon-c", "icon-old", "icon-d"], "the agent's new round is kept")
         XCTAssertEqual(result.items.map(\.status), [.changesRequested, .changesRequested, .changesRequested, .approved, .pending])
-        XCTAssertEqual(result.items[0].comments.map(\.text), ["Working on it", "Rounder"], "the agent's comment is kept, the reviewer's added")
-        XCTAssertEqual(result.items[1].comments.map(\.text), ["Rounder"])
-        XCTAssertEqual(result.items[2].comments.map(\.text), [])
+        XCTAssertEqual(result.items[0].comments.map(\.text), ["Working on it", "Smaller", "Rounder"], "the agent's comment is kept, the reviewer's added")
+        XCTAssertEqual(result.items[1].comments.map(\.text), ["Smaller", "Rounder"])
+        XCTAssertEqual(result.items[2].comments.map(\.text), ["Smaller"], "asking for changes carries its comment")
         XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("agent_only: keep"))
     }
 }

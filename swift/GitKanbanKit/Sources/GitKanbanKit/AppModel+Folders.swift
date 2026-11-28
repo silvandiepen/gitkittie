@@ -201,9 +201,23 @@ extension AppModel {
         return nil
     }
 
-    public func decide(_ request: ReviewRequest, item: ReviewItem, status: ReviewStatus) async {
+    /// Decide on one file. Changes needs a comment (`ReviewStatus.needsComment`): without one
+    /// nothing is written and `errorMessage` says why. A comment goes in the same write as the
+    /// decision. Returns whether it was written.
+    @discardableResult
+    public func decide(_ request: ReviewRequest, item: ReviewItem, status: ReviewStatus, comment: String? = nil) async -> Bool {
+        guard ReviewDecisionRule.canSend(status, comment: comment) else {
+            errorMessage = ReviewDecisionRule.commentRequired
+            return false
+        }
         let by = reviewerID(for: request)
-        await rewriteReview(request, [.decision(item: item.id, status: status, by: by, at: ReviewEdit.now())])
+        let at = ReviewEdit.now()
+        var edits: [ReviewEdit] = [.decision(item: item.id, status: status, by: by, at: at)]
+        if let note = comment.map(Self.trimmed), !note.isEmpty {
+            edits.append(.comment(item: item.id, by: by, text: note, image: nil, at: at))
+        }
+        await rewriteReview(request, edits)
+        return errorMessage == nil
     }
 
     public func comment(_ request: ReviewRequest, item: ReviewItem, text: String) async {
@@ -238,15 +252,35 @@ extension AppModel {
     /// Give every item that is still waiting the same answer, in one write. Groups where
     /// one item has to be picked are left alone when approving: approving them all would
     /// pick nothing. Questions are never answered this way: each needs its own answer.
-    public func decideAll(_ request: ReviewRequest, status: ReviewStatus) async {
+    /// Changes needs a comment, which every one of those files gets; without it nothing is
+    /// written. Returns whether it was written (or there was nothing waiting).
+    @discardableResult
+    public func decideAll(_ request: ReviewRequest, status: ReviewStatus, comment: String? = nil) async -> Bool {
+        guard ReviewDecisionRule.canSend(status, comment: comment) else {
+            errorMessage = ReviewDecisionRule.commentRequired
+            return false
+        }
         let by = reviewerID(for: request)
         let waiting = request.items.filter { item in
             guard item.status == .pending else { return false }
             return !(status == .approved && item.pickOne) && !(status == .approved && request.groups.contains { $0.pickOne && $0.items.contains(item) })
         }
-        guard !waiting.isEmpty else { return }
+        guard !waiting.isEmpty else { return true }
         let at = ReviewEdit.now()
-        await rewriteReview(request, waiting.map { .decision(item: $0.id, status: status, by: by, at: at) })
+        await rewriteReview(request, Self.edits(deciding: waiting.map(\.id), commenting: waiting.map(\.id),
+                                                status: status, comment: comment, by: by, at: at))
+        return errorMessage == nil
+    }
+
+    /// The edits of one decision on several files: a decision per file in `deciding`, then the
+    /// comment (when there is one) on each file in `commenting`, all at the same time.
+    private static func edits(deciding: [String], commenting: [String], status: ReviewStatus, comment: String?,
+                              by: String, at: Date) -> [ReviewEdit] {
+        var edits: [ReviewEdit] = deciding.map { .decision(item: $0, status: status, by: by, at: at) }
+        if let note = comment.map(trimmed), !note.isEmpty {
+            edits += commenting.map { .comment(item: $0, by: by, text: note, image: nil, at: at) }
+        }
+        return edits
     }
 
     /// The same comment on every item of a request (or only those still waiting), in one write.
@@ -265,21 +299,28 @@ extension AppModel {
     /// Give the chosen files of a request the same decision, in one write (one outbox entry
     /// carrying an edit per file). Files that already have that decision are left as they
     /// are. Approving is refused, and nothing written, when it would leave more than one
-    /// option of a pick-one group approved; `errorMessage` then says which.
+    /// option of a pick-one group approved; `errorMessage` then says which. Changes needs a
+    /// comment, and every chosen file gets it (also one that already asked for changes).
     /// Returns whether the decision was written (or there was nothing to change).
     @discardableResult
-    public func decide(_ request: ReviewRequest, itemIDs: some Collection<String>, status: ReviewStatus) async -> Bool {
+    public func decide(_ request: ReviewRequest, itemIDs: some Collection<String>, status: ReviewStatus, comment: String? = nil) async -> Bool {
         let chosen = request.items(withIDs: itemIDs)
         errorMessage = nil
+        guard ReviewDecisionRule.canSend(status, comment: comment) else {
+            errorMessage = ReviewDecisionRule.commentRequired
+            return false
+        }
         if status == .approved, let conflict = request.pickOneConflict(approving: chosen.map(\.id)) {
             errorMessage = conflict.message
             return false
         }
         let changing = chosen.filter { $0.status != status }
-        guard !changing.isEmpty else { return true }
+        let hasComment = !(comment.map(Self.trimmed) ?? "").isEmpty
+        guard !changing.isEmpty || (hasComment && !chosen.isEmpty) else { return true }
         let by = reviewerID(for: request)
         let at = ReviewEdit.now()
-        await rewriteReview(request, changing.map { .decision(item: $0.id, status: status, by: by, at: at) })
+        await rewriteReview(request, Self.edits(deciding: changing.map(\.id), commenting: chosen.map(\.id),
+                                                status: status, comment: comment, by: by, at: at))
         return errorMessage == nil
     }
 
@@ -360,7 +401,7 @@ extension AppModel {
     /// support it, the write is compare-and-swap; a concurrent agent edit is re-read and
     /// the change re-applied (up to 3 times) instead of overwritten. Through the outbox the
     /// edits travel with the write, and are applied again onto the server's copy when sent.
-    private func rewriteReview(_ request: ReviewRequest, _ edits: [ReviewEdit]) async {
+    func rewriteReview(_ request: ReviewRequest, _ edits: [ReviewEdit]) async {
         guard let source = reviewSource(for: request) else { return }
         isSaving = true
         errorMessage = nil
