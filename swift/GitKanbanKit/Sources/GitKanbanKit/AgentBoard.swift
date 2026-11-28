@@ -330,12 +330,17 @@ public struct AgentBoard {
     // MARK: Writing
 
     static func lane(_ wanted: String, in config: EffectiveConfig) throws -> Lane {
-        let key = wanted.trimmingCharacters(in: .whitespaces).lowercased()
+        if let lane = lane(wanted, among: config.lanes) { return lane }
         let lanes = config.lanes.filter { !$0.folder.isEmpty }
-        if let lane = lanes.first(where: { $0.id.lowercased() == key || $0.name.lowercased() == key || $0.status.lowercased() == key || $0.folder.lowercased() == key }) {
-            return lane
-        }
         throw AgentBoardError("No lane \"\(wanted)\". The lanes are: \(lanes.map { "\($0.name) (\($0.status))" }.joined(separator: ", ")).")
+    }
+
+    /// The lane `wanted` names among `lanes` (by id, name, status or folder), as `move_card` resolves it.
+    static func lane(_ wanted: String, among lanes: [Lane]) -> Lane? {
+        let key = wanted.trimmingCharacters(in: .whitespaces).lowercased()
+        return lanes.filter { !$0.folder.isEmpty }.first {
+            $0.id.lowercased() == key || $0.name.lowercased() == key || $0.status.lowercased() == key || $0.folder.lowercased() == key
+        }
     }
 
     /// The id prefix the board's cards use (`PETS` for `PETS-12-…`): the most common one.

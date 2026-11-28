@@ -20,13 +20,17 @@ struct ReviewListView: View {
     var cardID: String?
 
     private var requests: [ReviewRequest] {
-        guard let cardID else { return model.reviews }
-        return model.reviews.filter { $0.card == cardID }
+        let shown = model.shownReviews(model.reviews)
+        guard let cardID else { return shown }
+        return shown.filter { $0.card == cardID }
     }
 
     var body: some View {
         List {
             Group {
+                ForEach(model.boardsAskingWhoYouAre) { board in
+                    ReviewIdentityPrompt(board: board).listRowBackground(Color.clear)
+                }
                 if requests.isEmpty {
                     ContentUnavailableView("No review requests", systemImage: "checkmark.seal",
                                            description: Text("Agents haven't asked for a review here yet."))
@@ -50,7 +54,28 @@ struct ReviewListView: View {
         }
         .refreshable { await model.loadReviews() }
         .safeAreaInset(edge: .bottom, spacing: 0) { SyncFailuresBanner() }
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { ReviewAssignmentMenu() }
+            ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } }
+        }
+    }
+}
+
+/// For me / Everyone, in a Reviews list's ⋯ menu (remembered on this device).
+struct ReviewAssignmentMenu: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        Menu {
+            Picker("Requests", selection: $model.reviewAssignmentFilter) {
+                ForEach(ReviewAssignmentFilter.allCases) { Text($0.title).tag($0) }
+            }
+        } label: {
+            Image(systemName: model.reviewAssignmentFilter == .everyone ? "person.2.circle.fill" : "ellipsis.circle")
+        }
+        .accessibilityLabel("Show requests for")
+        .accessibilityIdentifier("reviewAssignmentMenu")
     }
 }
 
@@ -66,10 +91,12 @@ private struct ReviewRequestActions: ViewModifier {
     @State private var askingChanges: ReviewCommentRequest?
 
     func body(content: Content) -> some View {
-        let waiting = request.summary.pendingItems
-        let questions = request.summary.unanswered
+        // Someone else's request: nothing to decide here, only to comment on.
+        let waiting = model.isReadOnly(request) ? 0 : request.summary.pendingItems
+        let questions = model.isReadOnly(request) ? 0 : request.summary.unanswered
         content
             .contextMenu {
+                if let notice = model.readOnlyNotice(request) { Text(notice) }
                 if waiting > 0 {
                     Button("Approve All Waiting Files (\(waiting))", systemImage: "checkmark") { decide(.approved) }
                     Button("Ask Changes on All Waiting Files", systemImage: "pencil") { decide(.changesRequested) }
@@ -194,10 +221,13 @@ extension View {
 }
 
 struct ReviewRequestRow: View {
+    @Environment(AppModel.self) private var model
     let request: ReviewRequest
 
     var body: some View {
         let s = request.summary
+        let forLabel = model.reviewForLabel(request)
+        let due = request.dueLabel()
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(request.title).font(.body.weight(.medium))
@@ -217,6 +247,13 @@ struct ReviewRequestRow: View {
                 Text(MarkdownPage.inline(question)).font(.callout).foregroundStyle(.secondary).lineLimit(2)
             }
             Text(summaryLine(request)).font(.caption).foregroundStyle(.tertiary)
+            if forLabel != nil || due != nil || request.isLaterRound {
+                HStack(spacing: 6) {
+                    if let forLabel { ReviewForChip(text: forLabel, others: model.isReadOnly(request)) }
+                    if let due { ReviewDueTag(label: due) }
+                    if request.isLaterRound { ReviewRoundTag() }
+                }
+            }
         }
         .padding(.vertical, 2)
     }
@@ -230,6 +267,7 @@ struct ReviewRequestRow: View {
         if s.changesRequested > 0 { parts.append("\(s.changesRequested) changes") }
         if s.rejected > 0 { parts.append("\(s.rejected) rejected") }
         if let questions = s.questionsDescription { parts.append(questions) }
+        if s.checks > 0 { parts.append(s.pendingChecks > 0 ? "\(s.pendingChecks) of \(s.checks) check\(s.checks == 1 ? "" : "s") waiting" : "\(s.checks) check\(s.checks == 1 ? "" : "s")") }
         if parts.isEmpty || (parts.count == 1 && request.card != nil) { parts.append("\(s.items) item\(s.items == 1 ? "" : "s")") }
         return parts.joined(separator: " · ")
     }
@@ -243,8 +281,9 @@ private extension ReviewEntry {
     /// "2 items and 1 question have no answer yet".
     static func noAnswerTitle(_ pages: [ReviewEntry]) -> String {
         let questions = pages.filter { if case .question = $0 { return true } else { return false } }.count
+        let checks = pages.filter { if case .check = $0 { return true } else { return false } }.count
         let total = pages.count
-        return "\(ReviewSummary.describe(items: total - questions, questions: questions)) \(total == 1 ? "has" : "have") no answer yet"
+        return "\(ReviewSummary.describe(items: total - questions - checks, questions: questions, checks: checks)) \(total == 1 ? "has" : "have") no answer yet"
     }
 }
 
@@ -276,6 +315,10 @@ struct ReviewDetailView: View {
     @State private var selectionSheet: ReviewCommentRequest?
     /// The full-screen viewer, open at the file whose picture was tapped.
     @State private var fullScreen: ReviewFullScreenStart?
+    /// A browser check open full screen.
+    @State private var checking: CheckBrowserStart?
+    /// The request's "When decided" and "Actions", in a sheet.
+    @State private var showsActions = false
 
     private var request: ReviewRequest? { model.reviewRequest(ref) }
 
@@ -324,6 +367,10 @@ struct ReviewDetailView: View {
                                     switch page {
                                     case .question(let question):
                                         QuestionSlide(request: request, question: question, onAnswered: { advance(after: page.id) })
+                                    case .check(let check):
+                                        CheckSlide(request: request, check: check,
+                                                   onOpen: { key in checking = CheckBrowserStart(ref: ref, checkID: check.id, key: key) },
+                                                   onDecided: { advance(after: page.id) })
                                     case .item(let item):
                                         // Only the slide on screen and its neighbours hold their
                                         // picture: a request can have dozens of large images.
@@ -343,6 +390,7 @@ struct ReviewDetailView: View {
                 .onAppear { if slideIDs.isEmpty { load(request) } }
                 .onChange(of: filter) { _, _ in load(request) }
                 .sheet(isPresented: $showsNotes) { ReviewNotesSheet(request: request).environment(model) }
+                .sheet(isPresented: $showsActions) { ReviewActionsSheet(ref: ref).environment(model) }
                 .onChange(of: jumpToUnanswered) { _, _ in goToUnanswered(request) }
                 .confirmationDialog(
                     ReviewPage.noAnswerTitle(unanswered(request)),
@@ -386,9 +434,12 @@ struct ReviewDetailView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        if let request, !shownItems(request).isEmpty {
+                        if let request, !shownItems(request).isEmpty, !model.isReadOnly(request) {
                             Button("Select", systemImage: "checkmark.circle") { withAnimation { selecting = true } }
                                 .accessibilityIdentifier("reviewSelectFiles")
+                        }
+                        if let request, !model.reviewActionLines(request).isEmpty || !request.actionsRun.isEmpty {
+                            Button("When Decided", systemImage: "arrow.triangle.turn.up.right.circle") { showsActions = true }
                         }
                         Picker("Show", selection: $filter) {
                             ForEach(ReviewFilter.allCases) { option in
@@ -412,11 +463,16 @@ struct ReviewDetailView: View {
         .fullScreenCover(item: $fullScreen) { start in
             ReviewFullScreenView(ref: ref, start: start).environment(model)
         }
+        .fullScreenCover(item: $checking) { start in
+            CheckBrowserView(start: start).environment(model)
+        }
         .safeAreaInset(edge: .bottom) {
             if selecting, let request { selectionBar(request) }
         }
         .overlay(alignment: .bottom) {
             VStack(spacing: 0) {
+                // What the decision that settled the request did to its card, with Undo.
+                ReviewActionBannerView()
                 // Reviews open in a sheet, over the activity mark: a change that could not
                 // be sent shows here, with what can be done about it.
                 SyncFailuresBanner()
@@ -437,6 +493,7 @@ struct ReviewDetailView: View {
         let shown = request.entries.filter { entry in
             switch entry {
             case .question(let question): return !hidden.questions.contains(question.id)
+            case .check(let check): return !hidden.checks.contains(check.id)
             case .item(let item): return !hidden.items.contains(item.id)
             }
         }
@@ -545,6 +602,7 @@ struct ReviewDetailView: View {
                         .accessibilityIdentifier("reviewNotesButton")
                 }
             }
+            ReviewDetailTags(request: request, showActions: { showsActions = true })
             // Every page as a tick, waiting ones bright: where the files without an answer
             // are, at a glance. Tap or drag along it to go there.
             ReviewProgressStrip(marks: pages.map(\.mark), position: position) { index in
@@ -610,6 +668,7 @@ private extension ReviewEntry {
     var mark: ReviewStatus {
         switch self {
         case .question(let question): return question.isAnswered ? .approved : .pending
+        case .check(let check): return check.status
         case .item(let item): return item.status
         }
     }
@@ -765,6 +824,8 @@ private struct QuestionSlide: View {
             .padding(.horizontal).padding(.top, 8).padding(.bottom, 24)
             .frame(maxWidth: 680)
             .frame(maxWidth: .infinity)
+            // Someone else's request: answers are theirs to give.
+            .disabled(model.isReadOnly(request))
         }
         .scrollDismissesKeyboard(.interactively)
     }
@@ -1011,7 +1072,8 @@ private struct ReviewSlide: View {
                 } label: { Image(systemName: "ellipsis").frame(width: 32, height: 32) }
             }
         }
-        .disabled(model.isSaving)
+        // Someone else's request: you can comment, not decide (the notice at the top says so).
+        .disabled(model.isSaving || model.isReadOnly(request))
     }
 
     /// Choose this option: approve it and reject the group's others, whatever they were.

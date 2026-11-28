@@ -15,6 +15,10 @@ struct ReviewInboxView: View {
     var body: some View {
         List {
             Group {
+                // "Which one are you?", once per board your sign-in matches nobody on.
+                ForEach(model.boardsAskingWhoYouAre) { board in
+                    ReviewIdentityPrompt(board: board).listRowBackground(Color.clear)
+                }
                 if model.reviewInbox.isEmpty {
                     if model.isLoadingReviewInbox {
                         HStack(spacing: 10) { ProgressView(); Text("Looking for reviews").foregroundStyle(.secondary) }
@@ -42,7 +46,9 @@ struct ReviewInboxView: View {
                     }
                 }
                 ForEach(model.reviewInbox) { board in
-                    let requests = showDecided ? board.requests : board.open
+                    // For me: requests for you and for everyone; Everyone: others' too (read-only).
+                    let shown = model.shownReviews(board.requests)
+                    let requests = showDecided ? shown : shown.filter { $0.summary.pending > 0 }
                     if !requests.isEmpty {
                         Section {
                             ForEach(requests) { request in
@@ -53,6 +59,9 @@ struct ReviewInboxView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: board.icon ?? BoardAppearance.defaultIcon).font(.caption2)
                                 Text(board.boardName).textCase(nil)
+                                Text("· reviewing as \(model.reviewingAs(boardKey: board.id))").textCase(nil)
+                                    .font(.caption2).foregroundStyle(.secondary)
+                                    .accessibilityIdentifier("reviewingAs")
                                 if board.pending > 0 {
                                     Text("\(board.pending) waiting").textCase(nil).monospacedDigit()
                                         .font(.caption2.weight(.bold))
@@ -79,7 +88,10 @@ struct ReviewInboxView: View {
         .refreshable { await model.loadReviewInbox() }
         .task { if !model.hasLoadedReviewInbox { await model.loadReviewInbox() } }
         .safeAreaInset(edge: .bottom, spacing: 0) { SyncFailuresBanner() }
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { ReviewAssignmentMenu() }
+            ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } }
+        }
         .fullScreenCover(item: $run) { run in
             ReviewRunView(refs: run.refs).environment(model)
         }

@@ -305,29 +305,32 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
     /// The items and questions an "only what's waiting" view hides: decided items outside an
     /// open group, and answered questions. Empty when nothing waits, so a finished request
     /// still shows what was decided.
-    public var settledIDs: (items: Set<String>, questions: Set<String>) {
-        guard summary.pending > 0 else { return ([], []) }
+    public var settledIDs: (items: Set<String>, questions: Set<String>, checks: Set<String>) {
+        guard summary.pending > 0 else { return ([], [], []) }
         return (Set(items.filter { !isStillOpen($0) }.map(\.id)),
-                Set(questions.filter(\.isAnswered).map(\.id)))
+                Set(questions.filter(\.isAnswered).map(\.id)),
+                Set(checks.filter { $0.status != .pending }.map(\.id)))
     }
 
     /// What a review screen hides for a filter: for `.waiting` what is settled (see
     /// `settledIDs`), for `.answered` what still waits, for `.all` nothing. A screen fixes this
     /// when the request opens or the filter changes, so an entry you just answered stays put.
-    public func hiddenIDs(for filter: ReviewFilter) -> (items: Set<String>, questions: Set<String>) {
+    public func hiddenIDs(for filter: ReviewFilter) -> (items: Set<String>, questions: Set<String>, checks: Set<String>) {
         switch filter {
-        case .all: return ([], [])
+        case .all: return ([], [], [])
         case .waiting: return settledIDs
         case .answered:
             return (Set(items.filter { $0.status == .pending }.map(\.id)),
-                    Set(questions.filter { !$0.isAnswered }.map(\.id)))
+                    Set(questions.filter { !$0.isAnswered }.map(\.id)),
+                    Set(checks.filter { $0.status == .pending }.map(\.id)))
         }
     }
 
-    /// Every question and item in the order the screens show them: questions first (the agent
-    /// waits on them to go on), then the items group by group, as `groups` orders them.
+    /// Every question, check and item in the order the screens show them: questions first (the
+    /// agent waits on them to go on), then the browser checks, then the items group by group,
+    /// as `groups` orders them.
     public var entries: [ReviewEntry] {
-        questions.map(ReviewEntry.question) + groups.flatMap { $0.items.map(ReviewEntry.item) }
+        questions.map(ReviewEntry.question) + checks.map(ReviewEntry.check) + groups.flatMap { $0.items.map(ReviewEntry.item) }
     }
 
     /// Items grouped for side-by-side display, in file order. Ungrouped items stand alone.
@@ -377,22 +380,27 @@ public enum ReviewFilter: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
-/// One thing to answer in a request: a question or an item.
+/// One thing to answer in a request: a question, a browser check or an item.
 public enum ReviewEntry: Identifiable, Hashable, Sendable {
     case question(ReviewQuestion)
+    case check(ReviewCheck)
     case item(ReviewItem)
 
     public var id: String {
         switch self {
         case .question(let question): return "question:\(question.id)"
+        case .check(let check): return "check:\(check.id)"
         case .item(let item): return "item:\(item.id)"
         }
     }
 
-    /// Still waiting for the reviewer: an item without a decision, a question without an answer.
+    /// Still waiting for the reviewer: an item or a check without a decision (a check waits
+    /// until it is decided, however much of its checklist is answered), a question without an
+    /// answer.
     public var isWaiting: Bool {
         switch self {
         case .question(let question): return !question.isAnswered
+        case .check(let check): return check.status == .pending
         case .item(let item): return item.status == .pending
         }
     }

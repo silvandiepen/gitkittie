@@ -67,6 +67,7 @@ public extension ReviewRequest {
         return entries.filter { entry in
             switch entry {
             case .question(let question): return !hidden.questions.contains(question.id)
+            case .check(let check): return !hidden.checks.contains(check.id)
             case .item(let item): return !hidden.items.contains(item.id)
             }
         }

@@ -94,6 +94,9 @@ targets:
           - _gitkanban._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+          # A browser check's page can be plain http:// on a tailnet (ReviewSpec § 3.5): web
+          # views only, not the app's own requests.
+          NSAllowsArbitraryLoadsInWebContent: true
         # `gitkittie-tasks://new?title=…&body=…` starts a new task (GitKittie Mail's Make Task,
         # GKM-033). It only fills in the new-task sheet; nothing is saved without Create.
         CFBundleURLTypes:

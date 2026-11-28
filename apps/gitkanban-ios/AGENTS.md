@@ -29,6 +29,10 @@ of a pick-one group is refused. `UITests/ReviewSelectUITests` needs `scripts/see
 A request shows through one filter (Waiting / Answered / All, in the ⋯ menu; Decision 15 in the Mac app's `docs/Decisions.md`),
 its notes open from the header as formatted Markdown, and ⏩ goes to the next page still waiting. `UITests/ReviewLongRequestUITests`
 needs `scripts/seed-long-review-fixture.sh <simulator-udid>` first (`--from <folder>` adds real requests to look at).
+Actions, browser checks, `for` and due dates (GITKITTIE-136): `GitKanban/Review/ReviewCheckScreens.swift` (a check as a page,
+full-screen check with its checklist in a sheet, "When decided"), shared parts in `swift/TasksUI`. `UITests/ReviewActionsCheckUITests`
+needs `scripts/seed-review-actions-fixture.sh <simulator-udid>` first (a fresh seed per run: the tests decide). Decision 21 in the
+Mac app's `docs/Decisions.md`.
 The home-screen name is **Tasks** (GITKITTIE-013 tracks the rest of the rename).
 
 ## Share extension and shared storage

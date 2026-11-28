@@ -120,6 +120,8 @@ struct ReviewFullScreenView: View {
         let current = pager.items(in: request).first { $0.id == selection }
         let next = pager.nextWaiting(after: selection, in: request)
         return VStack(spacing: 10) {
+            // What the decision that settled the request did to its card, with Undo.
+            ReviewActionBannerView(onDark: true)
             if let undo {
                 HStack(spacing: 10) {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(ReviewColor.status(undo.status))
@@ -151,7 +153,7 @@ struct ReviewFullScreenView: View {
                     decisionButton(current, "Changes", "pencil", .changesRequested, .orange, "fullScreenChanges")
                     decisionButton(current, "Reject", "xmark", .rejected, .red, "fullScreenReject")
                 }
-                .disabled(model.isSaving)
+                .disabled(model.isSaving || model.isReadOnly(request))
             }
             if let next, next != selection {
                 Button { go(to: next) } label: {

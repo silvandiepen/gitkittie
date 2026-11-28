@@ -138,7 +138,7 @@ extension AppModel {
         defer { isLoadingReviews = false }
         let origin = activeRepo?.id ?? ""
         let onScreen = openBoardKey
-        let loaded = Self.newestFirst(await RemoteBoardStore.loadReviews(source: source, folder: folder).map {
+        let loaded = Self.inboxOrder(await RemoteBoardStore.loadReviews(source: source, folder: folder).map {
             var request = $0
             request.origin = origin
             return request

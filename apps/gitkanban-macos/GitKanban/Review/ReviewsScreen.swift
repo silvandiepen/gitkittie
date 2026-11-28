@@ -25,6 +25,8 @@ struct ReviewsScreen: View {
     private var listed: [BoardReviews] {
         model.reviewInbox.compactMap { board in
             var board = board
+            // For me: requests for you and for everyone; Everyone: others' too (read-only).
+            board.requests = model.shownReviews(board.requests)
             // A request stays listed while it is open here, also once it is fully decided.
             if !showDecided { board.requests = board.requests.filter { $0.summary.pending > 0 || $0.ref == selected } }
             return board.requests.isEmpty ? nil : board
@@ -65,6 +67,15 @@ struct ReviewsScreen: View {
                     .help("Look for new review requests")
             }
             ToolbarItem {
+                @Bindable var model = model
+                Picker("Requests", selection: $model.reviewAssignmentFilter) {
+                    ForEach(ReviewAssignmentFilter.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .help("Requests for you (and for everyone), or everyone's: others' open read-only")
+                .accessibilityIdentifier("reviewAssignmentFilter")
+            }
+            ToolbarItem {
                 Button { selected = nextWaiting } label: { Label("Next Waiting", systemImage: "forward.end.fill") }
                     .disabled(nextWaiting == nil)
                     .keyboardShortcut(.rightArrow, modifiers: .command)
@@ -102,7 +113,11 @@ struct ReviewsScreen: View {
     /// for files only: each question needs its own answer, so they are left out.
     @ViewBuilder private func requestMenu(_ request: ReviewRequest) -> some View {
         let s = request.summary
-        let waiting = s.pendingItems
+        let waiting = model.isReadOnly(request) ? 0 : s.pendingItems
+        if let notice = model.readOnlyNotice(request) {
+            Text(notice)
+            Divider()
+        }
         if s.items > 0 {
             Button("Approve All Waiting Files (\(waiting))", systemImage: "checkmark") { Task { await model.decideAll(request, status: .approved) } }
                 .disabled(waiting == 0)
@@ -140,6 +155,12 @@ struct ReviewsScreen: View {
     private var list: some View {
         VStack(spacing: 0) {
             List(selection: $selected) {
+                // "Which one are you?", once per board your sign-in matches nobody on.
+                ForEach(model.boardsAskingWhoYouAre) { board in
+                    ReviewIdentityPrompt(board: board)
+                        .listRowSeparator(.hidden)
+                        .selectionDisabled()
+                }
                 ForEach(listed) { board in
                     Section {
                         ForEach(board.requests) { request in
@@ -147,12 +168,17 @@ struct ReviewsScreen: View {
                                 .contextMenu { requestMenu(request) }
                         }
                     } header: {
-                        HStack(spacing: 6) {
-                            Image(systemName: board.icon ?? BoardAppearance.defaultIcon)
-                                .foregroundStyle(Color(boardColor: board.color))
-                            Text(board.boardName)
-                            Spacer()
-                            if board.pending > 0 { Text("\(board.pending)").monospacedDigit().foregroundStyle(.secondary) }
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 6) {
+                                Image(systemName: board.icon ?? BoardAppearance.defaultIcon)
+                                    .foregroundStyle(Color(boardColor: board.color))
+                                Text(board.boardName)
+                                Spacer()
+                                if board.pending > 0 { Text("\(board.pending)").monospacedDigit().foregroundStyle(.secondary) }
+                            }
+                            Text("Reviewing as \(model.reviewingAs(boardKey: board.id))")
+                                .font(.caption2).foregroundStyle(.secondary)
+                                .accessibilityIdentifier("reviewingAs")
                         }
                     }
                 }
@@ -165,7 +191,7 @@ struct ReviewsScreen: View {
                         ProgressView("Looking for reviews")
                     } else {
                         ContentUnavailableView(
-                            model.hasReviews ? "Nothing is waiting" : "No review requests",
+                            model.hasReviews ? (model.reviewAssignmentFilter == .forMe ? "Nothing is waiting for you" : "Nothing is waiting") : "No review requests",
                             systemImage: model.hasReviews ? "checkmark.seal.fill" : "checkmark.seal",
                             description: Text(model.hasReviews
                                               ? "Every request on your boards is decided."
@@ -196,10 +222,13 @@ struct ReviewsScreen: View {
 }
 
 private struct ReviewRequestRow: View {
+    @Environment(AppModel.self) private var model
     let request: ReviewRequest
 
     var body: some View {
         let s = request.summary
+        let forLabel = model.reviewForLabel(request)
+        let due = request.dueLabel()
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Text(request.title).font(.callout.weight(.medium)).lineLimit(2)
@@ -219,6 +248,13 @@ private struct ReviewRequestRow: View {
                 }
             }
             Text(summaryLine).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            if forLabel != nil || due != nil || request.isLaterRound {
+                HStack(spacing: 6) {
+                    if let forLabel { ReviewForChip(text: forLabel, others: model.isReadOnly(request)) }
+                    if let due { ReviewDueTag(label: due) }
+                    if request.isLaterRound { ReviewRoundTag() }
+                }
+            }
         }
         .padding(.vertical, 2)
     }
@@ -233,6 +269,7 @@ private struct ReviewRequestRow: View {
         if s.changesRequested > 0 { parts.append("\(s.changesRequested) changes") }
         if s.rejected > 0 { parts.append("\(s.rejected) rejected") }
         if s.items > 0, s.approved + s.changesRequested + s.rejected == 0 { parts.append("\(s.items) file\(s.items == 1 ? "" : "s")") }
+        if s.checks > 0 { parts.append(s.pendingChecks > 0 ? "\(s.pendingChecks) of \(s.checks) check\(s.checks == 1 ? "" : "s") waiting" : "\(s.checks) check\(s.checks == 1 ? "" : "s")") }
         if let questions = s.questionsDescription { parts.append(questions) }
         return parts.joined(separator: " · ")
     }
@@ -253,7 +290,7 @@ private struct ReviewDetailView: View {
     @AppStorage("reviewsFilter") private var filter: ReviewFilter = .waiting
     /// What the filter hides, fixed when the request opens (or the filter changes), so a
     /// file you just decided stays where it is instead of vanishing under the pointer.
-    @State private var hidden: (items: Set<String>, questions: Set<String>) = ([], [])
+    @State private var hidden: (items: Set<String>, questions: Set<String>, checks: Set<String>) = ([], [], [])
     /// Files chosen to act on at once: ⌘A, the checkbox, or a click with ⌘ or ⇧.
     @State private var selection: Set<String> = []
     /// Where a ⇧-click range starts: the file last clicked without ⇧.
@@ -274,15 +311,21 @@ private struct ReviewDetailView: View {
                 return shown.items.isEmpty ? nil : shown
             }
             let questions = request.questions.filter { !hidden.questions.contains($0.id) }
-            let shownIDs = groups.flatMap { $0.items.map(\.id) }
-            let entries = questions.map(ReviewEntry.question) + groups.flatMap { $0.items.map(ReviewEntry.item) }
+            let checks = request.checks.filter { !hidden.checks.contains($0.id) }
+            let readOnly = model.isReadOnly(request)
+            let shownIDs = readOnly ? [] : groups.flatMap { $0.items.map(\.id) }
+            let entries = questions.map(ReviewEntry.question) + checks.map(ReviewEntry.check) + groups.flatMap { $0.items.map(ReviewEntry.item) }
             let notes = ReviewNotes.blocks(request)
             let preview = ReviewNotes.previewCount(notes)
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         header(request).padding(.bottom, 18)
+                        if let notice = model.readOnlyNotice(request) {
+                            ReviewReadOnlyNotice(text: notice).frame(maxWidth: 680).padding(.bottom, 18)
+                        }
                         if let problem = request.problem { problemBox(problem).padding(.bottom, 22) }
+                        ReviewActionsSection(request: request).padding(.bottom, 22)
                         if !notes.isEmpty {
                             notesSection(notes, preview: preview)
                         }
@@ -291,6 +334,12 @@ private struct ReviewDetailView: View {
                                 .frame(maxWidth: 680, alignment: .leading)
                                 .padding(.bottom, 36)
                                 .id("question:\(question.id)")
+                        }
+                        ForEach(checks) { check in
+                            ReviewCheckRow(request: request, check: check, worked: { current = "check:\(check.id)" })
+                                .frame(maxWidth: 820, alignment: .leading)
+                                .padding(.bottom, 30)
+                                .id("check:\(check.id)")
                         }
                         ForEach(groups) { group in
                             let folded = foldedGroups.contains(group.id)
@@ -332,12 +381,12 @@ private struct ReviewDetailView: View {
                             jumpToNextWaiting(entries, proxy: proxy)
                         } label: {
                             let waiting = entries.filter(\.isWaiting).count
-                            Label(waiting == 0 ? "Next Waiting File" : "Next Waiting (\(waiting))", systemImage: "arrow.down.to.line")
+                            Label(waiting == 0 ? "Next Waiting" : "Next Waiting (\(waiting))", systemImage: "arrow.down.to.line")
                         }
                             .labelStyle(.titleAndIcon)
                             .keyboardShortcut("j", modifiers: .command)
                             .disabled(!entries.contains(where: \.isWaiting))
-                            .help("Scroll to the next file or question that waits for you (⌘J)")
+                            .help("Scroll to the next file, check or question that waits for you (⌘J)")
                             .accessibilityIdentifier("reviewNextWaitingEntry")
                     }
                     ToolbarItem {
@@ -354,9 +403,11 @@ private struct ReviewDetailView: View {
             }
             .overlay(alignment: .bottom) {
                 VStack(spacing: 0) {
+                    ReviewActionBannerView()
                     ReviewErrorBanner()
                     if !selection.isEmpty { selectionBar(request) }
                 }
+                .animation(.easeInOut(duration: 0.2), value: model.reviewActionReport?.id)
             }
             .background {
                 // ⌘A and Escape for the files. Kept out of sight: they are the keyboard's way in.
@@ -513,8 +564,17 @@ private struct ReviewDetailView: View {
                 if let card = request.card { Text(card) }
                 if let by = request.requestedBy { Text("· asked by \(by)") }
                 if let at = request.requestedAt { Text("· \(ReviewFormat.relative(at))") }
+                Text("· reviewing as \(model.reviewingAs(request))").accessibilityIdentifier("reviewingAs")
             }
             .font(.caption).foregroundStyle(.secondary)
+            let forLabel = model.reviewForLabel(request)
+            if forLabel != nil || request.due != nil || request.isLaterRound {
+                HStack(spacing: 8) {
+                    if let forLabel { ReviewForChip(text: forLabel, others: model.isReadOnly(request)) }
+                    if let due = request.dueLabel() { ReviewDueTag(label: due) }
+                    if request.isLaterRound { ReviewRoundTag() }
+                }
+            }
             if s.total > 0 {
                 HStack(spacing: 10) {
                     ProgressView(value: Double(answered), total: Double(s.total))
@@ -590,6 +650,8 @@ private struct ReviewQuestionRow: View {
             worked()
             return await model.answer(request, question: question, choices: choices, other: other, comment: comment)
         }
+        // Someone else's request: answers are theirs to give.
+        .disabled(model.isReadOnly(request))
     }
 }
 
@@ -624,6 +686,8 @@ private struct ReviewItemView: View {
     @State private var changeSheet: ReviewCommentRequest?
     @FocusState private var composing: Bool
 
+    private var readOnly: Bool { model.isReadOnly(request) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             AssetView(request: request, item: item)
@@ -653,6 +717,7 @@ private struct ReviewItemView: View {
                         .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                 }
                 .buttonStyle(.plain)
+                .disabled(readOnly)
                 .help("Select to act on several files at once (⌘A selects all)")
                 .accessibilityLabel("Select \(item.id)")
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -713,18 +778,18 @@ private struct ReviewItemView: View {
         .background(background, in: RoundedRectangle(cornerRadius: 14))
         .contentShape(RoundedRectangle(cornerRadius: 14))
         // A click with ⌘ or ⇧ chooses the file, wherever it lands, before anything inside it reacts.
-        .highPriorityGesture(TapGesture().modifiers(.command).onEnded { select(.toggle) })
-        .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { select(.extend) })
+        .highPriorityGesture(TapGesture().modifiers(.command).onEnded { if !readOnly { select(.toggle) } })
+        .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { if !readOnly { select(.extend) } })
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .contextMenu {
             Button("Approve", systemImage: "checkmark") { decide(.approved) }
-                .disabled(item.status == .approved)
+                .disabled(item.status == .approved || readOnly)
             Button("Ask Changes…", systemImage: "pencil") { askChanges() }
-                .disabled(item.status == .changesRequested)
+                .disabled(item.status == .changesRequested || readOnly)
             Button("Reject", systemImage: "xmark") { decide(.rejected) }
-                .disabled(item.status == .rejected)
+                .disabled(item.status == .rejected || readOnly)
             Button("Back to Waiting", systemImage: "arrow.uturn.backward") { decide(.pending) }
-                .disabled(item.status == .pending)
+                .disabled(item.status == .pending || readOnly)
             Divider()
             Button("Comment…", systemImage: "text.bubble") { openComment() }
             Divider()
@@ -801,22 +866,25 @@ private struct ReviewDecisionButtons: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            if group.pickOne && group.items.count > 1 {
-                decisionButton("Pick This", "checkmark.circle.fill", .approved, tint: .green) { await pickThis() }
-            } else {
-                decisionButton("Approve", "checkmark", .approved, tint: .green) {
-                    await model.decide(request, item: item, status: .approved)
+            Group {
+                if group.pickOne && group.items.count > 1 {
+                    decisionButton("Pick This", "checkmark.circle.fill", .approved, tint: .green) { await pickThis() }
+                } else {
+                    decisionButton("Approve", "checkmark", .approved, tint: .green) {
+                        await model.decide(request, item: item, status: .approved)
+                    }
+                }
+                Button(action: askChanges) {
+                    decisionLabel("Changes", "pencil", .changesRequested, tint: .orange)
+                }
+                .buttonStyle(.plain)
+                .help(blocked ?? "Ask for changes: say what to change")
+                decisionButton("Reject", "xmark", .rejected, tint: .red) {
+                    await model.decide(request, item: item, status: .rejected)
                 }
             }
-            Button(action: askChanges) {
-                decisionLabel("Changes", "pencil", .changesRequested, tint: .orange)
-            }
-            .buttonStyle(.plain)
-            .help("Ask for changes: say what to change")
-            decisionButton("Reject", "xmark", .rejected, tint: .red) {
-                await model.decide(request, item: item, status: .rejected)
-            }
-            if item.status != .pending {
+            .disabled(blocked != nil)
+            if item.status != .pending, blocked == nil {
                 Button {
                     decided(.pending)
                     Task { await model.decide(request, item: item, status: .pending) }
@@ -835,6 +903,8 @@ private struct ReviewDecisionButtons: View {
         }
         .disabled(model.isSaving)
     }
+
+    private var blocked: String? { model.decisionBlockedReason(request) }
 
     /// Approve this variant and reject the group's other pending variants.
     private func pickThis() async {
@@ -857,6 +927,7 @@ private struct ReviewDecisionButtons: View {
             decisionLabel(title, symbol, status, tint: tint)
         }
         .buttonStyle(.plain)
+        .help(blocked ?? "")
     }
 
     private func decisionLabel(_ title: String, _ symbol: String, _ status: ReviewStatus, tint: Color) -> some View {
