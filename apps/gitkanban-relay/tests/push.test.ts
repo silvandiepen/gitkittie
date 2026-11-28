@@ -3,11 +3,11 @@
 // and Apple would, and checks what it is sent.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { alertRequest, collapseID, providerToken, resetProviderToken, send, wakeRequest, type Device } from "../src/apns.js";
-import { isCurrent, parseDevice, recipients } from "../src/devices.js";
-import { appJWT, installURL, readableRepo, repoInstallation, resetInstallationTokens } from "../src/github.js";
+import { alertRequest, collapseID, providerToken, resetProviderToken, send, wakeRequest, type Device, type Fetch } from "../src/apns.js";
+import { isCurrent, loginKey, parseDevice, recipients } from "../src/devices.js";
+import { appJWT, installURL, readableRepo, repoInstallation, resetInstallationTokens, userLogin } from "../src/github.js";
 import { apnsToken, base64url, githubAppToken, importES256, importRS256, pemBody, pkcs1ToPkcs8 } from "../src/jwt.js";
-import { alertsForPush, reviewAlert, reviewPush, type ReviewAlert } from "../src/review-push.js";
+import { alertsForPush, boardFolder, boardUsers, reviewAlert, reviewPush, type ReviewAlert } from "../src/review-push.js";
 
 // --- keys -------------------------------------------------------------------------------
 
@@ -124,9 +124,9 @@ const DECIDED = PENDING.replace("status: pending", "status: approved\n    decide
 const REDO = DECIDED.replace("---\nNotes", "  - id: dog-v2\n    file: dog-v2.png\n    revises: dog-v1\n    status: pending\n---\nNotes");
 const PATH = "Morrow/review/MORROW-182-pet-models/review.md";
 
-describe("reviewAlert", () => {
-  it("announces a new request that waits for an answer, at its level", () => {
-    expect(reviewAlert("octo/tasks", PATH, null, PENDING)).toEqual({
+describe("reviewAlert", async () => {
+  it("announces a new request that waits for an answer, at its level", async () => {
+    expect(await reviewAlert("octo/tasks", PATH, null, PENDING)).toEqual({
       repo: "octo/tasks",
       path: PATH,
       folder: "Morrow/review/MORROW-182-pet-models",
@@ -134,25 +134,34 @@ describe("reviewAlert", () => {
       board: "Morrow",
       title: "Pet models, round 1",
       level: "urgent",
+      audience: { mapped: [], logins: [], others: true },
     });
   });
 
-  it("announces a redo, not a decision or a comment", () => {
-    expect(reviewAlert("octo/tasks", PATH, DECIDED, REDO)?.title).toBe("Pet models, round 1");
-    expect(reviewAlert("octo/tasks", PATH, PENDING, DECIDED)).toBeNull();
-    expect(reviewAlert("octo/tasks", PATH, PENDING, PENDING.replace("Notes", "More notes"))).toBeNull();
+  it("announces a redo, not a decision or a comment", async () => {
+    expect((await reviewAlert("octo/tasks", PATH, DECIDED, REDO))?.title).toBe("Pet models, round 1");
+    expect(await reviewAlert("octo/tasks", PATH, PENDING, DECIDED)).toBeNull();
+    expect(await reviewAlert("octo/tasks", PATH, PENDING, PENDING.replace("Notes", "More notes"))).toBeNull();
   });
 
-  it("is normal without notify, and takes the board from a nested folder", () => {
-    const alert = reviewAlert("octo/tasks", "Clients/Acme/review/x/review.md", null, PENDING.replace("notify: urgent\n", ""));
+  it("is normal without notify, and takes the board from a nested folder", async () => {
+    const alert = await reviewAlert("octo/tasks", "Clients/Acme/review/x/review.md", null, PENDING.replace("notify: urgent\n", ""));
     expect(alert).toMatchObject({ board: "Acme", level: "normal", folder: "Clients/Acme/review/x" });
   });
 
-  it("announces a new question, not an answered one", () => {
+  it("announces a new question, not an answered one", async () => {
     const asked = "---\ntitle: Pick\nnotify: silent\nquestions:\n  - id: q\n    question: Which?\n    options: [a, b]\n---\n";
     const answered = asked.replace("options: [a, b]", "options: [a, b]\n    answer: [a]\n    answered_at: 2026-11-08T15:00:00Z");
-    expect(reviewAlert("octo/tasks", PATH, null, asked)?.level).toBe("silent");
-    expect(reviewAlert("octo/tasks", PATH, asked, answered)).toBeNull();
+    expect((await reviewAlert("octo/tasks", PATH, null, asked))?.level).toBe("silent");
+    expect(await reviewAlert("octo/tasks", PATH, asked, answered)).toBeNull();
+  });
+
+  it("announces a new browser check, not a decided one", async () => {
+    const check = "---\ntitle: Page\nchecks:\n  - id: page\n    url: https://example.com\n    checklist: [Loads]\n    status: pending\n---\n";
+    const decided = check.replace("status: pending", "status: approved");
+    expect((await reviewAlert("octo/tasks", PATH, null, check))?.title).toBe("Page");
+    expect(await reviewAlert("octo/tasks", PATH, check, decided)).toBeNull();
+    expect((await reviewAlert("octo/tasks", PATH, DECIDED, DECIDED.replace("---\nNotes", "checks:\n  - id: page\n    url: https://example.com\n---\nNotes")))?.id).toBe("MORROW-182-pet-models");
   });
 });
 
@@ -286,6 +295,73 @@ describe("registration checks", () => {
   });
 });
 
+// --- reviews for named people ------------------------------------------------------------
+
+const ROOT_README = "---\nconfig: board\nusers:\n  - { id: sil, github: SilvanDiepen }\n  - { id: herma, github: herma-gh }\n  - { id: claude }\n---\n";
+const BOARD_README = "---\nconfig: project\nusers:\n  - { id: herma, github: herma-new }\n---\n";
+
+describe("reviews for named people", () => {
+  const users = boardUsers(ROOT_README, BOARD_README);
+  const FOR_SIL = PENDING.replace("notify: urgent\n", "notify: urgent\nfor: [sil]\n");
+  const FOR_HERMA = PENDING.replace("notify: urgent\n", "notify: urgent\nfor: herma\n");
+
+  it("reads the board's users, the board's own entry winning", () => {
+    expect(users).toEqual([{ id: "sil", github: "SilvanDiepen" }, { id: "herma", github: "herma-new" }, { id: "claude", github: undefined }]);
+    expect(boardUsers(null, "not frontmatter")).toEqual([]);
+    expect(boardFolder("Clients/Acme/review/x/review.md")).toBe("Clients/Acme");
+  });
+
+  it("sends a request for someone only to their devices", async () => {
+    const sil = await loginKey(42, "silvandiepen");
+    const herma = await loginKey(42, "herma-new");
+    const alert = (await reviewAlert("octo/tasks", PATH, null, FOR_SIL, { repoID: 42, users }))!;
+    expect(alert.audience).toEqual({ mapped: [sil, herma], logins: [sil], others: false });
+    const device = (token: string, key?: string): Device => ({ ...parseDevice({ token, platform: "ios", environment: "production" }, now)!, loginKey: key });
+    const silsPhone = device("aa".repeat(32), sil);
+    const hermasPhone = device("bb".repeat(32), herma);
+    const unknown = device("cc".repeat(32));
+    expect(recipients([silsPhone, hermasPhone, unknown], alert, now).map((d) => d.token)).toEqual([silsPhone.token]);
+    // For everyone: every device, the ones without a login too.
+    const everyone = (await reviewAlert("octo/tasks", PATH, null, PENDING, { repoID: 42, users }))!;
+    expect(recipients([silsPhone, hermasPhone, unknown], everyone, now)).toHaveLength(3);
+  });
+
+  it("counts a request newly put on someone as new for them, and nobody else", async () => {
+    const sil = await loginKey(42, "silvandiepen");
+    const moved = (await reviewAlert("octo/tasks", PATH, FOR_HERMA, FOR_SIL, { repoID: 42, users }))!;
+    expect(moved.audience.logins).toEqual([sil]);
+    expect(await reviewAlert("octo/tasks", PATH, FOR_SIL, FOR_SIL.replace("Notes", "More notes"), { repoID: 42, users })).toBeNull();
+    // A `for` id without a github login reaches nobody by push.
+    const forClaude = PENDING.replace("notify: urgent\n", "for: claude\n");
+    expect(await reviewAlert("octo/tasks", PATH, null, forClaude, { repoID: 42, users })).toBeNull();
+  });
+
+  it("reads the board's READMEs only for a request that names people", async () => {
+    const seen: Request[] = [];
+    const files = {
+      [`${"b".repeat(40)}:${PATH}`]: FOR_SIL,
+      [`${"b".repeat(40)}:README.md`]: ROOT_README,
+      [`${"b".repeat(40)}:Morrow/README.md`]: BOARD_README,
+    };
+    const alerts = await alertsForPush(reviewPush(pushPayload())!, app, github(files, seen), 1_800_000_000);
+    expect(alerts[0]?.audience.logins).toEqual([await loginKey(42, "silvandiepen")]);
+    const paths = seen.filter((r) => r.method === "GET").map((r) => decodeURIComponent(new URL(r.url).pathname));
+    expect(paths).toEqual([`/repos/octo/tasks/contents/${PATH}`, `/repos/octo/tasks/contents/${PATH}`,
+                           "/repos/octo/tasks/contents/README.md", "/repos/octo/tasks/contents/Morrow/README.md"]);
+  });
+
+  it("records who registered as a key, from GET /user", async () => {
+    const fetcher: Fetch = async (request) =>
+      new URL(request.url).pathname === "/user" && request.headers.get("authorization") === "Bearer gho_person"
+        ? Response.json({ login: "SilvanDiepen" })
+        : new Response("{}", { status: 401 });
+    expect(await userLogin("gho_person", fetcher)).toBe("SilvanDiepen");
+    expect(await userLogin("gho_other", fetcher)).toBeNull();
+    expect(await loginKey(42, "SilvanDiepen")).toBe(await loginKey(42, " silvandiepen "));
+    expect(await loginKey(42, "silvandiepen")).not.toBe(await loginKey(43, "silvandiepen"));
+  });
+});
+
 // --- devices and APNs -------------------------------------------------------------------
 
 const TOKEN = "ab".repeat(32);
@@ -312,7 +388,7 @@ describe("devices", () => {
     const urgentOnly = parseDevice({ token: TOKEN, platform: "ios", environment: "production", levels: ["urgent", "silent"] }, now)!;
     const everything = parseDevice({ token: "cd".repeat(32), platform: "macos", environment: "sandbox" }, now)!;
     const stale = { ...everything, token: "ef".repeat(32), verifiedAt: "2026-09-01T00:00:00Z" };
-    const alert = { level: "normal" } as ReviewAlert;
+    const alert = { level: "normal", audience: { mapped: [], logins: [], others: true } } as unknown as ReviewAlert;
     expect(recipients([urgentOnly, everything, stale], alert, now).map((device) => device.token)).toEqual([everything.token]);
     expect(isCurrent(stale, now)).toBe(false);
   });
@@ -326,6 +402,7 @@ const ALERT: ReviewAlert = {
   board: "Morrow",
   title: "Pet models, round 1",
   level: "urgent",
+  audience: { mapped: [], logins: [], others: true },
 };
 const DEVICE: Device = parseDevice({ token: TOKEN, platform: "ios", environment: "production" }, now)!;
 

@@ -291,6 +291,17 @@ public final class AppModel {
     public internal(set) var isLoadingReviewInbox = false
     /// Whether the inbox has been loaded at least once since launch.
     public internal(set) var hasLoadedReviewInbox = false
+    /// What the review actions of the last decision did: moved cards (Undo), conflicts
+    /// ("Move anyway?"). See AppModel+ReviewActions.swift.
+    public internal(set) var reviewActionReport: ReviewActionReport?
+    /// For me / Everyone in the Reviews lists, remembered on this device
+    /// (AppModel+ReviewAssignment.swift).
+    public var reviewAssignmentFilter: ReviewAssignmentFilter = .forMe {
+        didSet { defaults.set(reviewAssignmentFilter.rawValue, forKey: Self.reviewAssignmentFilterKey) }
+    }
+    /// Who you are on a board your login matches no user of, as you said ("Which one are
+    /// you?"): board key (`repoID|folder`) → user id, or "" for "None of these".
+    public internal(set) var reviewIdentities: [String: String] = [:]
     /// Ids of the cards in the selected project that have files in `attachments/<id>/`.
     public internal(set) var attachmentCardIDs: Set<String> = []
     /// The signed-in identity reported by a folder server (`Tailscale-User-Login`).
@@ -342,6 +353,7 @@ public final class AppModel {
         loadAddedRepos()
         loadAIConfig()
         loadSeenState()
+        loadReviewAssignmentState()
         await reconnect(loadRepositories: true)
         await refreshSyncItems()
         Task { await flushOutbox() }

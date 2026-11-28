@@ -66,6 +66,8 @@ public struct ReviewItem: Equatable, Sendable, Identifiable, Hashable {
     public var shippedTo: String?
     public var frames: Int?
     public var fps: Double?
+    /// What happens to cards when this item is decided (`move` is required on an item).
+    public var actions = ReviewActions()
 
     /// Decided by the reviewer, not yet acted on by the agent.
     public var awaitingAgent: Bool { status != .pending && handledAt == nil }
@@ -117,9 +119,9 @@ public struct ReviewQuestion: Equatable, Sendable, Identifiable, Hashable {
 }
 
 public struct ReviewSummary: Equatable, Sendable {
-    /// Items and questions.
+    /// Items, questions and browser checks.
     public var total = 0
-    /// Items without a decision and questions without an answer: what waits for the reviewer.
+    /// Items and checks without a decision and questions without an answer: what waits for the reviewer.
     public var pending = 0
     public var approved = 0
     public var rejected = 0
@@ -128,22 +130,30 @@ public struct ReviewSummary: Equatable, Sendable {
     public var awaitingAgent = 0
     public var questions = 0
     public var answered = 0
+    public var checks = 0
+    /// Browser checks still waiting for a decision.
+    public var pendingChecks = 0
 
-    public var items: Int { total - questions }
+    public var items: Int { total - questions - checks }
     public var unanswered: Int { questions - answered }
-    /// Items still waiting for a decision (questions left out).
-    public var pendingItems: Int { pending - unanswered }
+    /// Items still waiting for a decision (questions and checks left out).
+    public var pendingItems: Int { pending - unanswered - pendingChecks }
 
     /// What is waiting, in words: "3 items", "1 question", "2 items and 1 question".
-    public var waitingDescription: String { Self.describe(items: pendingItems, questions: unanswered) }
+    public var waitingDescription: String { Self.describe(items: pendingItems, questions: unanswered, checks: pendingChecks) }
 
-    /// Items and questions in words: "3 items", "1 question", "2 items and 1 question".
-    public static func describe(items: Int, questions: Int) -> String {
+    /// Items, questions and checks in words: "3 items", "1 question", "2 items, 1 check and 1 question".
+    public static func describe(items: Int, questions: Int, checks: Int = 0) -> String {
         let parts = [
             items > 0 ? "\(items) item\(items == 1 ? "" : "s")" : nil,
+            checks > 0 ? "\(checks) check\(checks == 1 ? "" : "s")" : nil,
             questions > 0 ? "\(questions) question\(questions == 1 ? "" : "s")" : nil,
         ].compactMap { $0 }
-        return parts.isEmpty ? "Nothing" : parts.joined(separator: " and ")
+        switch parts.count {
+        case 0: return "Nothing"
+        case 1, 2: return parts.joined(separator: " and ")
+        default: return parts.dropLast().joined(separator: ", ") + " and " + parts[parts.count - 1]
+        }
     }
 
     /// The questions in a request list's row: "3 questions, 1 answered"; `nil` without any.
@@ -190,6 +200,16 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
     public var problem: String?
     /// How loudly the request is announced (`notify:`); `normal` when it does not say.
     public var notify: ReviewNotify = .normal
+    /// Board user ids the request is for (`for:`); empty = everyone.
+    public var assignedTo: [String] = []
+    /// The day it is due (`due:`, `YYYY-MM-DD`).
+    public var due: String?
+    /// What happens to cards when the request has an outcome.
+    public var actions = ReviewActions()
+    /// Browser checks (`checks:`).
+    public var checks: [ReviewCheck] = []
+    /// What the app did on decisions (`actions_run:`, append-only).
+    public var actionsRun: [ActionRun] = []
 
     public var path: String { Review.join(folder, Review.fileName) }
     /// What tells this request apart from every other one the app has loaded.
@@ -197,16 +217,19 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
 
     public var summary: ReviewSummary {
         var s = ReviewSummary()
-        s.total = items.count
-        for item in items {
-            switch item.status {
+        s.total = items.count + checks.count
+        s.checks = checks.count
+        let decided: [(ReviewStatus, Bool)] = items.map { ($0.status, $0.awaitingAgent) } + checks.map { ($0.status, $0.awaitingAgent) }
+        for (status, awaiting) in decided {
+            switch status {
             case .pending: s.pending += 1
             case .approved: s.approved += 1
             case .rejected: s.rejected += 1
             case .changesRequested: s.changesRequested += 1
             }
-            if item.awaitingAgent { s.awaitingAgent += 1 }
+            if awaiting { s.awaitingAgent += 1 }
         }
+        s.pendingChecks = checks.filter { $0.status == .pending }.count
         s.total += questions.count
         s.questions = questions.count
         for question in questions {
@@ -218,6 +241,55 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
 
     /// Source-relative path of an item's file (or preview), `nil` if it escapes the root.
     public func assetPath(_ file: String) -> String? { Review.joinRelative(folder, file) }
+
+    /// Whether the request is for `user` (a board user id): it names them in `for`, or nobody.
+    /// Without a user (identity unknown) only requests for everyone count.
+    public func isFor(_ user: String?) -> Bool {
+        guard !assignedTo.isEmpty else { return true }
+        guard let user else { return false }
+        return assignedTo.contains { $0.caseInsensitiveCompare(user) == .orderedSame }
+    }
+
+    /// What still waits for the reviewer: `item:<id>`, `check:<id>`, `question:<id>`.
+    /// Mirrors `waitingEntries` in gitkanban-core.
+    public var waitingEntries: [String] {
+        items.filter { $0.status == .pending }.map { "item:\($0.id)" }
+            + checks.filter { $0.status == .pending }.map { "check:\($0.id)" }
+            + questions.filter { !$0.isAnswered }.map { "question:\($0.id)" }
+    }
+
+    /// What waits for `user` (`nil`: identity unknown): nothing when the request is for others.
+    public func waitingEntries(forUser user: String?) -> [String] {
+        isFor(user) ? waitingEntries : []
+    }
+
+    /// A losing option of a pick-one group: the group has an approved option and this is not
+    /// it. Losers may stay pending and never count against the outcome.
+    public func isPickLoser(_ item: ReviewItem) -> Bool {
+        guard let group = item.group, item.status != .approved else { return false }
+        let members = items.filter { $0.group == group }
+        return members.contains(where: \.pickOne) && members.contains { $0.status == .approved }
+    }
+
+    /// Decided, or a losing option of a pick.
+    public func isSettled(_ item: ReviewItem) -> Bool { item.status != .pending || isPickLoser(item) }
+
+    /// The request's outcome once every item and check is settled (questions don't count);
+    /// `nil` before that and for a request without items and checks. Any changes → changes;
+    /// else any rejected (pick-one losers left out) → reject; else accept.
+    public var outcome: ReviewOutcome? {
+        guard !(items.isEmpty && checks.isEmpty) else { return nil }
+        guard items.allSatisfy(isSettled), checks.allSatisfy({ $0.status != .pending }) else { return nil }
+        let counted = items.filter { !isPickLoser($0) }.map(\.status) + checks.map(\.status)
+        if counted.contains(.changesRequested) { return .changes }
+        if counted.contains(.rejected) { return .reject }
+        return .accept
+    }
+
+    /// Whether the request, an item or a check declares any action.
+    public var hasActions: Bool {
+        !actions.isEmpty || items.contains { !$0.actions.isEmpty } || checks.contains { !$0.actions.isEmpty }
+    }
 
     /// Whether an item still belongs on an "only what's waiting" view: it waits for a decision,
     /// or it is another option of a pick-one group in which something still waits (that choice
@@ -358,6 +430,10 @@ public enum ReviewError: Error, LocalizedError, Equatable {
     case oneChoiceOnly
     case otherNotAllowed
     case alreadyHandled(String)
+    case checkNotFound(String)
+    case checkLineNotFound(check: String, line: String)
+    case noteNeeded
+    case actionRunNotFound(Int)
 
     public var errorDescription: String? {
         switch self {
@@ -370,6 +446,10 @@ public enum ReviewError: Error, LocalizedError, Equatable {
         case .oneChoiceOnly: return "This question takes one answer."
         case .otherNotAllowed: return "This question has no room for an answer of your own."
         case .alreadyHandled(let id): return "The agent has already acted on the answer to \"\(id)\", so it can no longer change."
+        case .checkNotFound(let id): return "No browser check with id \"\(id)\"."
+        case .checkLineNotFound(let check, let line): return "\"\(line)\" is not a line of check \"\(check)\"."
+        case .noteNeeded: return "A note needs its text."
+        case .actionRunNotFound(let index): return "No review action \(index + 1) in this request."
         }
     }
 }
@@ -392,6 +472,11 @@ public enum Review {
         let items = rawItems.enumerated().compactMap { parseItem($0.element, index: $0.offset) }
         let rawQuestions = map?["questions"]?.sequence.map(Array.init) ?? []
         let questions = rawQuestions.enumerated().compactMap { parseQuestion($0.element, index: $0.offset) }
+        let rawChecks = map?["checks"]?.sequence.map(Array.init) ?? []
+        let checks = rawChecks.enumerated().compactMap { parseCheck($0.element, index: $0.offset) }
+        var assigned: [String] = []
+        for user in ids(map?["for"]) where !assigned.contains(user) { assigned.append(user) }
+        let due = string(map?["due"]).flatMap { $0.range(of: #"^\d{4}-\d{2}-\d{2}"#, options: .regularExpression) != nil ? String($0.prefix(10)) : nil }
         let id = string(map?["id"]) ?? fallbackID
         return ReviewRequest(
             folder: folder,
@@ -406,7 +491,12 @@ public enum Review {
             questions: questions,
             body: yaml == nil ? text : body,
             problem: problem,
-            notify: ReviewNotify(parsing: string(map?["notify"]))
+            notify: ReviewNotify(parsing: string(map?["notify"])),
+            assignedTo: assigned,
+            due: due,
+            actions: parseActions(map),
+            checks: checks,
+            actionsRun: parseActionsRun(map?["actions_run"])
         )
     }
 
@@ -477,7 +567,7 @@ public enum Review {
         }
     }
 
-    private static func parseComments(_ node: Node?) -> [ReviewComment] {
+    static func parseComments(_ node: Node?) -> [ReviewComment] {
         (node?.sequence.map(Array.init) ?? []).compactMap { entry in
             guard let c = entry.mapping, let text = string(c["text"]) else { return nil }
             return ReviewComment(by: string(c["by"]) ?? "unknown", at: string(c["at"]) ?? "", text: text, image: string(c["image"]))
@@ -523,7 +613,7 @@ public enum Review {
         return string(node).map { [$0] } ?? []
     }
 
-    private static func bool(_ node: Node?) -> Bool {
+    static func bool(_ node: Node?) -> Bool {
         ["true", "yes", "on"].contains(string(node)?.lowercased() ?? "")
     }
 
@@ -548,12 +638,13 @@ public enum Review {
             handledAt: string(map["handled_at"]),
             shippedTo: string(map["shipped_to"]),
             frames: string(map["frames"]).flatMap(Int.init).flatMap { $0 > 0 ? $0 : nil },
-            fps: string(map["fps"]).flatMap(Double.init).flatMap { $0 > 0 ? $0 : nil }
+            fps: string(map["fps"]).flatMap(Double.init).flatMap { $0 > 0 ? $0 : nil },
+            actions: parseActions(map)
         )
     }
 
     /// A scalar as trimmed text; `nil` for absent, null (`~`, `null`, empty) or non-scalar.
-    private static func string(_ node: Node?) -> String? {
+    static func string(_ node: Node?) -> String? {
         guard let scalar = node?.scalar else { return nil }
         let value = scalar.string.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.isEmpty || (scalar.style == .plain && ["~", "null", "Null", "NULL"].contains(value)) { return nil }
@@ -656,10 +747,43 @@ public enum Review {
         public var pickOne: Bool
         public var note: String?
         public var revises: String?
+        public var actions: ReviewActions
         public init(id: String, file: String, preview: String? = nil, kind: String? = nil, group: String? = nil,
-                    pickOne: Bool = false, note: String? = nil, revises: String? = nil) {
+                    pickOne: Bool = false, note: String? = nil, revises: String? = nil, actions: ReviewActions = ReviewActions()) {
             self.id = id; self.file = file; self.preview = preview; self.kind = kind
-            self.group = group; self.pickOne = pickOne; self.note = note; self.revises = revises
+            self.group = group; self.pickOne = pickOne; self.note = note; self.revises = revises; self.actions = actions
+        }
+    }
+
+    /// A browser check an agent asks for.
+    public struct NewCheck: Sendable, Equatable {
+        public var id: String
+        public var url: String
+        public var title: String?
+        public var note: String?
+        public var sizes: [CheckSize]
+        public var appearance: [CheckAppearance]
+        public var checklist: [CheckLine]
+        public var revises: String?
+        public var actions: ReviewActions
+        public init(id: String, url: String, title: String? = nil, note: String? = nil, sizes: [CheckSize] = [],
+                    appearance: [CheckAppearance] = [], checklist: [CheckLine], revises: String? = nil,
+                    actions: ReviewActions = ReviewActions()) {
+            self.id = id; self.url = url; self.title = title; self.note = note; self.sizes = sizes
+            self.appearance = appearance; self.checklist = checklist; self.revises = revises; self.actions = actions
+        }
+
+        /// Whether only the machine serving the page can open it.
+        public var isLocalOnly: Bool { ReviewCheck.isLocalOnly(url) }
+    }
+
+    /// What a new request says besides its entries: who it is for, when it is due, its actions.
+    public struct RequestOptions: Sendable, Equatable {
+        public var assignedTo: [String]
+        public var due: String?
+        public var actions: ReviewActions
+        public init(assignedTo: [String] = [], due: String? = nil, actions: ReviewActions = ReviewActions()) {
+            self.assignedTo = assignedTo; self.due = due; self.actions = actions
         }
     }
 
@@ -687,8 +811,47 @@ public enum Review {
         if item.pickOne { add("pick", "one") }
         add("note", item.note)
         add("revises", item.revises)
+        addActions(item.actions, to: &pairs)
         pairs.append((scalar("status"), scalar(ReviewStatus.pending.rawValue)))
         pairs.append((scalar("comments"), Node.sequence(Node.Sequence([]))))
+        return .mapping(Node.Mapping(pairs))
+    }
+
+    /// A size as written: a preset by its id, anything else as a mapping.
+    static func node(_ size: CheckSize) -> Node {
+        if let preset = CheckSize.presets.first(where: { $0.id == size.id }), preset == size { return scalar(size.id) }
+        var pairs: [(Node, Node)] = [(scalar("id"), scalar(size.id))]
+        if size.label != size.id { pairs.append((scalar("label"), scalar(size.label))) }
+        if let width = size.width, let height = size.height {
+            pairs.append((scalar("width"), Node(String(width), Tag(.int))))
+            pairs.append((scalar("height"), Node(String(height), Tag(.int))))
+        }
+        if size.ua != .default { pairs.append((scalar("ua"), scalar(size.ua.rawValue))) }
+        return .mapping(Node.Mapping(pairs, Tag(.map), .flow))
+    }
+
+    private static func node(_ check: NewCheck) -> Node {
+        var pairs: [(Node, Node)] = [(scalar("id"), scalar(check.id)), (scalar("url"), scalar(check.url))]
+        func add(_ key: String, _ value: String?) { if let value, !value.isEmpty { pairs.append((scalar(key), scalar(value))) } }
+        add("title", check.title)
+        add("note", check.note)
+        if !check.sizes.isEmpty {
+            pairs.append((scalar("sizes"), .sequence(Node.Sequence(check.sizes.map(node), Tag(.seq), .flow))))
+        }
+        if !check.appearance.isEmpty {
+            pairs.append((scalar("appearance"), .sequence(Node.Sequence(check.appearance.map { scalar($0.rawValue) }, Tag(.seq), .flow))))
+        }
+        let lines = check.checklist.map { line -> Node in
+            .mapping(Node.Mapping([(scalar("id"), scalar(line.id)), (scalar("text"), scalar(line.text))]))
+        }
+        pairs.append((scalar("checklist"), .sequence(Node.Sequence(lines))))
+        add("revises", check.revises)
+        addActions(check.actions, to: &pairs)
+        pairs.append((scalar("status"), scalar(ReviewStatus.pending.rawValue)))
+        pairs.append((scalar("results"), .mapping(Node.Mapping([], Tag(.map), .flow))))
+        for key in ["decided_by", "decided_at"] { pairs.append((scalar(key), null)) }
+        pairs.append((scalar("comments"), .sequence(Node.Sequence([]))))
+        pairs.append((scalar("handled_at"), null))
         return .mapping(Node.Mapping(pairs))
     }
 
@@ -715,7 +878,7 @@ public enum Review {
     public static func render(
         id: String, project: String?, card: String?, title: String, question: String?,
         requestedBy: String, at: Date = Date(), notes: String?, items: [NewItem], questions: [NewQuestion] = [],
-        notify: ReviewNotify? = nil
+        checks: [NewCheck] = [], notify: ReviewNotify? = nil, options: RequestOptions = RequestOptions()
     ) throws -> String {
         var pairs: [(Node, Node)] = [(scalar("config"), scalar("review")), (scalar("id"), scalar(id))]
         func add(_ key: String, _ value: String?) { if let value, !value.isEmpty { pairs.append((scalar(key), scalar(value))) } }
@@ -726,11 +889,19 @@ public enum Review {
         add("requested_by", requestedBy)
         add("requested_at", timestamp(at))
         add("notify", notify?.rawValue)
-        if !items.isEmpty || questions.isEmpty {
+        if !options.assignedTo.isEmpty {
+            pairs.append((scalar("for"), .sequence(Node.Sequence(options.assignedTo.map(scalar), Tag(.seq), .flow))))
+        }
+        add("due", options.due)
+        addActions(options.actions, to: &pairs)
+        if !items.isEmpty || (questions.isEmpty && checks.isEmpty) {
             pairs.append((scalar("items"), Node.sequence(Node.Sequence(items.map(node)))))
         }
         if !questions.isEmpty {
             pairs.append((scalar("questions"), Node.sequence(Node.Sequence(questions.map(node)))))
+        }
+        if !checks.isEmpty {
+            pairs.append((scalar("checks"), Node.sequence(Node.Sequence(checks.map(node)))))
         }
         let yaml = try Yams.serialize(node: .mapping(Node.Mapping(pairs)), width: -1, allowUnicode: true)
         let trimmed = yaml.hasSuffix("\n") ? String(yaml.dropLast()) : yaml
@@ -743,9 +914,27 @@ public enum Review {
         try mutateFrontmatter(text) { map in map["notify"] = scalar(notify.rawValue) }
     }
 
-    /// Add items and questions to an existing request (a new round). What is there is left as it is.
-    public static func appendItems(_ text: String, _ new: [NewItem], questions: [NewQuestion] = []) throws -> String {
+    /// Set who a request is for, when it is due and its actions, on an existing request: each
+    /// one given replaces the key; the rest of the file is left as it is.
+    public static func setOptions(_ text: String, _ options: RequestOptions) throws -> String {
         try mutateFrontmatter(text) { map in
+            if !options.assignedTo.isEmpty {
+                map["for"] = .sequence(Node.Sequence(options.assignedTo.map(scalar), Tag(.seq), .flow))
+            }
+            if let due = options.due, !due.isEmpty { map["due"] = scalar(due) }
+            for outcome in ReviewOutcome.allCases {
+                if let value = node(options.actions[outcome]) { map[outcome.key] = value }
+            }
+        }
+    }
+
+    /// Add items and questions to an existing request (a new round). What is there is left as it is.
+    public static func appendItems(_ text: String, _ new: [NewItem], questions: [NewQuestion] = [], checks: [NewCheck] = []) throws -> String {
+        try mutateFrontmatter(text) { map in
+            if !checks.isEmpty {
+                let existing = map["checks"]?.sequence.map(Array.init) ?? []
+                map["checks"] = .sequence(Node.Sequence(existing + checks.map(node)))
+            }
             if !new.isEmpty {
                 let items = map["items"]?.sequence.map(Array.init) ?? []
                 map["items"] = .sequence(Node.Sequence(items + new.map(node)))
@@ -775,6 +964,90 @@ public enum Review {
         entry["comments"] = Node.sequence(Node.Sequence(list))
     }
 
+    // MARK: Browser checks (reviewer writes)
+
+    /// Decide a browser check, like an item: only `status`, `decided_by`, `decided_at` change.
+    public static func applyCheckDecision(_ text: String, checkID: String, status: ReviewStatus, by: String, at: Date = Date()) throws -> String {
+        let stamp = timestamp(at)
+        return try mutateCheck(text, checkID: checkID) { check in
+            check["status"] = scalar(status.rawValue)
+            check["decided_by"] = status == .pending ? null : scalar(by)
+            check["decided_at"] = status == .pending ? null : scalar(stamp)
+        }
+    }
+
+    /// Answer one checklist line at one size key (`nil` takes the answer back). A `note`
+    /// answer needs its note. Only that answer and the result's `by`, `at`, `viewport` change.
+    public static func applyCheckAnswer(
+        _ text: String, checkID: String, key: String, line: String, result: CheckAnswerResult?, note: String? = nil,
+        viewport: String? = nil, by: String, at: Date = Date()
+    ) throws -> String {
+        let stamp = timestamp(at)
+        let note = note?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        if result == .note, note == nil { throw ReviewError.noteNeeded }
+        return try mutateCheck(text, checkID: checkID) { check in
+            guard let parsed = parseCheck(.mapping(check), index: 0), parsed.checklist.contains(where: { $0.id == line }) else {
+                throw ReviewError.checkLineNotFound(check: checkID, line: line)
+            }
+            try mutateResult(&check, key: key) { entry in
+                var answers = entry["answers"]?.mapping ?? Node.Mapping([])
+                if let result {
+                    var pairs: [(Node, Node)] = [(scalar("result"), scalar(result.rawValue))]
+                    if let note { pairs.append((scalar("note"), scalar(note))) }
+                    pairs.append((scalar("at"), scalar(stamp)))
+                    answers[line] = .mapping(Node.Mapping(pairs, Tag(.map), .flow))
+                } else {
+                    answers[line] = nil
+                }
+                if let viewport { entry["viewport"] = scalar(viewport) }
+                entry["by"] = scalar(by)
+                entry["at"] = scalar(stamp)
+                entry["answers"] = .mapping(answers)
+            }
+        }
+    }
+
+    /// Record the screenshot taken at a size key, already written at `path` (relative to the
+    /// request folder, `results/<check>-<key>.png`).
+    public static func applyCheckScreenshot(
+        _ text: String, checkID: String, key: String, path: String, viewport: String? = nil, by: String, at: Date = Date()
+    ) throws -> String {
+        let stamp = timestamp(at)
+        return try mutateCheck(text, checkID: checkID) { check in
+            try mutateResult(&check, key: key) { entry in
+                if let viewport { entry["viewport"] = scalar(viewport) }
+                entry["by"] = scalar(by)
+                entry["at"] = scalar(stamp)
+                entry["screenshot"] = scalar(path)
+                if entry["answers"] == nil { entry["answers"] = .mapping(Node.Mapping([], Tag(.map), .flow)) }
+            }
+        }
+    }
+
+    /// Append a comment to a browser check. Existing comments are never rewritten.
+    public static func appendCheckComment(_ text: String, checkID: String, by: String, body: String, at: Date = Date()) throws -> String {
+        let comment = try commentNode(by: by, body: body, image: nil, at: at)
+        return try mutateCheck(text, checkID: checkID) { append(comment, to: &$0) }
+    }
+
+    /// Record that the agent acted on a check's decision.
+    public static func markCheckHandled(_ text: String, checkID: String, at: Date = Date()) throws -> String {
+        let stamp = timestamp(at)
+        return try mutateCheck(text, checkID: checkID) { $0["handled_at"] = scalar(stamp) }
+    }
+
+    private static func mutateResult(_ check: inout Node.Mapping, key: String, _ change: (inout Node.Mapping) throws -> Void) throws {
+        var results = check["results"]?.mapping ?? Node.Mapping([])
+        var entry = results[key]?.mapping ?? Node.Mapping([])
+        try change(&entry)
+        results[key] = .mapping(entry)
+        check["results"] = .mapping(results)
+    }
+
+    private static func mutateCheck(_ text: String, checkID: String, _ change: (inout Node.Mapping) throws -> Void) throws -> String {
+        try mutateEntry(text, list: "checks", id: checkID, fallback: "check", notFound: ReviewError.checkNotFound(checkID), change)
+    }
+
     private static func mutateItem(_ text: String, itemID: String, _ change: (inout Node.Mapping) throws -> Void) throws -> String {
         try mutateEntry(text, list: "items", id: itemID, fallback: "item", notFound: ReviewError.itemNotFound(itemID), change)
     }
@@ -802,21 +1075,28 @@ public enum Review {
         }
     }
 
-    private static func mutateFrontmatter(_ text: String, _ change: (inout Node.Mapping) throws -> Void) throws -> String {
+    /// Change the frontmatter and write it back. Only what changed is written anew: every key,
+    /// list entry and line that is the same as before keeps its exact text (`ReviewYAMLSplice`),
+    /// so a hand-written request reads the same after a decision, apart from that decision.
+    static func mutateFrontmatter(_ text: String, _ change: (inout Node.Mapping) throws -> Void) throws -> String {
         let (yamlText, body) = BoardMarkdown.splitFrontmatter(text)
-        guard let yamlText, let root = try composeLeniently(yamlText), var map = root.mapping else {
+        guard let yamlText else { throw ReviewError.malformed }
+        // A request with the slips agents make by hand is read (and spliced) as mended YAML.
+        let source = (try? Yams.compose(yaml: yamlText)) != nil ? yamlText : mendedYAML(yamlText)
+        guard let root = try composeLeniently(yamlText), var map = root.mapping else {
             throw ReviewError.malformed
         }
+        let original = map
         try change(&map)
-        let yaml = try Yams.serialize(node: .mapping(map), width: -1, allowUnicode: true)
-        let trimmed = yaml.hasSuffix("\n") ? String(yaml.dropLast()) : yaml
-        return "---\n\(trimmed)\n---\n\(body)"
+        if map == original { return text }
+        let yaml = try ReviewYAMLSplice.render(map, original: original, text: source)
+        return "---\n\(yaml)\n---\n\(body)"
     }
 
-    private static var null: Node { Node("null", Tag(.null)) }
+    static var null: Node { Node("null", Tag(.null)) }
 
     /// A value as written by the app: multi-line text (Markdown) as a literal block.
-    private static func scalar(_ value: String) -> Node {
+    static func scalar(_ value: String) -> Node {
         value.contains("\n") ? Node(value, Tag(.str), .literal) : Node(value)
     }
 

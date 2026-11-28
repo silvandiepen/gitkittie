@@ -1,0 +1,121 @@
+{
+  "id": "PETS-2-site",
+  "title": "Site, round 2",
+  "card": "PETS-2",
+  "notify": "normal",
+  "for": [],
+  "due": null,
+  "actions": {
+    "accept": [
+      {
+        "move": null,
+        "to": "testing",
+        "comment": false,
+        "assign": null
+      }
+    ],
+    "changes": [
+      {
+        "move": null,
+        "to": "in-progress",
+        "comment": true,
+        "assign": "claude"
+      }
+    ],
+    "reject": [
+      {
+        "move": null,
+        "to": "todo",
+        "comment": true,
+        "assign": null
+      },
+      {
+        "move": "PETS-9",
+        "to": "done",
+        "comment": false,
+        "assign": null
+      }
+    ]
+  },
+  "items": [
+    {
+      "id": "hero-a",
+      "status": "approved",
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      }
+    },
+    {
+      "id": "hero-b",
+      "status": "pending",
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      }
+    },
+    {
+      "id": "hero-c",
+      "status": "rejected",
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      }
+    },
+    {
+      "id": "badge",
+      "status": "changes-requested",
+      "actions": {
+        "accept": [
+          {
+            "move": "PETS-40",
+            "to": "testing",
+            "comment": false,
+            "assign": null
+          }
+        ],
+        "changes": [
+          {
+            "move": "PETS-40",
+            "to": "in-progress",
+            "comment": true,
+            "assign": null
+          }
+        ],
+        "reject": []
+      }
+    }
+  ],
+  "questions": [],
+  "checks": [],
+  "actions_run": [],
+  "outcome": "changes",
+  "waiting": [
+    "item:hero-b"
+  ],
+  "waiting_for": {
+    "sil": [
+      "item:hero-b"
+    ],
+    "herma": [
+      "item:hero-b"
+    ],
+    "nobody": [
+      "item:hero-b"
+    ]
+  },
+  "summary": {
+    "total": 4,
+    "pending": 1,
+    "approved": 1,
+    "rejected": 1,
+    "changes_requested": 1,
+    "awaiting_agent": 3,
+    "questions": 0,
+    "answered": 0,
+    "checks": 0
+  }
+}

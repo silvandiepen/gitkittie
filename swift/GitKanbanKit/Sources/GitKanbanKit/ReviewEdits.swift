@@ -26,12 +26,35 @@ public enum ReviewEdit: Codable, Sendable, Equatable, Hashable {
     case comment(item: String, by: String, text: String, image: String?, at: Date)
     case answer(question: String, choices: [String], other: String?, by: String, at: Date)
     case questionComment(question: String, by: String, text: String, at: Date)
+    /// A browser check's decision.
+    case checkDecision(check: String, status: ReviewStatus, by: String, at: Date)
+    /// One checklist line answered at one size key (`result: nil` takes it back).
+    case checkAnswer(check: String, key: String, line: String, result: CheckAnswerResult?, note: String?, viewport: String?, by: String, at: Date)
+    /// A screenshot taken at a size key, already written at `path` in the request folder.
+    case checkScreenshot(check: String, key: String, path: String, viewport: String?, by: String, at: Date)
+    case checkComment(check: String, by: String, text: String, at: Date)
+    /// A review action the app ran (or skipped), appended to `actions_run`.
+    case actionRun(ActionRun)
+    /// A review action taken back: the `actions_run` entry of `card` made at `runAt` gets `undone_at`.
+    case actionUndo(card: String, runAt: String, at: Date)
 
     /// When it was done, to the second: the precision the file stores.
     public var at: Date {
         switch self {
-        case .decision(_, _, _, let at), .comment(_, _, _, _, let at), .answer(_, _, _, _, let at), .questionComment(_, _, _, let at):
+        case .decision(_, _, _, let at), .comment(_, _, _, _, let at), .answer(_, _, _, _, let at), .questionComment(_, _, _, let at),
+             .checkDecision(_, _, _, let at), .checkAnswer(_, _, _, _, _, _, _, let at), .checkScreenshot(_, _, _, _, _, let at),
+             .checkComment(_, _, _, let at), .actionUndo(_, _, let at):
             return at
+        case .actionRun(let run):
+            return Review.reviewDate(run.at) ?? Date(timeIntervalSince1970: 0)
+        }
+    }
+
+    /// A decision or an answer: what only the people a request is for may do.
+    public var isDecision: Bool {
+        switch self {
+        case .decision, .answer, .checkDecision, .checkAnswer, .checkScreenshot: return true
+        case .comment, .questionComment, .checkComment, .actionRun, .actionUndo: return false
         }
     }
 
@@ -42,6 +65,12 @@ public enum ReviewEdit: Codable, Sendable, Equatable, Hashable {
         case .comment(let item, _, _, _, _): return "comment on \(item)"
         case .answer(let question, _, _, _, _): return "answer to \(question)"
         case .questionComment(let question, _, _, _): return "comment on \(question)"
+        case .checkDecision(let check, let status, _, _): return "\(status.title.lowercased()) on \(check)"
+        case .checkAnswer(let check, let key, let line, _, _, _, _, _): return "\(line) at \(key) on \(check)"
+        case .checkScreenshot(let check, let key, _, _, _, _): return "screenshot at \(key) on \(check)"
+        case .checkComment(let check, _, _, _): return "comment on \(check)"
+        case .actionRun(let run): return "\(run.result.rawValue) \(run.card) to \(run.to)"
+        case .actionUndo(let card, _, _): return "undo the move of \(card)"
         }
     }
 
@@ -74,6 +103,22 @@ public extension Review {
                 return try applyAnswer(text, questionID: question, choices: choices, other: other, by: by, at: at)
             case .questionComment(let question, let by, let body, let at):
                 return try appendQuestionComment(text, questionID: question, by: by, body: body, at: at)
+            case .checkDecision(let check, let status, let by, let at):
+                return try applyCheckDecision(text, checkID: check, status: status, by: by, at: at)
+            case .checkAnswer(let check, let key, let line, let result, let note, let viewport, let by, let at):
+                return try applyCheckAnswer(text, checkID: check, key: key, line: line, result: result, note: note, viewport: viewport, by: by, at: at)
+            case .checkScreenshot(let check, let key, let path, let viewport, let by, let at):
+                return try applyCheckScreenshot(text, checkID: check, key: key, path: path, viewport: viewport, by: by, at: at)
+            case .checkComment(let check, let by, let body, let at):
+                return try appendCheckComment(text, checkID: check, by: by, body: body, at: at)
+            case .actionRun(let run):
+                return try appendActionRun(text, run)
+            case .actionUndo(let card, let runAt, let at):
+                let request = parse(text, folder: "")
+                guard let index = request.actionsRun.firstIndex(where: { $0.card == card && $0.at == runAt }) else {
+                    throw ReviewError.actionRunNotFound(-1)
+                }
+                return try markActionRunUndone(text, index: index, at: at)
             }
         }
     }
@@ -171,6 +216,32 @@ private extension Review {
         case .questionComment(let id, let by, let text, let at):
             guard let question = request.questions.first(where: { $0.id == id }) else { return .superseded }
             return question.comments.contains { same($0, by: by, text: text, image: nil, at: at) } ? .present : .apply
+        case .checkDecision(let id, let status, _, let at):
+            guard let check = request.checks.first(where: { $0.id == id }) else { return .superseded }
+            if check.status == status { return .present }
+            if handled(check.handledAt, after: at) { return .superseded }
+            if let server = reviewDate(check.decidedAt), server > at { return .superseded }
+            return .apply
+        case .checkAnswer(let id, let key, let line, let result, let note, _, _, let at):
+            // Answer by answer: each carries its own time, so two devices' answers merge.
+            guard let check = request.checks.first(where: { $0.id == id }) else { return .superseded }
+            let current = check.results[key]?.answers[line]
+            let wantedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if current?.result == result, result == nil || current?.note == (wantedNote?.isEmpty == true ? nil : wantedNote) { return .present }
+            if let server = reviewDate(current?.at), server > at { return .superseded }
+            return .apply
+        case .checkScreenshot(let id, let key, let path, _, _, _):
+            guard let check = request.checks.first(where: { $0.id == id }) else { return .superseded }
+            return check.results[key]?.screenshot == path ? .present : .apply
+        case .checkComment(let id, let by, let text, let at):
+            guard let check = request.checks.first(where: { $0.id == id }) else { return .superseded }
+            return check.comments.contains { same($0, by: by, text: text, image: nil, at: at) } ? .present : .apply
+        case .actionRun(let run):
+            let present = request.actionsRun.contains { $0.card == run.card && $0.at == run.at && $0.on == run.on && $0.entry == run.entry }
+            return present ? .present : .apply
+        case .actionUndo(let card, let runAt, _):
+            guard let run = request.actionsRun.first(where: { $0.card == card && $0.at == runAt }) else { return .superseded }
+            return run.undoneAt != nil ? .present : .apply
         }
     }
 

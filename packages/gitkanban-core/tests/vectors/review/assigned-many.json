@@ -1,0 +1,93 @@
+{
+  "id": "PETS-5-copy",
+  "title": "Copy",
+  "card": null,
+  "notify": "normal",
+  "for": [
+    "sil",
+    "herma"
+  ],
+  "due": null,
+  "actions": {
+    "accept": [
+      {
+        "move": null,
+        "to": "testing",
+        "comment": false,
+        "assign": null
+      }
+    ],
+    "changes": [],
+    "reject": []
+  },
+  "items": [],
+  "questions": [
+    {
+      "id": "q",
+      "answered": true
+    }
+  ],
+  "checks": [],
+  "actions_run": [
+    {
+      "on": "changes",
+      "entry": null,
+      "card": "PETS-5",
+      "from": "in-review",
+      "to": "in-progress",
+      "result": "moved",
+      "reason": null,
+      "by": "sil",
+      "at": "2026-11-30T10:12:04Z",
+      "undone_at": "2026-11-30T10:12:09Z",
+      "before": {
+        "assignee": "claude",
+        "reviewer": null
+      }
+    },
+    {
+      "on": "accept",
+      "entry": "hero",
+      "card": "PETS-6",
+      "from": null,
+      "to": "testing",
+      "result": "skipped",
+      "reason": "claimed by herma",
+      "by": "sil",
+      "at": "2026-11-30T10:13:00Z",
+      "undone_at": null,
+      "before": {}
+    },
+    {
+      "on": "accept",
+      "entry": null,
+      "card": "PETS-6",
+      "from": null,
+      "to": "testing",
+      "result": "moved",
+      "reason": null,
+      "by": "unknown",
+      "at": "",
+      "undone_at": null,
+      "before": {}
+    }
+  ],
+  "outcome": null,
+  "waiting": [],
+  "waiting_for": {
+    "sil": [],
+    "herma": [],
+    "nobody": []
+  },
+  "summary": {
+    "total": 1,
+    "pending": 0,
+    "approved": 0,
+    "rejected": 0,
+    "changes_requested": 0,
+    "awaiting_agent": 1,
+    "questions": 1,
+    "answered": 1,
+    "checks": 0
+  }
+}

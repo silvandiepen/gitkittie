@@ -154,9 +154,10 @@ extension AppModel {
     /// What a request asks of the reviewer, for a notification: "3 items to review",
     /// "2 questions to answer", "1 item and 1 question waiting".
     nonisolated static func waitingLine(_ summary: ReviewSummary) -> String {
-        let items = summary.pendingItems, questions = summary.unanswered
-        if questions == 0 { return "\(items) item\(items == 1 ? "" : "s") to review" }
-        if items == 0 { return "\(questions) question\(questions == 1 ? "" : "s") to answer" }
+        let items = summary.pendingItems, questions = summary.unanswered, checks = summary.pendingChecks
+        if questions == 0, checks == 0 { return "\(items) item\(items == 1 ? "" : "s") to review" }
+        if items == 0, checks == 0 { return "\(questions) question\(questions == 1 ? "" : "s") to answer" }
+        if items == 0, questions == 0 { return "\(checks) page\(checks == 1 ? "" : "s") to check" }
         return "\(summary.waitingDescription) waiting"
     }
 

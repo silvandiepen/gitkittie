@@ -267,10 +267,8 @@ final class OutboxSafetyTests: XCTestCase {
     func testADecisionOlderThanTheAgentsHandlingIsLeftOutAndANewerOneGoesIn() throws {
         var server = try Review.applyAnswer(request, questionID: "q-name", choices: ["lobby"], other: nil, by: "sil", at: olderAt)
         // The agent handled q-name, and put hero-1 back to pending for a second look, on 22 Nov.
-        server = server.replacingOccurrences(of: "  status: pending\n  comments: []",
-                                             with: "  status: pending\n  comments: []\n  handled_at: 2026-11-22T10:00:00Z")
-        let name = server.range(of: "handled_at: null", options: .backwards)!
-        server.replaceSubrange(name, with: "handled_at: 2026-11-22T10:00:00Z")
+        server = try Review.markHandled(server, itemID: "hero-1", shippedTo: nil, at: Self.date("2026-11-22T10:00:00Z"))
+        server = try Review.markQuestionHandled(server, questionID: "q-name", at: Self.date("2026-11-22T10:00:00Z"))
         XCTAssertEqual(Review.parse(server, folder: "").items.first?.handledAt, "2026-11-22T10:00:00Z")
 
         // Queued on 20 Nov, before the agent acted: left out.

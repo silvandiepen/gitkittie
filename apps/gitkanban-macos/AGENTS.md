@@ -25,6 +25,12 @@ when that folder exists. Reviewer writes are compare-and-swap so an agent's conc
 Both apps have review screens (`GitKanban/Review/`). Several files of a request can be chosen and decided or commented on
 at once (Mac: ⌘A, checkbox, ⌘/⇧-click, Escape; iOS: Select in the request's ⋯ menu): `AppModel.decide(_:itemIDs:status:)` and
 `comment(_:itemIDs:text:)` make it one write, and refuse approving two options of a pick-one group (`ReviewSelection.swift`).
+Requests can carry actions (`on_accept` / `on_changes` / `on_reject`), browser checks (`checks:`) and
+`for:` (who decides). The decision that settles a request runs its actions through
+`AgentBoard.updateCard` (`ReviewActionRunner.swift`, `AppModel+ReviewActions.swift`: `reviewActionReport`,
+`moveAnyway`, `undoReviewAction`); `AppModel+ReviewAssignment.swift` works out who you are per board, the
+For me / Everyone filter, and refuses decisions on others' requests. Review writes keep the file's text
+outside what changed (`ReviewYAMLSplice` in GitKittieKit). Decisions: `docs/Decisions.md` § 20.
 
 ## Rules specific to this app
 

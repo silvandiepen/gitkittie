@@ -133,6 +133,18 @@ public struct QueuedChange: Sendable, Equatable, Identifiable {
                 return "\(question): answered \((choices + [other].compactMap { $0 }).joined(separator: ", ")) by \(by) at \(when)"
             case .questionComment(let question, let by, let text, _):
                 return "\(question): comment by \(by) at \(when): \(text)"
+            case .checkDecision(let check, let status, let by, _):
+                return "\(check): \(status.title) by \(by) at \(when)"
+            case .checkAnswer(let check, let key, let line, let result, let note, _, let by, _):
+                return "\(check) \(key) \(line): \(result?.rawValue ?? "cleared")\(note.map { " (\($0))" } ?? "") by \(by) at \(when)"
+            case .checkScreenshot(let check, let key, let path, _, let by, _):
+                return "\(check) \(key): screenshot \(path) by \(by) at \(when)"
+            case .checkComment(let check, let by, let text, _):
+                return "\(check): comment by \(by) at \(when): \(text)"
+            case .actionRun(let run):
+                return "\(run.card): \(run.result.rawValue) to \(run.to) by \(run.by) at \(when)"
+            case .actionUndo(let card, _, _):
+                return "\(card): review move undone at \(when)"
             }
         }
     }

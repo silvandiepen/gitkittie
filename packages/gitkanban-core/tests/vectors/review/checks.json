@@ -1,0 +1,240 @@
+{
+  "id": "PETS-3-onboarding",
+  "title": "Onboarding page",
+  "card": "PETS-3",
+  "notify": "normal",
+  "for": [],
+  "due": null,
+  "actions": {
+    "accept": [],
+    "changes": [],
+    "reject": []
+  },
+  "items": [],
+  "questions": [],
+  "checks": [
+    {
+      "id": "onboarding-page",
+      "url": "https://preview-95.example.app/onboarding",
+      "title": "Onboarding page on the new site",
+      "note": "Preview of PR 95.",
+      "sizes": [
+        {
+          "id": "phone",
+          "label": "Phone",
+          "width": 390,
+          "height": 844,
+          "ua": "mobile"
+        },
+        {
+          "id": "desktop",
+          "label": "Desktop",
+          "width": 1440,
+          "height": 900,
+          "ua": "desktop"
+        },
+        {
+          "id": "1080x1920",
+          "label": "1080x1920",
+          "width": 1080,
+          "height": 1920,
+          "ua": "default"
+        },
+        {
+          "id": "kiosk",
+          "label": "Kiosk",
+          "width": 1080,
+          "height": 1920,
+          "ua": "desktop"
+        },
+        {
+          "id": "tablet",
+          "label": "iPad",
+          "width": 820,
+          "height": 1180,
+          "ua": "mobile"
+        },
+        {
+          "id": "mystery",
+          "label": "mystery",
+          "width": null,
+          "height": null,
+          "ua": "default"
+        }
+      ],
+      "appearance": [
+        "light",
+        "dark"
+      ],
+      "checklist": [
+        {
+          "id": "hero",
+          "text": "The headline fits without an awkward break"
+        },
+        {
+          "id": "the-download-button-shows-without-scroll",
+          "text": "The download button shows without scrolling"
+        }
+      ],
+      "result_keys": [
+        "phone.light",
+        "phone.dark",
+        "desktop.light",
+        "desktop.dark",
+        "1080x1920.light",
+        "1080x1920.dark",
+        "kiosk.light",
+        "kiosk.dark",
+        "tablet.light",
+        "tablet.dark",
+        "mystery.light",
+        "mystery.dark"
+      ],
+      "results": {
+        "custom": {
+          "viewport": "1012x768",
+          "by": null,
+          "at": null,
+          "screenshot": null,
+          "answers": {
+            "hero": {
+              "result": "fail",
+              "note": null,
+              "at": null
+            }
+          }
+        },
+        "desktop.dark": {
+          "viewport": null,
+          "by": null,
+          "at": null,
+          "screenshot": null,
+          "answers": {
+            "hero": {
+              "result": "note",
+              "note": "Looks off",
+              "at": null
+            }
+          }
+        },
+        "phone.light": {
+          "viewport": "402x874",
+          "by": "sil",
+          "at": "2026-11-30T10:05:12Z",
+          "screenshot": "results/onboarding-page-phone.light.png",
+          "answers": {
+            "hero": {
+              "result": "pass",
+              "note": null,
+              "at": "2026-11-30T10:04:40Z"
+            },
+            "the-download-button-shows-without-scroll": {
+              "result": "fail",
+              "note": "Below the fold.",
+              "at": "2026-11-30T10:04:58Z"
+            }
+          }
+        }
+      },
+      "status": "changes-requested",
+      "decided_by": "sil",
+      "decided_at": "2026-11-30T10:06:00Z",
+      "revises": "onboarding-old",
+      "comments": 1,
+      "actions": {
+        "accept": [
+          {
+            "move": "PETS-31",
+            "to": "testing",
+            "comment": false,
+            "assign": null
+          }
+        ],
+        "changes": [],
+        "reject": []
+      },
+      "failed": [
+        {
+          "size": "phone.light",
+          "item": "the-download-button-shows-without-scroll",
+          "text": "The download button shows without scrolling",
+          "result": "fail",
+          "note": "Below the fold.",
+          "screenshot": "results/onboarding-page-phone.light.png"
+        },
+        {
+          "size": "desktop.dark",
+          "item": "hero",
+          "text": "The headline fits without an awkward break",
+          "result": "note",
+          "note": "Looks off",
+          "screenshot": null
+        },
+        {
+          "size": "custom",
+          "item": "hero",
+          "text": "The headline fits without an awkward break",
+          "result": "fail",
+          "note": null,
+          "screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "plain",
+      "url": "http://localhost:5173/",
+      "title": null,
+      "note": null,
+      "sizes": [],
+      "appearance": [],
+      "checklist": [
+        {
+          "id": "loads",
+          "text": "Loads"
+        }
+      ],
+      "result_keys": [
+        "default"
+      ],
+      "results": {},
+      "status": "pending",
+      "decided_by": null,
+      "decided_at": null,
+      "revises": null,
+      "comments": 0,
+      "actions": {
+        "accept": [],
+        "changes": [],
+        "reject": []
+      },
+      "failed": []
+    }
+  ],
+  "actions_run": [],
+  "outcome": null,
+  "waiting": [
+    "check:plain"
+  ],
+  "waiting_for": {
+    "sil": [
+      "check:plain"
+    ],
+    "herma": [
+      "check:plain"
+    ],
+    "nobody": [
+      "check:plain"
+    ]
+  },
+  "summary": {
+    "total": 2,
+    "pending": 1,
+    "approved": 0,
+    "rejected": 0,
+    "changes_requested": 1,
+    "awaiting_agent": 1,
+    "questions": 0,
+    "answered": 0,
+    "checks": 2
+  }
+}

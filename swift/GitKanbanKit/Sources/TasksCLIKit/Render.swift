@@ -37,6 +37,8 @@ public struct Renderer: Sendable {
             let lanes = (object["lanes"] as? [String] ?? []).joined(separator: ", ")
             return "Created board \(object["board"] as? String ?? "") (lanes: \(lanes))."
         case .raw: return Self.pretty(value)
+        case .reviewCreated: return reviewCreated(value)
+        case .reviewFile: return Self.pretty(value)
         }
     }
 
@@ -229,8 +231,21 @@ public struct Renderer: Sendable {
             return "No review request \"\(id)\" on this board."
         }
         var out = "\(text(request["request"]))  \(text(request["title"]))\n"
-        out += pairs([("card", text(request["card"])), ("asks", text(request["question"])), ("requested by", text(request["requested_by"])),
-                      ("requested at", text(request["requested_at"])), ("notify", text(request["notify"])), ("pending", text(request["pending"])), ("to handle", text(request["to_handle"]))]
+        func actions(_ object: [String: Any]) -> [(String, String)] {
+            ["on_accept", "on_changes", "on_reject"].compactMap { key in
+                guard let list = object[key] as? [[String: Any]], !list.isEmpty else { return nil }
+                return (key.replacingOccurrences(of: "_", with: " "), list.map { action in
+                    var words = [text(action["move"]).isEmpty ? "→ \(text(action["to"]))" : "\(text(action["move"])) → \(text(action["to"]))"]
+                    if (action["comment"] as? Bool) == true { words.append("with comments") }
+                    if !text(action["assign"]).isEmpty { words.append("assign \(text(action["assign"]))") }
+                    return words.joined(separator: ", ")
+                }.joined(separator: "; "))
+            }
+        }
+        out += pairs(([("card", text(request["card"])), ("asks", text(request["question"])), ("for", text(request["for"])), ("due", text(request["due"])),
+                       ("requested by", text(request["requested_by"])), ("requested at", text(request["requested_at"])), ("notify", text(request["notify"])),
+                       ("pending", text(request["pending"])), ("to handle", text(request["to_handle"])), ("outcome", text(request["outcome"]))]
+                      + actions(request))
             .filter { !$0.1.isEmpty })
         let items = request["items"] as? [[String: Any]] ?? []
         if !items.isEmpty {
@@ -246,6 +261,35 @@ public struct Renderer: Sendable {
             }
             if let other = question["answer_other"] as? String { out += "\n  ● other: \(other)" }
         }
+        for check in request["checks"] as? [[String: Any]] ?? [] {
+            let sizes = (check["sizes"] as? [[String: Any]] ?? []).map { text($0["id"]) }
+            out += "\n\nCheck \(text(check["id"])): \(text(check["url"])) [\(text(check["status"]))]"
+            if !sizes.isEmpty { out += "\n  sizes: \(sizes.joined(separator: ", "))" }
+            for line in check["checklist"] as? [[String: Any]] ?? [] { out += "\n  ☐ \(text(line["id"])): \(text(line["text"]))" }
+            for failure in check["failed"] as? [[String: Any]] ?? [] {
+                let note = text(failure["note"]).isEmpty ? "" : " — \(text(failure["note"]))"
+                out += "\n  ✗ \(text(failure["size"])) \(text(failure["item"]))\(note)"
+            }
+        }
+        let runs = request["actions_run"] as? [[String: Any]] ?? []
+        if !runs.isEmpty {
+            out += "\n\nActions run:\n" + table(["ON", "CARD", "FROM", "TO", "RESULT", "BY", "AT"], runs.map { run in
+                let result = text(run["undone_at"]).isEmpty ? text(run["result"]) : "undone"
+                return [text(run["on"]), text(run["card"]), text(run["from"]), text(run["to"]), result, text(run["by"]), text(run["at"])]
+            }, flex: 4)
+        }
+        return out
+    }
+
+    func reviewCreated(_ value: Any) -> String {
+        let object = value as? [String: Any] ?? [:]
+        var out = "Asked for review: \(text(object["request"])) (\(text(object["folder"])))."
+        for (key, word) in [("items", "files"), ("checks", "checks"), ("questions", "questions")] {
+            let ids = object[key] as? [String] ?? []
+            if !ids.isEmpty { out += "\n  \(word): \(ids.joined(separator: ", "))" }
+        }
+        if let assigned = object["for"] as? [String], !assigned.isEmpty { out += "\n  for: \(assigned.joined(separator: ", "))" }
+        for warning in object["warnings"] as? [String] ?? [] { out += "\nwarning: \(warning)" }
         return out
     }
 

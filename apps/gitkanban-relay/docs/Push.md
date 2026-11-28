@@ -64,7 +64,9 @@ At launch Tasks asks iOS / macOS for a push token, then registers it for every a
 - **GitHub:** `POST /github/devices` with the client proof (`X-GitKanban-Client`, as for channels)
   and the person's own GitHub token in `Authorization`. The relay calls `GET /repos/<repo>` with
   that token once and needs `permissions.pull: true`, so nobody can subscribe to a repo they
-  cannot read; the token is not stored or logged. Then it asks GitHub, as the App, whether the App
+  cannot read, and `GET /user` once, to know whose devices these are; the token is not stored or
+  logged, and the login is kept only as a key (SHA-256 of `<repo id>:<login>`), so a review put on
+  someone (`for:`) reaches their devices and nobody else's. Then it asks GitHub, as the App, whether the App
   is installed on the repo (`GET /repos/<repo>/installation`). Not installed → `409` with the page
   to install it (`github.com/apps/gitkittie-tasks/installations/new/permissions?suggested_target_id=<owner>&repository_ids[]=<repo>`),
   which Tasks shows as **Turn On** in Settings ▸ Notifications and opens in a web sign-in sheet.
@@ -89,8 +91,9 @@ For the App Store privacy label and the site's privacy page. Proposed text for t
 > token, its platform (iOS or macOS), the app version and the notification levels you chose are
 > kept on our relay together with the repositories you get notifications for, so the relay knows
 > where to send them. When a review request is pushed to such a repository, the relay reads that
-> request's file once, takes its title, board name and notification level, sends the notification
-> through Apple's push service and forgets the file. It stores nothing from your repositories and
+> request's file once, takes its title, board name and notification level (and, for a request
+> put on named people, who they are, from the board's README), sends the notification through
+> Apple's push service and forgets the file. It stores nothing from your repositories and
 > keeps no history. On GitHub the relay reads files as the GitKittie Tasks app, only in
 > repositories you installed it on and only with read access; when you turn notifications on, your
 > GitHub token is used once to check that you can read the repository and is not kept. Turning the
@@ -101,10 +104,22 @@ App Store privacy label: **Identifiers → Device ID** (the push token), *not li
 used transiently and not stored, and repository content is processed transiently. Check this
 against the current label in App Store Connect before submitting.
 
-Per device the relay stores `{token, platform, environment, levels, appVersion, verifiedAt}` under
-the repo (Durable Object `github:<repo id>` with the repo's name, or the channel's object). The
-review file, its notes, items and comments are never stored, logged or forwarded; only
-`title`, the board name, the request's folder and id, and the level go into the push.
+Per device the relay stores `{token, platform, environment, levels, appVersion, verifiedAt,
+loginKey}` under the repo (Durable Object `github:<repo id>` with the repo's name, or the channel's
+object). `loginKey` is SHA-256 of `<repo id>:<github login>`: not the login, but it does tie the
+device to an account on that repo, so check the App Store label ("User ID", linked to identity?)
+before shipping this. The review file, its notes, items and comments are never stored, logged or
+forwarded; only `title`, the board name, the request's folder and id, and the level go into the
+push.
+
+**Reviews for named people.** When a request (now or before the push) has `for:`, the relay also
+reads the repo's root `README.md` and the board's `README.md` at the pushed commit, merges their
+`users` (the board's entry wins), and keys each user's `github:` login. A device whose key is one of
+them gets the alert when something newly waits for that user (a request newly put on them counts);
+any other device (no key, or not on the board) only when something newly waits for everyone. A
+`for` id without `github:` reaches nobody by push; the app still shows it. Devices registered before
+this have no key and get only requests for everyone until the app registers them again (it does at
+every launch).
 
 ## The GitHub App
 

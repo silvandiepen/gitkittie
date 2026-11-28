@@ -260,6 +260,9 @@ writes their answer back to the board.
 - **Items** are files to approve or reject (`kind`: image, model, audio, animation, video, other).
   Items in one `group` are shown side by side; `pick_one` makes the reviewer choose one of them. A
   model or video needs a `preview` PNG.
+- **Browser checks** are for "look at this page": a `url`, `sizes` and a `checklist`, which the
+  reviewer answers pass or fail at each size (with a screenshot) and then approves, sends back or
+  rejects as a whole. Never send a folder of screenshots to approve instead. See below.
 - **Recommend an answer.** There is no separate field for it: put the option you recommend first,
   say "(recommended)" in its label, and give the trade-off of every option in its `detail`.
 - One request per round of related work; several questions in one request read as one form. Put the
@@ -270,8 +273,16 @@ writes their answer back to the board.
   notification: the request only counts on the badge and in the Reviews list (an FYI, a decision that
   can wait for the next look). To change it later: `create_review` with `"request"` and `"notify"`.
 
-Creating one goes through `create_review` (from the command line: `tasks raw create_review`, with
-the JSON on standard input):
+Creating one goes through `create_review`. From the command line, `tasks review create` takes the
+common case as options (files are read and sent for you), and `tasks review check` asks for a
+browser check:
+
+```sh
+tasks review create --card PROJ-12 --title "Site onboarding, round 1" --question "Check the new onboarding page." --on-accept testing --on-changes in-progress --comment-on-changes --for sil --file after-phone.png --file after-desktop.png
+```
+
+Anything richer (questions, groups, per-file actions) is the tool's JSON, given to
+`tasks review create` as a JSON argument or to `tasks raw create_review` on standard input:
 
 ```sh
 tasks raw create_review --board MyProject - <<'JSON'
@@ -308,6 +319,63 @@ Files are sent base64-encoded in `items` (`"content_base64": "<base64 of the fil
 `base64 -i after.png`). To add to an existing request (a redo), pass `"request": "<id>"` instead of
 a title, and set `"revises": "<old item id>"` on the new item.
 
+### Say where the card goes: actions on decision
+
+Don't wait for the answer to move the card yourself. Say in the request what happens when it is
+decided, and the app does it on the reviewer's device the moment the last file or check is decided:
+
+```json
+{
+  "card": "PROJ-12",
+  "title": "Badge, round 2",
+  "on_accept":  {"to": "testing"},
+  "on_changes": {"to": "in-progress", "comment": true, "assign": "claude"},
+  "on_reject":  {"to": "todo", "comment": true}
+}
+```
+
+- `to` is a lane (id, name or status); `move` is the card (default: the request's `card`; required
+  on an item or check, which can move a card of its own: `"on_accept": {"move": "PROJ-40", "to": "testing"}`);
+  `comment: true` copies the reviewer's comments into the card's activity log; `assign` sets the
+  card's assignee. One action or a list.
+- The outcome: any changes requested → `changes`; else any rejected (losing options of a pick-one
+  group left out) → `reject`; else `accept`. Questions don't count. A request with only questions
+  has no outcome, so actions are refused on it.
+- Accept and changes also fill the card's `reviewer`, `review_outcome` and `review_completed_at`.
+- A card claimed by someone other than you, or already Done, is not moved by itself: the reviewer is
+  asked "Move anyway?".
+- `list_reviews` gives `outcome` and `actions_run`, what the app already did (`result`: moved,
+  already, skipped; `undone_at` when the reviewer took it back). **If an action moved your card,
+  don't move it again**: act on the feedback.
+
+### Browser checks
+
+```sh
+tasks review check --card PROJ-12 --title "Onboarding page" --url https://preview-95.example.app/onboarding --size phone --size desktop --size 1080x1920 --item "The headline fits without an awkward break" --item "The download button shows without scrolling" --for sil --on-accept testing --on-changes in-progress
+```
+
+- Sizes: `phone-small` (375×667), `phone` (390×844), `phone-large` (440×956), `tablet` (820×1180),
+  `tablet-landscape` (1180×820), `laptop` (1280×800), `desktop` (1440×900), `wide` (1920×1080), or
+  `WIDTHxHEIGHT`; in JSON also `{"id": "kiosk", "label": "Kiosk", "width": 1080, "height": 1920, "ua": "desktop"}`.
+  `"appearance": ["light", "dark"]` checks each size in both. Without sizes there is one, whatever
+  the reviewer opens it in.
+- **Give an address the reviewer's phone can open**: a preview deploy or a tailnet host, never
+  `localhost` or `*.local` (the app warns, and the phone can't open it).
+- Checklist lines are short statements that are true when the page is right; their ids come from
+  the text unless you give `{"id", "text"}`.
+- Reading back: each check in `list_reviews` has `status`, `results` per size (`phone` or
+  `phone.dark`) and `failed`: the lines answered fail or with a note, with the note and the size's
+  screenshot. Fetch a screenshot with `tasks review file <request> results/<check>-<size>.png -o shot.png`
+  (`get_review_file`). A redo is a new check with `"revises": "<old check id>"`; then handle the old one.
+
+### Who decides: `for`
+
+`"for": ["sil"]` (or `--for sil`) puts the request on board users: only they get it in their list,
+badge and notifications, and only they can decide; others can still comment. Without `for`, anyone
+on the board decides. Put the request on the person who asked for the work when the card says who
+that is; otherwise leave it out. It is routing, not privacy: everyone with the repository can read
+every request, so nothing secret belongs in one. `"due": "YYYY-MM-DD"` gives it a day.
+
 Then **log the request on the card** (and in Handoff if the work waits on it), and carry on with
 other work. If nothing can move until the answer comes, say so on the card. To wait for it:
 `tasks review wait --card PROJ-12 --timeout 240` (`wait_for_reviews`) returns as soon as something
@@ -319,6 +387,7 @@ is answered, or an empty list when the time is up (call it again).
   `answered_by` / `answered_at`. Act on it, then record that you did:
   `tasks review handle <request> <question id>`. The reviewer can change an answer until you handle
   it; after that it is fixed, so handle it only once you have acted on it.
+- A browser check is decided like an item; handle it with its id once you acted on it.
 - An item has `status` `approved`, `rejected` or `changes-requested`, with `decided_by` /
   `decided_at` and `comments`. Approved → put the file where it ships, then
   `tasks review handle <request> <item> --shipped-to <path>`. Rejected → don't use it; read the
@@ -326,7 +395,7 @@ is answered, or an empty list when the time is up (call it again).
   `revises`, then handle the old one.
 - Handling sets `handled_at`. Never set `approved`, an answer, or any of the reviewer's fields
   yourself, and only ever append to `comments`.
-- **Closing:** a request whose every item and question is decided and handled removes itself (pass
+- **Closing:** a request whose every item, check and question is decided and handled removes itself (pass
   `--keep` to keep it). `tasks review close <request>` removes a finished one; the app refuses while
   something still waits, unless `--force` (only when the request is really obsolete).
 
