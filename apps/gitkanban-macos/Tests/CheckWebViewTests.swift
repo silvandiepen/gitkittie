@@ -93,11 +93,15 @@ final class CheckWebViewTests: XCTestCase {
             let inView = CGPoint(x: css.x * layout.scale, y: css.y * layout.scale)
             let flipped = CGPoint(x: inView.x, y: webView.bounds.height - inView.y)
             let point = webView.isFlipped ? webView.convert(inView, to: nil) : webView.convert(flipped, to: nil)
-            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-                let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
-                window.sendEvent(event)
+            func event(_ type: NSEvent.EventType) -> NSEvent {
+                NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                   windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
             }
+            // Straight to the web view, as AppKit hands a click to the view under it.
+            webView.mouseMoved(with: event(.mouseMoved))
+            webView.mouseDown(with: event(.leftMouseDown))
+            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            webView.mouseUp(with: event(.leftMouseUp))
         }
         click(css: CGPoint(x: 350, y: 650))
         var hits = ""
