@@ -32,6 +32,24 @@ final class AgentReviewTests: XCTestCase {
         AgentBoard.ReviewUpload(item: Review.NewItem(id: id, file: "\(id).png", note: "A \(id)", revises: revises), data: Data("png-\(id)".utf8))
     }
 
+    func testNotifyLevelIsWrittenAndCanBeChangedLater() async throws {
+        let made = try await board.createReview(request: nil, card: nil, title: "Blocked", question: nil, notes: nil,
+                                                uploads: [upload("a")], notify: .urgent, agent: "claude")
+        XCTAssertEqual(made["notify"] as? String, "urgent")
+        let file = "Pets/review/blocked/review.md"
+        var text = try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)
+        XCTAssertEqual(Review.parse(text, folder: "Pets/review/blocked").notify, .urgent)
+        let listed = try await board.listReviews(state: "pending", card: nil)
+        XCTAssertEqual(listed.first?["notify"] as? String, "urgent")
+
+        // Only the level, on an existing request.
+        _ = try await board.createReview(request: "blocked", card: nil, title: nil, question: nil, notes: nil,
+                                         uploads: [], notify: .silent, agent: "claude")
+        text = try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)
+        XCTAssertEqual(Review.parse(text, folder: "Pets/review/blocked").notify, .silent)
+        XCTAssertEqual(Review.parse(text, folder: "Pets/review/blocked").items.map(\.id), ["a"])
+    }
+
     func testRequestDecideHandleAndAutomaticCleanup() async throws {
         let made = try await board.createReview(request: nil, card: "PETS-001", title: "Dog models", question: "Which dog?",
                                                 notes: "First pass.", uploads: [upload("dog-v1"), upload("dog-v2")], agent: "claude")

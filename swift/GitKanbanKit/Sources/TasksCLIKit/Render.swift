@@ -230,7 +230,7 @@ public struct Renderer: Sendable {
         }
         var out = "\(text(request["request"]))  \(text(request["title"]))\n"
         out += pairs([("card", text(request["card"])), ("asks", text(request["question"])), ("requested by", text(request["requested_by"])),
-                      ("requested at", text(request["requested_at"])), ("pending", text(request["pending"])), ("to handle", text(request["to_handle"]))]
+                      ("requested at", text(request["requested_at"])), ("notify", text(request["notify"])), ("pending", text(request["pending"])), ("to handle", text(request["to_handle"]))]
             .filter { !$0.1.isEmpty })
         let items = request["items"] as? [[String: Any]] ?? []
         if !items.isEmpty {

@@ -155,6 +155,19 @@ public struct ReviewSummary: Equatable, Sendable {
     }
 }
 
+/// How loudly a request is announced when it newly needs an answer: `notify:` in its
+/// frontmatter. `urgent` is time-sensitive (it breaks through Focus), `normal` is an
+/// ordinary notification and the default, `silent` only counts on the badge and in the
+/// Reviews list. Mirrors `ReviewNotify` in `@gitkittie/gitkanban-core`.
+public enum ReviewNotify: String, CaseIterable, Sendable, Codable {
+    case urgent, normal, silent
+
+    /// A `notify:` value; anything missing or unknown is `normal`.
+    public init(parsing value: String?) {
+        self = value.flatMap { ReviewNotify(rawValue: $0.trimmingCharacters(in: .whitespaces).lowercased()) } ?? .normal
+    }
+}
+
 /// One review request: a folder with a `review.md` and the assets under review.
 public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
     /// Source-relative folder of the request (e.g. `Morrow/review/MORROW-182-pet-models`).
@@ -175,6 +188,8 @@ public struct ReviewRequest: Equatable, Sendable, Identifiable, Hashable {
     /// Why the request's frontmatter could not be read (invalid YAML), in words; `nil` when
     /// it could. Such a request has no items or questions to show, and says so.
     public var problem: String?
+    /// How loudly the request is announced (`notify:`); `normal` when it does not say.
+    public var notify: ReviewNotify = .normal
 
     public var path: String { Review.join(folder, Review.fileName) }
     /// What tells this request apart from every other one the app has loaded.
@@ -390,7 +405,8 @@ public enum Review {
             items: items,
             questions: questions,
             body: yaml == nil ? text : body,
-            problem: problem
+            problem: problem,
+            notify: ReviewNotify(parsing: string(map?["notify"]))
         )
     }
 
@@ -698,7 +714,8 @@ public enum Review {
     /// is empty is left out.
     public static func render(
         id: String, project: String?, card: String?, title: String, question: String?,
-        requestedBy: String, at: Date = Date(), notes: String?, items: [NewItem], questions: [NewQuestion] = []
+        requestedBy: String, at: Date = Date(), notes: String?, items: [NewItem], questions: [NewQuestion] = [],
+        notify: ReviewNotify? = nil
     ) throws -> String {
         var pairs: [(Node, Node)] = [(scalar("config"), scalar("review")), (scalar("id"), scalar(id))]
         func add(_ key: String, _ value: String?) { if let value, !value.isEmpty { pairs.append((scalar(key), scalar(value))) } }
@@ -708,6 +725,7 @@ public enum Review {
         add("question", question)
         add("requested_by", requestedBy)
         add("requested_at", timestamp(at))
+        add("notify", notify?.rawValue)
         if !items.isEmpty || questions.isEmpty {
             pairs.append((scalar("items"), Node.sequence(Node.Sequence(items.map(node)))))
         }
@@ -718,6 +736,11 @@ public enum Review {
         let trimmed = yaml.hasSuffix("\n") ? String(yaml.dropLast()) : yaml
         let body = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return "---\n\(trimmed)\n---\n" + (body.isEmpty ? "" : "\n\(body)\n")
+    }
+
+    /// Set how loudly a request is announced (`notify:`). The rest of the file is left as it is.
+    public static func setNotify(_ text: String, _ notify: ReviewNotify) throws -> String {
+        try mutateFrontmatter(text) { map in map["notify"] = scalar(notify.rawValue) }
     }
 
     /// Add items and questions to an existing request (a new round). What is there is left as it is.
