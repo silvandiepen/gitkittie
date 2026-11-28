@@ -4,12 +4,18 @@ Live updates for Tasks / GitKanban boards on GitHub and GitLab. The provider cal
 when someone pushes; the Worker tells the connected apps which paths changed, and they reload
 just that.
 
-It sees repo names and file paths. It never sees file contents or your git token. Per channel it
-stores the repo's name, the channel's two secrets, the random id of the app install that registered
-it, and when; it does not store the paths it relays.
+For live updates it sees repo names and file paths, never file contents or your git token. Per
+channel it stores the repo's name, the channel's two secrets, the random id of the app install that
+registered it, and when; it does not store the paths it relays.
+
+It also sends **instant review notifications** (see [docs/Push.md](./docs/Push.md)): through the
+"GitKittie Tasks" GitHub App it reads a review request that a push touched, once, and sends its title
+and board to the devices that asked, through Apple's push service. For that it keeps each device's
+push token per repository, and nothing from the repository.
 
 The GitKittie relay is deployed at `https://gitkanban-relay.vandipyan.workers.dev`, and the apps
-offer that address by default. It reaches apps that are open; a closed app is not woken.
+offer that address by default. Live updates reach apps that are open; review notifications also
+reach a closed app.
 
 ## Who can register
 
@@ -24,6 +30,9 @@ someone who reads the app or this code. The random id is kept with each channel,
 be told apart later (a cap or a block per id is not built).
 
 ## Deploy
+
+To turn on review notifications as well, run `scripts/go-live.sh` instead (docs/Push.md → Going
+live): it puts the secrets in place first.
 
 ```sh
 cd apps/gitkanban-relay

@@ -1,0 +1,19 @@
+{
+  "name": "GitKittie Tasks",
+  "url": "https://gitkittie.hakobs.com/tasks",
+  "description": "Instant notifications for review requests on your GitKittie Tasks boards. Reads only the review requests a push touches; stores nothing from your repository.",
+  "public": true,
+  "hook_attributes": {
+    "url": "https://gitkanban-relay.vandipyan.workers.dev/github",
+    "active": true
+  },
+  "redirect_url": "http://localhost:8765/",
+  "setup_url": "https://gitkittie.hakobs.com/tasks/github-installed",
+  "setup_on_update": true,
+  "request_oauth_on_install": false,
+  "default_permissions": {
+    "contents": "read",
+    "metadata": "read"
+  },
+  "default_events": ["push"]
+}
