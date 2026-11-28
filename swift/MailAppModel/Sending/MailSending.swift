@@ -43,6 +43,11 @@ final class MailSending {
     /// Shown in an alert, then cleared.
     var lastError: String?
 
+    /// Non-nil while the mail folder is read-only (GKM-104, MAIL-135): why, in words for the
+    /// person. Drafts can be read but not changed, and the outbox is paused: it shows what is
+    /// queued, but nothing is sent, retried, checked or cancelled, because sending writes the
+    /// draft's removal into the folder and the sent copy after it.
+    let readOnlyReason: String?
     let draftStore: DraftStore
     let registry: SendingAccountRegistry
     @ObservationIgnored private let outboxActor: Outbox?
@@ -57,8 +62,10 @@ final class MailSending {
     var needsAttention: [OutboxEntry] { outbox.filter { $0.state == .failed || $0.state == .uncertain } }
 
     init(locations: StoreLocations, registry: SendingAccountRegistry = SendingAccountRegistry(),
-         credentials: any CredentialProvider, configuration: Outbox.Configuration = Outbox.Configuration()) throws {
-        self.draftStore = try DraftStore(locations: locations)
+         credentials: any CredentialProvider, configuration: Outbox.Configuration = Outbox.Configuration(),
+         readOnlyReason: String? = nil) throws {
+        self.readOnlyReason = readOnlyReason
+        self.draftStore = try DraftStore(locations: locations, readOnlyReason: readOnlyReason)
         self.registry = registry
         do {
             self.outboxActor = try Outbox.open(folder: locations.outboxFolder, accounts: registry,
@@ -78,6 +85,8 @@ final class MailSending {
                 self?.outbox = entries
             }
         }
+        // Paused while the folder is read-only: nothing is due then.
+        guard readOnlyReason == nil else { return }
         pumpTask = Task { [weak self] in
             while !Task.isCancelled {
                 await outboxActor.processDue()
@@ -168,6 +177,7 @@ final class MailSending {
     /// Builds the message from the saved draft, puts it in the outbox and only then removes
     /// the draft. Throws what stops the message from being sent (no recipient, a bad address).
     func send(_ draft: ComposeDraft) async throws {
+        try requireWritable()
         guard let outboxActor else {
             throw OutboxError.ownedByAnotherProcess
         }
@@ -185,6 +195,7 @@ final class MailSending {
     /// A `mailto:` unsubscribe you previewed (GKM-020): straight into the outbox, no draft kept.
     /// Returns its operation, so the unsubscribe can follow it to sent or failed.
     func queueUnsubscribe(_ draft: ComposeDraft) async throws -> OperationID {
+        try requireWritable()
         guard let outboxActor else { throw OutboxError.ownedByAnotherProcess }
         guard let account = draft.account else { throw ComposeError.noSender }
         let entry = try await outboxActor.enqueue(MessageComposer.compose(draft, attachments: []), account: account, draft: nil)
@@ -195,7 +206,7 @@ final class MailSending {
     // MARK: - Outbox intents
 
     func retry(_ id: OperationID) async {
-        guard let outboxActor else { return }
+        guard let outboxActor, refuseWhileReadOnly() else { return }
         do {
             try await outboxActor.retry(id)
             await outboxActor.processDue()
@@ -206,7 +217,7 @@ final class MailSending {
 
     /// Looks for an uncertain message at the provider again.
     func checkAgain(_ id: OperationID) async {
-        guard let outboxActor else { return }
+        guard let outboxActor, refuseWhileReadOnly() else { return }
         do {
             try await outboxActor.reconcile(id)
         } catch {
@@ -217,7 +228,7 @@ final class MailSending {
     /// The person's decision to send an uncertain message again. The outbox looks in Sent one
     /// more time first and refuses if it is there.
     func sendAgain(_ id: OperationID) async {
-        guard let outboxActor else { return }
+        guard let outboxActor, refuseWhileReadOnly() else { return }
         do {
             try await outboxActor.sendAgain(id)
             await outboxActor.processDue()
@@ -229,7 +240,7 @@ final class MailSending {
     /// Takes a message out of the outbox and puts it back in Drafts, attachments included.
     @discardableResult
     func cancel(_ id: OperationID) async -> DraftID? {
-        guard let outboxActor else { return nil }
+        guard let outboxActor, refuseWhileReadOnly() else { return nil }
         do {
             let (entry, raw) = try await outboxActor.cancel(id)
             let parsed = MIMEParser.parse(raw)
@@ -249,6 +260,19 @@ final class MailSending {
     }
 
     // MARK: - Internals
+
+    /// Throws the read-only error while the folder is read-only: the one gate of every send.
+    private func requireWritable() throws {
+        if let readOnlyReason { throw MailStoreError.readOnly(readOnlyReason) }
+    }
+
+    /// For an outbox intent that doesn't throw: true when it may go on; otherwise the reason is
+    /// in `lastError` and it must stop.
+    private func refuseWhileReadOnly() -> Bool {
+        guard let readOnlyReason else { return true }
+        lastError = readOnlyReason
+        return false
+    }
 
     private func create(_ draft: ComposeDraft, attachments: [OutgoingAttachment]) async throws -> DraftID {
         var draft = draft

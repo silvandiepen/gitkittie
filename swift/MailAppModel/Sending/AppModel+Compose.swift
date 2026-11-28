@@ -8,10 +8,10 @@ extension AppModel {
     enum ComposeAction { case reply, replyAll, forward }
 
     /// True when there is an open message to answer.
-    var canAnswer: Bool { openMessage != nil && sending != nil }
+    var canAnswer: Bool { openMessage != nil && sending != nil && canWrite }
 
     func composeNew() async -> DraftID? {
-        guard let sending else { return nil }
+        guard let sending, !refuseWrite() else { return nil }
         let identities = await sending.identities(accounts: accounts)
         let preferred = selectedAccount.flatMap { account in identities.first { $0.account == account.id } } ?? identities.first
         do {
@@ -23,7 +23,7 @@ extension AppModel {
     }
 
     func compose(_ action: ComposeAction) async -> DraftID? {
-        guard let sending, let message = openMessage else { return nil }
+        guard let sending, let message = openMessage, !refuseWrite() else { return nil }
         let id = message.front.id
         let account = message.front.account
         do {

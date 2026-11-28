@@ -128,6 +128,8 @@ final class AppModel {
     private(set) var sending: MailSending?
     /// The mail folder `sending` belongs to.
     @ObservationIgnored private var sendingFolder: URL?
+    /// The read-only reason `sending` was made with (GKM-104).
+    @ObservationIgnored private var sendingReadOnlyReason: String?
 
     private let locations: StoreLocations?
     /// The folders a mail folder's device state is placed beside (`MailFolderLocation`): the ones
@@ -188,6 +190,23 @@ final class AppModel {
     /// Where the user's mail lives, once the store is open.
     var mailFolder: URL? { store?.locations.mailFolder }
 
+    /// Why nothing can be written into the mail folder; nil when it can (GKM-104, MAIL-135). The
+    /// folder is read-only while it is in iCloud Drive or a File Provider folder: the store is
+    /// opened that way, so this is the one question every write asks. A write that reaches the
+    /// store anyway is refused there with the same words.
+    var writeRefusal: String? { store?.readOnlyReason }
+
+    /// False while the mail folder is read-only: what menus and buttons that write ask.
+    var canWrite: Bool { writeRefusal == nil }
+
+    /// For an intent that writes into the mail folder: true when it must stop, with the reason
+    /// in `actionError` for the alert.
+    func refuseWrite() -> Bool {
+        guard let reason = writeRefusal else { return false }
+        actionError = reason
+        return true
+    }
+
     /// True when there is nothing at all yet: no account and no message.
     var isEmpty: Bool { accounts.isEmpty && totalCount == 0 }
 
@@ -204,7 +223,12 @@ final class AppModel {
         await sync.stopAll()
         do {
             let folder = MailFolderLocation(defaults: sync.services.defaults)
-            let opened = try await MailStore.open(locations ?? folder.locations())
+            let chosen = try locations ?? folder.locations()
+            // A mail folder in iCloud Drive or a File Provider folder is opened read-only
+            // (GKM-104, MAIL-135): the store writes nothing into it, not even to recover or
+            // rebuild; its sync is held back too (GKM-103, MAIL-126).
+            let hold = sync.checkPlacement(of: chosen.mailFolder)
+            let opened = try await MailStore.open(chosen, readOnlyReason: hold?.readOnlyText)
             store = opened
             browser.attach(opened)
             actions.attach(opened)
@@ -221,17 +245,20 @@ final class AppModel {
             selection = place?.selection ?? .category(.focused)
             await browser.setScope(selection.scope)
             try await attention.attach(opened)
-            if let current = sending, sendingFolder != opened.locations.mailFolder {
-                // Another mail folder was chosen: its drafts and outbox are its own.
+            if let current = sending, sendingFolder != opened.locations.mailFolder || sendingReadOnlyReason != opened.readOnlyReason {
+                // Another mail folder was chosen, or this one is read-only now (or no longer):
+                // its drafts and outbox are its own.
                 await current.stop()
                 sending = nil
             }
             if sending == nil {
-                let sending = try MailSending(locations: opened.locations, credentials: KeychainCredentials())
+                let sending = try MailSending(locations: opened.locations, credentials: KeychainCredentials(),
+                                              readOnlyReason: opened.readOnlyReason)
                 sending.start()
                 await sending.refreshDrafts()
                 self.sending = sending
                 sendingFolder = opened.locations.mailFolder
+                sendingReadOnlyReason = opened.readOnlyReason
             }
             senders.unsubscribe.sending = sending
             try await reload()
@@ -321,7 +348,7 @@ final class AppModel {
 
     /// File ▸ Import Messages…: `.eml` files and folders of them, into "On My Mac".
     func importMessages(from urls: [URL]) async {
-        guard let store, !isImporting else { return }
+        guard let store, !isImporting, !refuseWrite() else { return }
         isImporting = true
         defer { isImporting = false }
         let report = await MailImporter.importMessages(from: urls, into: store)

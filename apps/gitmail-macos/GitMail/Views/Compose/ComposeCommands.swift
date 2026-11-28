@@ -143,8 +143,8 @@ struct ComposeToolbar: ToolbarContent {
                 .help("Forward (⇧⌘F)")
                 .disabled(!model.canAnswer)
             Button { open { await model.composeNew() } } label: { Label("New Message", systemImage: "square.and.pencil") }
-                .help("New Message (⌘N)")
-                .disabled(model.sending == nil)
+                .help(model.writeRefusal ?? "New Message (⌘N)")
+                .disabled(model.sending == nil || !model.canWrite)
         }
     }
 

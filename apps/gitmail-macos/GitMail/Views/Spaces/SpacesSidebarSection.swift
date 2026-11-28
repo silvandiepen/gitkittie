@@ -46,6 +46,8 @@ struct SpacesSidebarSection: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.accent)
+                .disabled(!model.canWrite)
+                .help(model.writeRefusal ?? "")
                 .padding(.vertical, 2)
                 .selectionDisabled()
                 .help("Collect mail about a project, person or company from every account")

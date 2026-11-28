@@ -268,6 +268,8 @@ private struct NoMailView: View {
                 .frame(maxWidth: 320)
             HStack(spacing: 12) {
                 Button("Import Messages…") { Task { await Platform.importMessages(into: model) } }
+                    .disabled(!model.canWrite)
+                    .help(model.writeRefusal ?? "")
                 if let folder = model.mailFolder {
                     Button("Show Mail Folder") { Platform.reveal(folder) }
                 }

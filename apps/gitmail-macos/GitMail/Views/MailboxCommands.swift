@@ -39,8 +39,11 @@ struct MailboxCommands: Commands {
             .keyboardShortcut("f", modifiers: [.command, .option])
         }
         CommandMenu("Mailbox") {
+            // No shortcut, so these may be disabled while the mail folder is read-only (GKM-104).
             Button("Add Account…") { requests.accountSheet = .add }
+                .disabled(!model.canWrite)
             Button("New Space…") { requests.spaceSheet = .create }
+                .disabled(!model.canWrite)
             Divider()
             // As in Apple Mail's Get All New Mail.
             Button("Sync Now") {

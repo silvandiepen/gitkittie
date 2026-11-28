@@ -24,6 +24,16 @@ enum MenuCommand: Equatable {
     case messageAction
 }
 
+extension MenuCommand {
+    /// True for the commands that write into the mail folder: a draft, an import.
+    var writesMailFolder: Bool {
+        switch self {
+        case .newMessage, .answer, .importMessages: true
+        case .searchMail, .syncNow, .messageAction: false
+        }
+    }
+}
+
 extension AppModel {
     /// Why `command` can't run now, in words for the alert; nil when it can.
     func unavailableReason(_ command: MenuCommand) -> String? {
@@ -32,6 +42,9 @@ extension AppModel {
         case .failed: return "Your mail folder couldn’t be opened, so this can’t be done."
         case .ready: break
         }
+        // A command that writes into the mail folder can't while it is read-only (GKM-104):
+        // the one gate, in the words of the held notice.
+        if command.writesMailFolder, let reason = writeRefusal { return reason }
         switch command {
         case .newMessage:
             return sending == nil ? "Your mail is still opening. Try again in a moment." : nil
@@ -47,6 +60,7 @@ extension AppModel {
         case .searchMail:
             return nil
         case .syncNow:
+            if let hold = sync.folderHold?.readOnlyText { return hold }
             guard !sync.isRunning else { return nil }
             return accounts.contains(where: { $0.connection != nil })
                 ? "Your accounts aren’t syncing yet. Try again in a moment."

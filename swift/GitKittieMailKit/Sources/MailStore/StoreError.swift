@@ -39,9 +39,13 @@ public enum MailStoreError: Error, Equatable, CustomStringConvertible {
     /// Writing would leave less free space on the mail folder's disk than the sync's minimum
     /// (``FreeSpaceFloor``, GKM-091). Nothing of the batch was written.
     case diskNearlyFull(freeBytes: Int64, minimumFreeBytes: Int64)
+    /// The store was opened read-only (GKM-104, MAIL-135): nothing is written into the mail
+    /// folder. The text says why, in words for the person.
+    case readOnly(String)
 
     public var description: String {
         switch self {
+        case .readOnly(let reason): return reason
         case .unsafePathComponent(let s): return "Unsafe path component: \(s.debugDescription)"
         case .deviceStateInsideMailFolder: return "The index and sync state must live outside the mail folder."
         case .integrityMismatch(let path): return "File does not match its recorded hash: \(path)"

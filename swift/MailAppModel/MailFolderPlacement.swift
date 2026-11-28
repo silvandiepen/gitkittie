@@ -76,14 +76,25 @@ extension MailFolderPlacement {
         }
     }
 
+    /// Where the folder is, in the words of both texts below.
+    private var words: (place: String, away: String)? {
+        switch self {
+        case .onThisDevice: nil
+        case .iCloudDrive: ("in iCloud Drive", "out of iCloud Drive")
+        case .cloudStorage: ("in a folder another app syncs", "out of that app’s folder")
+        }
+    }
+
     /// The notice: what happened, that nothing was touched, and what to do.
     var text: String? {
-        let place: String, away: String
-        switch self {
-        case .onThisDevice: return nil
-        case .iCloudDrive: (place, away) = ("in iCloud Drive", "out of iCloud Drive")
-        case .cloudStorage: (place, away) = ("in a folder another app syncs", "out of that app’s folder")
-        }
-        return "Your mail folder is \(place), where Mail can’t write safely yet, so syncing with your provider is paused. The mail in the folder is untouched. Move the folder \(away) in the Finder and choose it again in Settings ▸ Storage, or use the default mail folder."
+        guard let (place, away) = words else { return nil }
+        return "Your mail folder is \(place), where Mail can’t write safely yet, so syncing with your provider is paused and the folder is read-only: you can read and search your mail, but not write, import, sort into spaces or send. The mail in the folder is untouched. Move the folder \(away) in the Finder and choose it again in Settings ▸ Storage, or use the default mail folder."
+    }
+
+    /// What a refused action says (GKM-104, MAIL-135): the folder is read-only while it is here,
+    /// and how to change that. Also the text of the store's read-only error.
+    var readOnlyText: String? {
+        guard let (place, away) = words else { return nil }
+        return "Your mail folder is \(place), where Mail can’t write safely yet, so it is read-only and this can’t be done. Move the folder \(away) in the Finder and choose it again in Settings ▸ Storage, or use the default mail folder."
     }
 }

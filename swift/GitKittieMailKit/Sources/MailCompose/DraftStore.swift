@@ -35,6 +35,10 @@ public enum DraftSaveResult: Sendable, Equatable {
 public actor DraftStore {
     public nonisolated let folder: URL
     public nonisolated let deviceID: String
+    /// Non-nil when the drafts folder is only read (GKM-104, MAIL-135): why, in words for the
+    /// person. Saving, attaching and deleting then throw ``MailStoreError/readOnly(_:)``, and
+    /// listing does not adopt a sync tool's conflict files, which would write.
+    public nonisolated let readOnlyReason: String?
     public static let keptVersions = 20
     /// Per attachment. The composer limits the whole message (``MessageComposer/maximumSize``).
     public static let maximumAttachmentSize = 25 * 1024 * 1024
@@ -52,13 +56,18 @@ public actor DraftStore {
         return decoder
     }()
 
-    public init(folder: URL, deviceID: String) {
+    public init(folder: URL, deviceID: String, readOnlyReason: String? = nil) {
         self.folder = folder
         self.deviceID = deviceID
+        self.readOnlyReason = readOnlyReason
     }
 
-    public init(locations: StoreLocations) throws {
-        self.init(folder: locations.draftsFolder, deviceID: try locations.deviceIdentifier())
+    public init(locations: StoreLocations, readOnlyReason: String? = nil) throws {
+        self.init(folder: locations.draftsFolder, deviceID: try locations.deviceIdentifier(), readOnlyReason: readOnlyReason)
+    }
+
+    private func requireWritable() throws {
+        if let readOnlyReason { throw MailStoreError.readOnly(readOnlyReason) }
     }
 
     // MARK: - Reading
@@ -71,7 +80,7 @@ public actor DraftStore {
         var drafts: [ComposeDraft] = []
         for name in try fileManager.contentsOfDirectory(atPath: folder.path) {
             guard let id = DraftID(name), name == id.rawValue else { continue }
-            try adoptSyncConflicts(of: id)
+            if readOnlyReason == nil { try adoptSyncConflicts(of: id) }
             if let draft = try? read(directory(of: id).appendingPathComponent("draft.json")) {
                 drafts.append(draft)
             }
@@ -104,6 +113,7 @@ public actor DraftStore {
     /// Saves `draft` as the revision after `draft.revision`, unless the stored draft has moved
     /// past it (then a conflict copy) or nothing changed.
     public func save(_ draft: ComposeDraft, now: Date = Date()) throws -> DraftSaveResult {
+        try requireWritable()
         let directory = directory(of: draft.id)
         let headURL = directory.appendingPathComponent("draft.json")
         let current = FileManager.default.fileExists(atPath: headURL.path) ? try read(headURL) : nil
@@ -127,6 +137,7 @@ public actor DraftStore {
 
     /// Adds a file to the draft's attachment folder and returns the reference to put on it.
     public func addAttachment(_ data: Data, filename: String, mimeType: String, to id: DraftID) throws -> DraftAttachment {
+        try requireWritable()
         guard data.count <= Self.maximumAttachmentSize else {
             throw ComposeError.tooLarge(bytes: data.count, limit: Self.maximumAttachmentSize)
         }
@@ -154,6 +165,7 @@ public actor DraftStore {
 
     /// Removes a draft and everything with it: after it was queued for sending, or discarded.
     public func delete(_ id: DraftID) throws {
+        try requireWritable()
         let directory = directory(of: id)
         guard FileManager.default.fileExists(atPath: directory.path) else { return }
         try FileManager.default.removeItem(at: directory)

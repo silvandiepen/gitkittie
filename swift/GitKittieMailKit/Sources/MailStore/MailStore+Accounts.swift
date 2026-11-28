@@ -17,6 +17,7 @@ extension MailStore {
     /// Disconnects an account: forgets this device's sync state for it, and keeps or removes
     /// its mail. The sync for the account must be stopped first.
     public func disconnectAccount(_ id: MailAccountID, mail disposition: AccountMailDisposition) throws {
+        try requireWritable()
         let name = try SafePath.component(id.rawValue)
         let accountFolder = locations.accountsFolder.appendingPathComponent(name, isDirectory: true)
         let fileManager = FileManager.default
@@ -89,6 +90,7 @@ extension MailStore {
 
     /// Deletes blobs that no remaining message links to.
     func removeUnreferencedBlobs() throws {
+        try requireWritable()
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: locations.blobsFolder.path) else { return }
         let accountFolders = fileManager.fileExists(atPath: locations.accountsFolder.path)
