@@ -155,6 +155,17 @@ call, made with the content in view.
 
 ---
 
+### 9. The full-screen review viewer; Changes needs a message (GITKITTIE-126/127/095)
+
+Tapping a review picture opens a full-screen pager over the files the request screen shows, with
+zoom, swipe-down to close and Approve / Changes / Reject in the thumb zone; a decision moves on to
+the next waiting file with Undo. Changes is never sent without a comment, and earlier comments of
+the request are offered to reuse. Rows, bars and floating controls take the theme's navy `bar`
+instead of the system greys. The rules and the reasons are shared with the Mac app: see the Mac's
+[Decision 19](../../gitkanban-macos/docs/Decisions.md).
+
+**Status.** Accepted.
+
 ## Open questions
 
 - **OAuth sign-in:** move from a pasted personal access token to provider OAuth. (Open — PAT-only
