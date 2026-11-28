@@ -3,10 +3,12 @@ import GitKittieKit
 import UserNotifications
 
 // Notifications: a review request that newly needs an answer, and (when asked for) cards
-// that are new or moved on a board. The app has no server that pushes to the phone, so it
-// notices these itself: when it is open, on its regular checks, and on iOS whenever the
-// system grants a background refresh. What it found before is remembered, so each thing
-// is announced once.
+// that are new or moved on a board. Review requests on a repo with instant notifications
+// arrive as pushes from the relay (AppModel+Push.swift). The app also notices them itself,
+// as the fallback: when it is open, on its regular checks, and on iOS whenever the system
+// grants a background refresh. What it found before, and what a push already announced, is
+// remembered, so each thing is announced once. A request's `notify:` sets how loudly:
+// urgent is time-sensitive, silent only counts on the badge.
 
 enum NotificationCategory {
     static let reviews = "gitkanban.reviews"
@@ -16,16 +18,30 @@ enum NotificationCategory {
 
 /// Receives taps on notifications and shows banners while the app is in front.
 final class NotificationRouter: NSObject, UNUserNotificationCenterDelegate {
-    let onOpenReviews: @MainActor () -> Void
-    init(onOpenReviews: @escaping @MainActor () -> Void) { self.onOpenReviews = onOpenReviews }
+    /// A notification about reviews was tapped; with the request it names, when it names one.
+    let onOpenReviews: @MainActor (PushedReview?) -> Void
+    /// A push about a request is being shown while the app is in front.
+    let onPushShown: @MainActor (PushedReview) -> Void
+
+    init(onOpenReviews: @escaping @MainActor (PushedReview?) -> Void, onPushShown: @escaping @MainActor (PushedReview) -> Void) {
+        self.onOpenReviews = onOpenReviews
+        self.onPushShown = onPushShown
+    }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+        if notification.request.trigger is UNPushNotificationTrigger,
+           let review = PushedReview(userInfo: notification.request.content.userInfo) {
+            await onPushShown(review)
+        }
+        return [.banner, .list, .sound]
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        if response.notification.request.content.categoryIdentifier == NotificationCategory.reviews {
-            await onOpenReviews()
+        let content = response.notification.request.content
+        if let review = PushedReview(userInfo: content.userInfo) {
+            await onOpenReviews(review)
+        } else if content.categoryIdentifier == NotificationCategory.reviews {
+            await onOpenReviews(nil)
         }
     }
 }
@@ -47,10 +63,10 @@ extension AppModel {
         notificationSettingsVersion += 1
     }
 
-    /// Tell me when a review request needs an answer.
+    /// Tell me when a review request needs an answer. Off also stops instant notifications.
     public var notifiesReviews: Bool {
         get { setting(Self.reviewsKey, default: true) }
-        set { set(Self.reviewsKey, newValue) }
+        set { set(Self.reviewsKey, newValue); Task { await reviewNotificationsDidChange() } }
     }
 
     /// Tell me when cards are new or moved on a board.
@@ -72,7 +88,15 @@ extension AppModel {
     /// their taps are handled.
     public func startNotifications() async {
         guard notificationRouter == nil else { return }
-        let router = NotificationRouter { [weak self] in self?.wantsReviews = true }
+        let router = NotificationRouter(
+            onOpenReviews: { [weak self] review in
+                guard let self else { return }
+                if let review { Task { await self.openPushedReview(review) } } else { self.wantsReviews = true }
+            },
+            onPushShown: { [weak self] review in
+                self?.notePushAnnounced(review)
+                Task { await self?.checkForNews() }
+            })
         notificationRouter = router
         UNUserNotificationCenter.current().delegate = router
         await refreshNotificationPermission()
@@ -95,11 +119,12 @@ extension AppModel {
         guard notificationRouter != nil else { return false }
         let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
         await refreshNotificationPermission()
-        if granted { await updateBadge() }
+        if granted { await updateBadge(); await registerForReviewPushes() }
         return granted
     }
 
-    private func post(title: String, body: String, category: String, id: String) async {
+    private func post(title: String, body: String, category: String, id: String,
+                      level: ReviewNotify = .normal, userInfo: [AnyHashable: Any] = [:]) async {
         guard notificationRouter != nil, notificationsAllowed == true else { return }
         let content = UNMutableNotificationContent()
         content.title = title
@@ -107,6 +132,9 @@ extension AppModel {
         content.sound = .default
         content.categoryIdentifier = category
         content.threadIdentifier = category
+        content.userInfo = userInfo
+        // Urgent breaks through Focus (the Time Sensitive Notifications entitlement).
+        content.interruptionLevel = level == .urgent ? .timeSensitive : .active
         try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
     }
 
@@ -132,6 +160,17 @@ extension AppModel {
         return "\(summary.waitingDescription) waiting"
     }
 
+    /// Which newly open requests the app should announce itself: not silent ones, not ones
+    /// below the level asked for, and not ones a push (`pushed`, notification ids) or an
+    /// earlier notification still on screen (`delivered`) already told about.
+    static func toAnnounce(_ requests: [ReviewRequest], pushed: Set<String>, delivered: Set<String>,
+                           announces: (ReviewNotify) -> Bool) -> [ReviewRequest] {
+        requests.filter { request in
+            let id = reviewNotificationID(repo: request.origin, folder: request.folder)
+            return announces(request.notify) && !pushed.contains(id) && !delivered.contains(id)
+        }
+    }
+
     /// The inbox was loaded: announce requests that newly need an answer.
     func reviewInboxDidLoad() async {
         let open = openReviewRequests
@@ -143,20 +182,29 @@ extension AppModel {
         if notificationsAllowed == nil, notifiesReviews, !open.isEmpty { await requestNotificationPermission() }
         await updateBadge()
         guard notifiesReviews, !fresh.isEmpty else { return }
-        let requests = open.filter { fresh.contains($0.ref.id) }
+        let delivered = Set(await UNUserNotificationCenter.current().deliveredNotifications().map(\.request.identifier))
+        let requests = Self.toAnnounce(open.filter { fresh.contains($0.ref.id) }, pushed: Set(pushAnnounced),
+                                       delivered: delivered, announces: announces)
+        guard !requests.isEmpty else { return }
         func board(_ request: ReviewRequest) -> String {
             reviewInbox.first { $0.repoID == request.origin && $0.requests.contains { $0.folder == request.folder } }?.boardName ?? "Review"
         }
         if requests.count <= 3 {
             for request in requests {
+                // The same id as the relay's push for it, and what a tap needs to open it.
+                let pushed = PushedReview(repo: request.origin, folder: request.folder, id: request.id,
+                                          board: board(request), level: request.notify)
                 await post(title: "\(board(request)): \(request.title)",
                            body: request.question ?? Self.waitingLine(request.summary),
-                           category: NotificationCategory.reviews, id: "review|\(request.ref.id)")
+                           category: NotificationCategory.reviews,
+                           id: reviewNotificationID(repo: request.origin, folder: request.folder),
+                           level: request.notify, userInfo: pushed.userInfo)
             }
         } else {
             let boards = Set(requests.map(board)).sorted().joined(separator: ", ")
             await post(title: "\(requests.count) new review requests", body: boards,
-                       category: NotificationCategory.reviews, id: "reviews|\(Date().timeIntervalSince1970)")
+                       category: NotificationCategory.reviews, id: "reviews|\(Date().timeIntervalSince1970)",
+                       level: requests.contains { $0.notify == .urgent } ? .urgent : .normal)
         }
     }
 

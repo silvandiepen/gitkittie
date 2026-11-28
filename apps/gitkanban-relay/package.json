@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Cloudflare Worker that turns a repo's GitHub push webhook into live \"these paths changed\" events for the GitKanban apps.",
+  "description": "Cloudflare Worker for the GitKanban apps: live \"these paths changed\" events from push webhooks, and push notifications for review requests (GitHub App + APNs).",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -12,7 +12,8 @@
     "e2e": "node tools/e2e.mjs"
   },
   "dependencies": {
-    "hono": "^4.13.17"
+    "hono": "^4.13.17",
+    "@gitkittie/gitkanban-core": "file:../../packages/gitkanban-core"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261120.1",

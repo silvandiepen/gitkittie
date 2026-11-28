@@ -90,6 +90,7 @@ extension AgentBoard {
         out["question"] = request.question
         out["requested_by"] = request.requestedBy
         out["requested_at"] = request.requestedAt
+        out["notify"] = request.notify.rawValue
         return out
     }
 
@@ -163,8 +164,9 @@ extension AgentBoard {
     /// request the items and questions are added to it (a new round), which is how a redo
     /// is submitted. A request holds files to judge, questions to answer, or both.
     public func createReview(request existing: String?, card: String?, title: String?, question: String?, notes: String?,
-                             uploads: [ReviewUpload], questions: [Review.NewQuestion] = [], agent: String) async throws -> [String: Any] {
-        guard !uploads.isEmpty || !questions.isEmpty else {
+                             uploads: [ReviewUpload], questions: [Review.NewQuestion] = [], notify: ReviewNotify? = nil,
+                             agent: String) async throws -> [String: Any] {
+        guard !uploads.isEmpty || !questions.isEmpty || (existing != nil && notify != nil) else {
             throw AgentBoardError("A review request needs at least one item or question.")
         }
         let shell = try await shell()
@@ -222,17 +224,20 @@ extension AgentBoard {
         for (name, data) in files {
             try await source.writeData(path: path(requestFolder, name), data: data, message: "chore(tasks): add \(name) to review \(id)")
         }
-        let text: String
+        var text: String
         if let current {
             text = try Review.appendItems(try await source.readText(current.path), items, questions: questions)
+            if let notify { text = try Review.setNotify(text, notify) }
         } else {
             text = try Review.render(id: id, project: shell.project.name, card: card, title: title ?? id, question: question,
-                                     requestedBy: agent, at: now(), notes: notes, items: items, questions: questions)
+                                     requestedBy: agent, at: now(), notes: notes, items: items, questions: questions,
+                                     notify: notify)
         }
         try await source.write(path: path(requestFolder, Review.fileName), text: text,
                                message: current == nil ? "chore(tasks): request review \(id)" : "chore(tasks): add a round to review \(id)")
         var out: [String: Any] = ["request": id, "folder": requestFolder, "items": items.map(\.id)]
         if !questions.isEmpty { out["questions"] = questions.map(\.id) }
+        if let notify { out["notify"] = notify.rawValue }
         return out
     }
 

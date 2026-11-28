@@ -250,6 +250,8 @@ private struct HomeView: View {
     @State private var browseRepo: AddedRepo?
     @State private var storageRepo: AddedRepo?
     @State private var showReviews = false
+    /// The reviews sheet's navigation: a tapped notification about one request starts on it.
+    @State private var reviewPath: [ReviewRef] = []
     @Environment(\.scenePhase) private var scenePhase
 
     /// "N tasks · 2 In Progress · 5 In Review" for a board row (loads lazily from listings).
@@ -511,7 +513,9 @@ private struct HomeView: View {
         // Reviews on every board: on launch, whenever the app comes forward, and when a
         // board is added or removed.
         .task(id: "\(scenePhase == .active)\n\(model.reviewInboxKey)") { if scenePhase == .active { await model.loadReviewInbox() } }
-        .sheet(isPresented: $showReviews) { NavigationStack { ReviewInboxView() }.environment(model) }
+        .sheet(isPresented: $showReviews, onDismiss: { reviewPath = [] }) {
+            NavigationStack(path: $reviewPath) { ReviewInboxView() }.environment(model)
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -536,9 +540,12 @@ private struct HomeView: View {
         }
         .sheet(isPresented: $showAISettings) { AISettingsSheet().environment(model) }
         .sheet(isPresented: $showNotificationSettings) { NotificationSettingsSheet().environment(model) }
-        // A tapped notification about reviews opens them.
+        // A tapped notification about reviews opens them, at the request it names.
         .onChange(of: model.wantsReviews, initial: true) { _, wants in
-            if wants { model.wantsReviews = false; showReviews = true }
+            guard wants else { return }
+            model.wantsReviews = false
+            if let ref = model.reviewsFocusRequest { reviewPath = [ref]; model.reviewsFocusRequest = nil }
+            showReviews = true
         }
         .sheet(isPresented: $showAdd) { NavigationStack { AddRepoView() }.environment(model) }
         .sheet(isPresented: $showAddServer) {

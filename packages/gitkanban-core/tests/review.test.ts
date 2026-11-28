@@ -12,6 +12,7 @@ import {
   ReviewItemNotFoundError,
   ReviewQuestionNotFoundError,
   summarizeReview,
+  waitingEntries,
 } from '../src/index.js'
 
 const REVIEW = `---
@@ -73,6 +74,21 @@ describe('parseReview', () => {
     expect(review.title).toBe('folder-id')
     expect(review.items).toHaveLength(1)
     expect(review.items[0]).toMatchObject({ id: 'item-1', kind: 'image', status: 'pending' })
+  })
+
+  it('reads notify, normal when absent or unknown', () => {
+    expect(parseReview(REVIEW).notify).toBe('normal')
+    expect(parseReview('---\nnotify: urgent\n---\n').notify).toBe('urgent')
+    expect(parseReview('---\nnotify: Silent\n---\n').notify).toBe('silent')
+    expect(parseReview('---\nnotify: loud\n---\n').notify).toBe('normal')
+  })
+
+  it('lists what still waits for the reviewer', () => {
+    expect(waitingEntries(parseReview(REVIEW))).toEqual(['item:dog-v1'])
+    const questions = parseReview(
+      '---\nquestions:\n  - id: q1\n    question: A?\n    options: [a, b]\n  - id: q2\n    question: B?\n    options: [a]\n    answer: [a]\n    answered_at: 2026-11-08T15:00:00Z\n---\n',
+    )
+    expect(waitingEntries(questions)).toEqual(['question:q1'])
   })
 
   it('summarizes', () => {

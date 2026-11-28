@@ -32,10 +32,20 @@ extension AppModel {
     /// Register a channel on the relay, point a push webhook on the repo at it, and commit
     /// the channel into the repo so every device that reads the repo can subscribe.
     public func enableLiveUpdates() async {
-        guard let repo = activeRepo, let source, let connection, canEnableLiveUpdates else { return }
+        guard let repo = activeRepo, canEnableLiveUpdates else { return }
+        if await enableLiveUpdates(on: repo) { startWatching() }
+    }
+
+    /// The same for any added provider repo, open or not: instant review notifications on a
+    /// GitLab board use its channel. Returns whether the channel is on.
+    @discardableResult
+    func enableLiveUpdates(on repo: AddedRepo) async -> Bool {
+        // The open repo writes through the source the board uses; any other through its own.
+        let open = repo.id == activeRepo?.id ? self.source : nil
+        guard !repo.kind.isFolder, let source = open ?? source(for: repo), let connection else { return false }
         guard let relay = URL(string: relayURL), relay.scheme?.hasPrefix("http") == true else {
             errorMessage = "Enter the relay's address first."
-            return
+            return false
         }
         errorMessage = nil
         do {
@@ -57,9 +67,10 @@ extension AppModel {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
             let text = String(decoding: try encoder.encode(config), as: UTF8.self) + "\n"
             try await source.write(path: RelayConfig.path, text: text, message: "Turn on live updates")
-            startWatching()
+            return true
         } catch {
             errorMessage = "Live updates were not turned on: \(error.localizedDescription)"
+            return false
         }
     }
 

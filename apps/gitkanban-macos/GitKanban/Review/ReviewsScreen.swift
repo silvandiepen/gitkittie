@@ -73,12 +73,16 @@ struct ReviewsScreen: View {
         }
         .task {
             if !model.hasLoadedReviewInbox { await model.loadReviewInbox() }
+            if let request = model.reviewsFocusRequest { selected = request; model.reviewsFocusRequest = nil }
             if selected == nil { selected = startingRequest }
         }
         .onChange(of: model.reviewInbox) { _, _ in
             if selected == nil { selected = startingRequest }
         }
         .onChange(of: model.reviewsFocusBoard) { _, _ in selected = startingRequest }
+        .onChange(of: model.reviewsFocusRequest) { _, request in
+            if let request { selected = request; model.reviewsFocusRequest = nil }
+        }
         .sheet(item: $commentSheet) { ReviewCommentSheet(request: $0) }
         .confirmationDialog("Remove “\(removing?.title ?? "")”?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             Button("Remove Request", role: .destructive) {

@@ -7,7 +7,9 @@ import UIKit
 
 @main
 struct GitKanbanApp: App {
-    @State private var model = AppModel.shared(migratesLegacyStorage: true)
+    /// Owns the model, so a push that wakes the app in the background reaches it before any view exists.
+    @UIApplicationDelegateAdaptor(TasksAppDelegate.self) private var appDelegate
+    private var model: AppModel { appDelegate.model }
     @State private var network = NetworkWatcher()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -39,8 +41,9 @@ struct GitKanbanApp: App {
                     print("AI-DIAG done")
                 }
                 #endif
-                // `gitkittie-tasks://new?…`: another app's Make Task (GitKittie Mail, GKM-033).
-                .onOpenURL { url in model.openTaskRequest(url) }
+                // `gitkittie-tasks://new?…`: another app's Make Task (GitKittie Mail, GKM-033);
+                // `gitkittie-tasks://github-installed`: back from installing GitKittie Tasks on GitHub.
+                .onOpenURL { url in model.openURL(url) }
                 .tint(Theme.accent)
                 .preferredColorScheme(CaptureHooks.colorScheme ?? .dark)
                 .onChange(of: scenePhase) { _, phase in
@@ -66,6 +69,8 @@ struct GitKanbanApp: App {
                     } else {
                         await model.restore()
                         await model.startNotifications()
+                        // Instant review notifications: the token arrives in the delegate.
+                        UIApplication.shared.registerForRemoteNotifications()
                     }
                 }
                 .task {
@@ -116,6 +121,33 @@ struct GitKanbanApp: App {
             await model.flushOutbox()
             if token != .invalid { UIApplication.shared.endBackgroundTask(token) }
         }
+    }
+}
+
+/// The app's UIKit side: it owns the model and takes what the system hands the app for
+/// push notifications (the device token, and pushes that arrive in the background).
+@MainActor
+final class TasksAppDelegate: NSObject, UIApplicationDelegate {
+    let model = AppModel.shared(migratesLegacyStorage: true)
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        #if DEBUG
+        let environment = "sandbox"
+        #else
+        let environment = "production"
+        #endif
+        Task { await model.didRegisterForRemoteNotifications(deviceToken: deviceToken, environment: environment) }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        // No token (no network, or no push entitlement in this build): the app's own checks still run.
+    }
+
+    /// A push woke the app (or reached it while open): note it and catch up the inbox and badge.
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+        await model.startNotifications()
+        await model.didReceiveRemoteNotification(userInfo)
+        return .newData
     }
 }
 
