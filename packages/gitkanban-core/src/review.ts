@@ -29,6 +29,16 @@ export const REVIEW_FILE = 'review.md'
 export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'changes-requested'
 export type ReviewKind = 'image' | 'model' | 'audio' | 'animation' | 'video' | 'other'
 
+/**
+ * How loudly a request announces itself when it newly needs an answer (`notify:` in the
+ * frontmatter). `urgent` is time-sensitive and breaks through Focus, `normal` (the default
+ * when absent or unknown) is an ordinary notification, `silent` only counts on the badge
+ * and in the Reviews list.
+ */
+export type ReviewNotify = 'urgent' | 'normal' | 'silent'
+
+export const REVIEW_NOTIFY_LEVELS: readonly ReviewNotify[] = ['urgent', 'normal', 'silent']
+
 export const REVIEW_STATUSES: readonly ReviewStatus[] = ['pending', 'approved', 'rejected', 'changes-requested']
 export const REVIEW_KINDS: readonly ReviewKind[] = ['image', 'model', 'audio', 'animation', 'video', 'other']
 
@@ -92,6 +102,8 @@ export interface ReviewRequest {
   question?: string
   requestedBy?: string
   requestedAt?: string
+  /** How loudly the request is announced; `normal` when the frontmatter has no `notify`. */
+  notify: ReviewNotify
   items: ReviewItem[]
   questions: ReviewQuestion[]
   /** Free-form notes below the frontmatter. */
@@ -127,6 +139,12 @@ function num(value: unknown): number | undefined {
 function parseStatus(value: unknown): ReviewStatus {
   const s = str(value)
   return s && (REVIEW_STATUSES as readonly string[]).includes(s) ? (s as ReviewStatus) : 'pending'
+}
+
+/** A `notify:` value; anything missing or unknown is `normal`. */
+export function parseNotify(value: unknown): ReviewNotify {
+  const s = str(value)?.toLowerCase()
+  return s && (REVIEW_NOTIFY_LEVELS as readonly string[]).includes(s) ? (s as ReviewNotify) : 'normal'
 }
 
 function parseKind(value: unknown, file: string): ReviewKind {
@@ -245,10 +263,23 @@ export function parseReview(text: string, fallbackId = 'review'): ReviewRequest 
     question: str(data.question),
     requestedBy: str(data.requested_by),
     requestedAt: str(data.requested_at),
+    notify: parseNotify(data.notify),
     items,
     questions,
     body,
   }
+}
+
+/**
+ * What still waits for the reviewer: ids of items without a decision and of questions
+ * without an answer (`item:<id>` / `question:<id>`, since the two may share an id in a
+ * hand-written file). Empty when the request needs no answer.
+ */
+export function waitingEntries(review: ReviewRequest): string[] {
+  return [
+    ...review.items.filter((item) => item.status === 'pending').map((item) => `item:${item.id}`),
+    ...review.questions.filter((question) => !isQuestionAnswered(question)).map((question) => `question:${question.id}`),
+  ]
 }
 
 export function summarizeReview(review: ReviewRequest): ReviewSummary {
