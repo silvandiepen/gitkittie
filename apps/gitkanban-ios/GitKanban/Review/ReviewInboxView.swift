@@ -14,53 +14,63 @@ struct ReviewInboxView: View {
 
     var body: some View {
         List {
-            if model.reviewInbox.isEmpty {
-                if model.isLoadingReviewInbox {
-                    HStack(spacing: 10) { ProgressView(); Text("Looking for reviews").foregroundStyle(.secondary) }
-                        .listRowBackground(Color.clear)
-                } else {
-                    ContentUnavailableView("No review requests", systemImage: "checkmark.seal",
-                                           description: Text("Agents haven't asked for a review on any of your boards."))
-                        .listRowBackground(Color.clear)
-                }
-            } else if model.pendingReviewTotal == 0 {
-                Section {
-                    Label("Nothing is waiting for you", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
-                }
-            } else {
-                Section {
-                    Button {
-                        run = ReviewRun(refs: model.openReviewRequests.map(\.ref))
-                    } label: {
-                        Label("Review All (\(model.openReviewRequests.count))", systemImage: "play.fill")
-                            .font(.body.weight(.semibold))
+            Group {
+                if model.reviewInbox.isEmpty {
+                    if model.isLoadingReviewInbox {
+                        HStack(spacing: 10) { ProgressView(); Text("Looking for reviews").foregroundStyle(.secondary) }
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ContentUnavailableView("No review requests", systemImage: "checkmark.seal",
+                                               description: Text("Agents haven't asked for a review on any of your boards."))
+                            .listRowBackground(Color.clear)
                     }
-                    .accessibilityIdentifier("reviewAllButton")
-                } footer: {
-                    Text("\(model.pendingReviewTotal) waiting in \(model.openReviewRequests.count) request\(model.openReviewRequests.count == 1 ? "" : "s").")
-                }
-            }
-            ForEach(model.reviewInbox) { board in
-                let requests = showDecided ? board.requests : board.open
-                if !requests.isEmpty {
+                } else if model.pendingReviewTotal == 0 {
                     Section {
-                        ForEach(requests) { request in
-                            NavigationLink(value: request.ref) { ReviewRequestRow(request: request) }
-                                .reviewRequestActions(request)
+                        Label("Nothing is waiting for you", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+                    }
+                } else {
+                    Section {
+                        Button {
+                            run = ReviewRun(refs: model.openReviewRequests.map(\.ref))
+                        } label: {
+                            Label("Review All (\(model.openReviewRequests.count))", systemImage: "play.fill")
+                                .font(.body.weight(.semibold))
                         }
-                    } header: {
-                        HStack(spacing: 6) {
-                            Image(systemName: board.icon ?? BoardAppearance.defaultIcon).font(.caption2)
-                            Text(board.boardName).textCase(nil)
+                        .accessibilityIdentifier("reviewAllButton")
+                    } footer: {
+                        Text("\(model.pendingReviewTotal) waiting in \(model.openReviewRequests.count) request\(model.openReviewRequests.count == 1 ? "" : "s").")
+                    }
+                }
+                ForEach(model.reviewInbox) { board in
+                    let requests = showDecided ? board.requests : board.open
+                    if !requests.isEmpty {
+                        Section {
+                            ForEach(requests) { request in
+                                NavigationLink(value: request.ref) { ReviewRequestRow(request: request) }
+                                    .reviewRequestActions(request)
+                            }
+                        } header: {
+                            HStack(spacing: 6) {
+                                Image(systemName: board.icon ?? BoardAppearance.defaultIcon).font(.caption2)
+                                Text(board.boardName).textCase(nil)
+                                if board.pending > 0 {
+                                    Text("\(board.pending) waiting").textCase(nil).monospacedDigit()
+                                        .font(.caption2.weight(.bold))
+                                        .padding(.horizontal, 6).padding(.vertical, 1)
+                                        .background(Theme.accentFill, in: Capsule()).foregroundStyle(.white)
+                                }
+                            }
                         }
                     }
                 }
-            }
-            if model.hasReviews {
-                Section {
-                    Toggle("Show decided requests", isOn: $showDecided)
+                if model.hasReviews {
+                    Section {
+                        Toggle("Show decided requests", isOn: $showDecided)
+                    }
                 }
             }
+            // Rows on the navy, not the system grey (GITKITTIE-095).
+            .themedRows()
         }
         .themedList()
         .navigationTitle("Reviews")
@@ -137,7 +147,7 @@ struct ReviewRunView: View {
                         .accessibilityIdentifier("reviewNextButton")
                     }
                     .padding(.horizontal).padding(.vertical, 10)
-                    .background(.bar)
+                    .background(Theme.bar.ignoresSafeArea(edges: .bottom))
                 }
                 .confirmationDialog(
                     "\(waitingHere) \(pendingHere == 1 ? "has" : "have") no answer yet",
