@@ -24,6 +24,12 @@ export interface Device {
   appVersion: string;
   /** When the device last proved it may read the repo (ISO-8601). */
   verifiedAt: string;
+  /**
+   * Who registered it: SHA-256 of `<repo id>:<github login>` (lower case), so a review put on
+   * someone (`for:`) reaches only their devices. The login itself is not kept. Absent on a
+   * registration made before this, or when GitHub did not say.
+   */
+  loginKey?: string;
 }
 
 export type Fetch = (input: Request) => Promise<Response>;

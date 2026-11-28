@@ -32,7 +32,23 @@ export function isCurrent(device: Device, now: Date): boolean {
   return Number.isFinite(verified) && now.getTime() - verified < DEVICE_LIFETIME_DAYS * 86_400_000;
 }
 
-/** The devices that want `alert`. */
+/**
+ * The devices that want `alert`: current, at its level, and in its audience. A device whose
+ * person is one of the board's users (by `github:`) gets it when something newly waits for that
+ * user; any other device (no login recorded, or nobody on the board) when something newly waits
+ * for everyone.
+ */
 export function recipients(devices: Device[], alert: ReviewAlert, now: Date): Device[] {
-  return devices.filter((device) => isCurrent(device, now) && device.levels.includes(alert.level));
+  return devices.filter((device) => {
+    if (!isCurrent(device, now) || !device.levels.includes(alert.level)) return false;
+    const key = device.loginKey;
+    if (key && alert.audience.mapped.includes(key)) return alert.audience.logins.includes(key);
+    return alert.audience.others;
+  });
+}
+
+/** What a device's person is known by on a repo: SHA-256 hex of `<repo id>:<login>`, login in lower case. */
+export async function loginKey(repoID: number, login: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${repoID}:${login.trim().toLowerCase()}`));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }

@@ -90,6 +90,14 @@ export async function readableRepo(userToken: string, repo: string, fetcher: Fet
   return { repo: body.full_name, repoID: body.id, ownerID: body.owner.id };
 }
 
+/** The login of the person `userToken` belongs to (`GET /user`), or `null`. */
+export async function userLogin(userToken: string, fetcher: Fetch): Promise<string | null> {
+  const response = await fetcher(new Request(`${API}/user`, { headers: headers(userToken) }));
+  if (response.status !== 200) return null;
+  const { login } = (await response.json()) as { login?: unknown };
+  return typeof login === "string" && /^[A-Za-z0-9-]{1,39}$/.test(login) ? login : null;
+}
+
 /** The App's installation on `repo`, or `null` when the App is not installed there. */
 export async function repoInstallation(config: GitHubAppConfig, repo: string, fetcher: Fetch, now: number): Promise<number | null> {
   const response = await fetcher(new Request(`${API}/repos/${repo}/installation`, { headers: headers(await appJWT(config, now)) }));

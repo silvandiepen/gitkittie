@@ -41,8 +41,8 @@ import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { alertRequest, providerToken, send, wakeRequest, type APNsConfig, type Device, type SendOutcome } from "./apns.js";
-import { isCurrent, MAX_DEVICES_PER_REPO, parseDevice, recipients } from "./devices.js";
-import { installURL, readableRepo, repoInstallation, type GitHubAppConfig } from "./github.js";
+import { isCurrent, loginKey, MAX_DEVICES_PER_REPO, parseDevice, recipients } from "./devices.js";
+import { installURL, readableRepo, repoInstallation, userLogin, type GitHubAppConfig } from "./github.js";
 import { changeEvent } from "./push.js";
 import { alertsForPush, reviewPush, type ReviewAlert } from "./review-push.js";
 import { randomHex, sameSecret, verifiedClient, verify } from "./signature.js";
@@ -271,6 +271,9 @@ app.post("/github/devices", async (context) => {
   if (installation === null) {
     return context.json({ error: "not installed", installURL: installURL(config, repo), repoID: repo.repoID }, 409);
   }
+  // Who it is, so reviews put on someone reach only their devices; kept as a key, not the login.
+  const login = await userLogin(userToken, outbound);
+  if (login) device.loginKey = await loginKey(repo.repoID, login);
   const stub = context.env.GITHUB_REPO.get(context.env.GITHUB_REPO.idFromName(`github:${repo.repoID}`));
   const added = await stub.addDevice(repo.repo, device);
   if (!added) return context.json({ error: "too many devices on this repository" }, 429);

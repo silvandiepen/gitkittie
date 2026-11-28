@@ -6,8 +6,9 @@
 // without a decision, or a new question without an answer. Comparing the two versions
 // means nothing has to be remembered between pushes.
 
-import { parseReview, waitingEntries, type ReviewNotify } from "@gitkittie/gitkanban-core";
+import { parseFrontmatter, parseReview, waitingEntries, type ReviewNotify, type ReviewRequest } from "@gitkittie/gitkanban-core";
 import type { Fetch } from "./apns.js";
+import { loginKey } from "./devices.js";
 import { fileAt, installationToken, type GitHubAppConfig } from "./github.js";
 
 /** What a push notification about a review says. No file contents beyond the title. */
@@ -24,6 +25,71 @@ export interface ReviewAlert {
   board: string;
   title: string;
   level: ReviewNotify;
+  /** Who it newly waits for (`for:`), as login keys (see `loginKey`); never logins. */
+  audience: ReviewAudience;
+}
+
+/**
+ * Who an alert goes to. `mapped`: the keys of every board user with a `github:` login;
+ * `logins`: those of them something newly waits for; `others`: whether devices of anyone
+ * else get it (something newly waits for everyone).
+ */
+export interface ReviewAudience {
+  mapped: string[];
+  logins: string[];
+  others: boolean;
+}
+
+/** A board user as routing needs it: an id and maybe a GitHub login. */
+export interface RoutedUser {
+  id: string;
+  github?: string;
+}
+
+/** The board's effective users: the root README's, overlaid by the board README's (same id: the board's wins). */
+export function boardUsers(rootReadme: string | null, boardReadme: string | null): RoutedUser[] {
+  const read = (text: string | null): RoutedUser[] => {
+    if (!text) return [];
+    let data: Record<string, unknown>;
+    try {
+      data = parseFrontmatter(text).data;
+    } catch {
+      return [];
+    }
+    return (Array.isArray(data.users) ? data.users : []).flatMap((entry) => {
+      if (!entry || typeof entry !== "object") return [];
+      const user = entry as Record<string, unknown>;
+      if (typeof user.id !== "string" || user.id.length === 0) return [];
+      return [{ id: user.id, github: typeof user.github === "string" && user.github.length > 0 ? user.github : undefined }];
+    });
+  };
+  const merged = new Map<string, RoutedUser>();
+  for (const user of [...read(rootReadme), ...read(boardReadme)]) merged.set(user.id, user);
+  return [...merged.values()];
+}
+
+function newlyWaiting(before: ReviewRequest | null, after: ReviewRequest, user: string | null): boolean {
+  const was = before === null ? new Set<string>() : new Set(waitingEntries(before, user));
+  return waitingEntries(after, user).some((entry) => !was.has(entry));
+}
+
+/** Who a request newly waits for, per board user, given its text before (`null`: new) and after. */
+export async function reviewAudience(
+  repoID: number,
+  before: ReviewRequest | null,
+  after: ReviewRequest,
+  users: RoutedUser[],
+): Promise<ReviewAudience> {
+  const mapped: string[] = [];
+  const logins: string[] = [];
+  for (const user of users) {
+    if (!user.github) continue;
+    const key = await loginKey(repoID, user.github);
+    if (mapped.includes(key)) continue;
+    mapped.push(key);
+    if (newlyWaiting(before, after, user.id)) logins.push(key);
+  }
+  return { mapped, logins, others: newlyWaiting(before, after, null) };
 }
 
 const REVIEW_FILE = /^((?:[^/]+\/)*?([^/]+))\/review\/([^/]+)\/review\.md$/;
@@ -79,21 +145,38 @@ export function reviewPush(payload: unknown): ReviewPush | null {
   return { repo, repoID, installationID: typeof installation === "number" ? installation : null, before, after: push.after, paths };
 }
 
+/** The board folder of a review file's path (`Clients/Acme` for `Clients/Acme/review/x/review.md`). */
+export function boardFolder(path: string): string | null {
+  return REVIEW_FILE.exec(path)?.[1] ?? null;
+}
+
 /**
  * The alert for a review file, given its text before the push (`null` when it did not exist)
- * and after; `null` when nothing newly waits for the reviewer.
+ * and after, and the board's users; `null` when nothing newly waits for anyone. A request
+ * newly put on someone (`for:`) counts as new for them.
  */
-export function reviewAlert(repo: string, path: string, before: string | null, after: string): ReviewAlert | null {
+export async function reviewAlert(
+  repo: string,
+  path: string,
+  before: string | null,
+  after: string,
+  route: { repoID: number; users: RoutedUser[] } = { repoID: 0, users: [] },
+): Promise<ReviewAlert | null> {
   const match = REVIEW_FILE.exec(path);
   if (!match) return null;
   const [, , board, requestFolder] = match;
   const folder = path.slice(0, -"/review.md".length);
   const now = parseReview(after, requestFolder);
-  const waiting = waitingEntries(now);
-  if (waiting.length === 0) return null;
-  const was = before === null ? new Set<string>() : new Set(waitingEntries(parseReview(before, requestFolder)));
-  if (!waiting.some((entry) => !was.has(entry))) return null;
-  return { repo, path, folder, id: now.id, board: board!, title: now.title, level: now.notify };
+  if (waitingEntries(now).length === 0) return null;
+  const was = before === null ? null : parseReview(before, requestFolder);
+  const audience = await reviewAudience(route.repoID, was, now, route.users);
+  if (audience.logins.length === 0 && !audience.others) return null;
+  return { repo, path, folder, id: now.id, board: board!, title: now.title, level: now.notify, audience };
+}
+
+/** Whether routing needs the board's users: the request names people, now or before. */
+function namesPeople(text: string | null, folder: string): boolean {
+  return text !== null && parseReview(text, folder).for.length > 0;
 }
 
 
@@ -110,7 +193,14 @@ export async function alertsForPush(push: ReviewPush, config: GitHubAppConfig, f
     const after = await fileAt(token, push.repo, path, push.after, fetcher);
     if (after === null) continue;
     const before = push.before === null ? null : await fileAt(token, push.repo, path, push.before, fetcher);
-    const alert = reviewAlert(push.repo, path, before, after);
+    // The board's users are read only when the request is for named people.
+    let users: RoutedUser[] = [];
+    const board = boardFolder(path);
+    if (board !== null && (namesPeople(after, board) || namesPeople(before, board))) {
+      users = boardUsers(await fileAt(token, push.repo, "README.md", push.after, fetcher),
+                         await fileAt(token, push.repo, `${board}/README.md`, push.after, fetcher));
+    }
+    const alert = await reviewAlert(push.repo, path, before, after, { repoID: push.repoID, users });
     if (alert) alerts.push(alert);
   }
   return alerts;

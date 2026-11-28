@@ -28,10 +28,13 @@ sockets, using WebSocket hibernation so it sleeps between pushes.
   holds the channel and subscribe key.
 - **Review pushes read one file and keep nothing from it** (docs/Push.md). As the GitKittie Tasks
   GitHub App (contents: read, one repo per installation token) the relay reads a `review.md` a push
-  touched, before and after, and only the title, board, folder, id and level leave
-  `alertsForPush` (`src/review-push.ts`). `POST /github/devices` takes the person's GitHub token
-  for one `GET /repos/<repo>` permission check: never store, log or forward it, and never use it
-  for anything else. No other endpoint takes a provider token.
+  touched, before and after, and only the title, board, folder, id, level and audience leave
+  `alertsForPush` (`src/review-push.ts`). A request for named people (`for:`) also has the root and
+  board `README.md` read for the board's `users`; the audience holds login *keys* (SHA-256 of
+  `<repo id>:<login>`, `loginKey` in `src/devices.ts`), never logins. `POST /github/devices` takes
+  the person's GitHub token for one `GET /repos/<repo>` permission check and one `GET /user` (whose
+  login is kept only as that key): never store, log or forward the token, and never use it for
+  anything else. No other endpoint takes a provider token.
 - Nothing is relayed without a valid signature (GitHub) or token (GitLab).
 - Nothing is registered without a client proof. `CLIENT_FAMILY` (`src/signature.ts`) must equal
   `RelayClientProof.family` in `swift/GitKittieKit`; change both together, and note that changing
