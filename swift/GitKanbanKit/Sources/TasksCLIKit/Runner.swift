@@ -217,6 +217,24 @@ public struct TasksCommand {
         case .text(let text):
             output(text)
         case .json(let value):
+            if case .reviewFile(let target?) = plan.view {
+                let object = value as? [String: Any] ?? [:]
+                guard let encoded = object["content_base64"] as? String, let data = Data(base64Encoded: encoded) else {
+                    throw CLIError.tool("The app sent no file content.")
+                }
+                if target == "-" {
+                    FileHandle.standardOutput.write(data)
+                    return
+                }
+                do {
+                    try data.write(to: URL(fileURLWithPath: (target as NSString).expandingTildeInPath))
+                } catch {
+                    throw CLIError.usage("Could not write \(target): \(error.localizedDescription) (If this copy of tasks runs sandboxed, use `-o -` and redirect standard output.)")
+                }
+                output(json ? Renderer.pretty(["request": object["request"] ?? "", "path": object["path"] ?? "", "bytes": data.count, "saved_to": target])
+                            : "Saved \(target) (\(data.count) bytes).")
+                return
+            }
             if json || plan.view == .raw {
                 if case .review(let id) = plan.view {
                     let match = (value as? [[String: Any]] ?? []).first { ($0["request"] as? String)?.lowercased() == id.lowercased() }

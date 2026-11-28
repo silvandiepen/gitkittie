@@ -193,7 +193,7 @@ final class AgentAccessTests: XCTestCase {
         let tools = try XCTUnwrap((listed["result"] as? [String: Any])?["tools"] as? [[String: Any]])
         XCTAssertEqual(Set(tools.compactMap { $0["name"] as? String }),
                        ["list_boards", "create_board", "get_board", "get_board_rules", "list_cards", "get_card", "create_card", "update_card", "claim_card", "attach_file",
-                        "list_reviews", "create_review", "handle_review_item", "close_review", "wait_for_reviews", "list_docs", "get_doc", "search_docs", "write_doc", "delete_doc", "get_agent_guide"])
+                        "list_reviews", "create_review", "handle_review_item", "close_review", "wait_for_reviews", "get_review_file", "list_docs", "get_doc", "search_docs", "write_doc", "delete_doc", "get_agent_guide"])
         for tool in tools {
             // Every schema must have parsed as a JSON Schema object, not fallen back.
             XCTAssertNotNil((tool["inputSchema"] as? [String: Any])?["properties"], "\(tool["name"] ?? "")")

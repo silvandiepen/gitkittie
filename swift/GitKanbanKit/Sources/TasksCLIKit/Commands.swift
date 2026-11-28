@@ -20,6 +20,10 @@ public struct Plan: Equatable, Sendable {
     public enum View: Equatable, Sendable {
         case boards, board, rules, cards, card, created, updated, moved, claimed, commented, attached
         case reviews, review(String), handled, closed, docs, doc, docHits, boardCreated, raw
+        /// A review request was made or added to.
+        case reviewCreated
+        /// A request's file: written to `output` (`-`: standard output), or its JSON printed.
+        case reviewFile(output: String?)
     }
 
     public var tool: String
@@ -492,9 +496,108 @@ private struct Context {
                 arguments["timeout_seconds"] = .number(seconds)
             }
             return try plan("wait_for_reviews", arguments, card: card, view: .reviews)
+        case "create", "check":
+            return try plan("create_review", try reviewArguments(check: sub == "check"), card: args.value("card"), view: .reviewCreated)
+        case "file":
+            let request = try positional(1, "request")
+            let path = try positional(2, "path")
+            try noMorePositionals(than: 3)
+            return try plan("get_review_file", ["request": .string(request), "path": .string(path)], view: .reviewFile(output: args.value("output")))
         default:
-            throw CLIError.usage("review: unknown \"\(sub)\". Use show, handle, close or wait. See `tasks review --help`.")
+            throw CLIError.usage("review: unknown \"\(sub)\". Use create, check, show, handle, close, wait or file. See `tasks review --help`.")
         }
+    }
+
+    /// The `create_review` arguments of `review create` / `review check`: the options, then a
+    /// JSON object (the tool's own arguments) merged over them.
+    func reviewArguments(check: Bool) throws -> [String: JSONValue] {
+        let sub = check ? "check" : "create"
+        var arguments: [String: JSONValue] = ["agent": .string(try agent())]
+        for (option, key) in [("card", "card"), ("title", "title"), ("request", "request"), ("question", "question"), ("notes", "notes"), ("due", "due")] {
+            if let value = args.value(option) { arguments[key] = .string(value) }
+        }
+        if let notify = args.value("notify") { arguments["notify"] = .string(notify.lowercased()) }
+        let assigned = args.values["for"] ?? []
+        if !assigned.isEmpty { arguments["for"] = .array(assigned.map(JSONValue.string)) }
+        func action(_ lane: String?, comment: Bool, assign: String?) -> JSONValue? {
+            guard let lane else { return nil }
+            var object: [String: JSONValue] = ["to": .string(Self.lane(lane))]
+            if comment { object["comment"] = .bool(true) }
+            if let assign { object["assign"] = .string(assign) }
+            return .object(object)
+        }
+        arguments["on_accept"] = action(args.value("on-accept"), comment: false, assign: nil)
+        arguments["on_changes"] = action(args.value("on-changes"), comment: args.has("comment-on-changes"), assign: args.value("assign-on-changes"))
+        arguments["on_reject"] = action(args.value("on-reject"), comment: args.has("comment-on-reject"), assign: nil)
+        if args.has("comment-on-changes") || args.value("assign-on-changes") != nil, args.value("on-changes") == nil {
+            throw CLIError.usage("review \(sub): --comment-on-changes and --assign-on-changes need --on-changes <lane>.")
+        }
+        if args.has("comment-on-reject"), args.value("on-reject") == nil {
+            throw CLIError.usage("review \(sub): --comment-on-reject needs --on-reject <lane>.")
+        }
+
+        if check {
+            guard let url = args.value("url") else { throw CLIError.usage("review check: give the page with --url <url>.") }
+            let lines = args.values["item"] ?? []
+            var object: [String: JSONValue] = [
+                "url": .string(url),
+                "checklist": .array(lines.map(JSONValue.string)),
+            ]
+            let title = args.value("title")
+            object["id"] = .string(args.value("check-id") ?? Self.slug(title ?? URL(string: url).map { ($0.host ?? "") + $0.path } ?? url))
+            if let title { object["title"] = .string(title) }
+            let sizes = args.values["size"] ?? []
+            if !sizes.isEmpty { object["sizes"] = .array(sizes.map(JSONValue.string)) }
+            let appearance = args.values["appearance"] ?? []
+            if !appearance.isEmpty { object["appearance"] = .array(appearance.map { .string($0.lowercased()) }) }
+            arguments["checks"] = .array([.object(object)])
+        } else {
+            var items: [JSONValue] = []
+            var used = Set<String>()
+            for path in args.values["file"] ?? [] {
+                guard path != "-" else { throw CLIError.usage("review create: --file takes a path; send standard input through the JSON's content_base64.") }
+                let data = try read(path)
+                let name = (path as NSString).lastPathComponent
+                var id = Self.slug((name as NSString).deletingPathExtension)
+                var n = 2
+                while !used.insert(id).inserted { id = "\(Self.slug((name as NSString).deletingPathExtension))-\(n)"; n += 1 }
+                items.append(.object(["id": .string(id), "file_name": .string(name), "content_base64": .string(data.base64EncodedString())]))
+            }
+            if !items.isEmpty { arguments["items"] = .array(items) }
+        }
+        for word in positionals.dropFirst() {
+            guard word.hasPrefix("{") || word == "-" else {
+                throw CLIError.usage("review \(sub): unexpected \"\(word)\". Quote texts, and give extra arguments as one JSON object.")
+            }
+            for (key, value) in try jsonArgument(word) {
+                if ["items", "checks", "questions"].contains(key), case .array(let more) = value, case .array(let mine)? = arguments[key] {
+                    arguments[key] = .array(mine + more)
+                } else {
+                    arguments[key] = value
+                }
+            }
+        }
+        guard arguments["title"] != nil || arguments["request"] != nil else {
+            throw CLIError.usage("review \(sub): give --title for a new request, or --request <id> to add to one.")
+        }
+        return arguments
+    }
+
+    /// Lower case words joined by `-`, as review ids are written.
+    static func slug(_ text: String) -> String {
+        var out = ""
+        var dash = false
+        for scalar in text.lowercased().unicodeScalars {
+            if ("a"..."z").contains(scalar) || ("0"..."9").contains(scalar) {
+                if dash, !out.isEmpty { out.append("-") }
+                dash = false
+                out.unicodeScalars.append(scalar)
+            } else {
+                dash = true
+            }
+        }
+        let slug = String(out.prefix(48)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return slug.isEmpty ? "review" : slug
     }
 
     func docs() throws -> Plan {

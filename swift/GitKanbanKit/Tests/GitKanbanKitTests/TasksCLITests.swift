@@ -143,6 +143,8 @@ final class TasksCLIParsingTests: XCTestCase {
             ["create", "-b", "Pets", "-t", "T"], ["update", "P-1", "-p", "P1"], ["move", "P-1", "done"], ["claim", "P-1"],
             ["comment", "P-1", "x"], ["reviews", "-b", "Pets"], ["review", "show", "r", "-b", "Pets"],
             ["review", "handle", "r", "i", "-b", "Pets"], ["review", "close", "r", "-b", "Pets"], ["review", "wait", "-b", "Pets"],
+            ["review", "create", "-b", "Pets", "--title", "T"], ["review", "check", "-b", "Pets", "--title", "T", "--url", "https://x.example", "--item", "Loads"],
+            ["review", "file", "r", "results/a.png", "-b", "Pets"],
             ["docs", "-b", "Pets"], ["docs", "show", "README.md", "-b", "Pets"], ["docs", "search", "q", "-b", "Pets"],
             ["create-board", "Birds"],
         ]
@@ -157,9 +159,10 @@ final class TasksCLIParsingTests: XCTestCase {
             }
             for key in plan.arguments.keys { XCTAssertTrue(schema.properties.contains(key), "\(line): \(tool.name) has no argument \(key)") }
         }
-        // Everything but the base64 uploads has its own command; those go through `raw`.
-        // (`tasks guide` prints the guide itself, offline: the same text get_agent_guide returns.)
-        XCTAssertEqual(Set(AgentTools.all.map(\.name)).subtracting(used), ["attach_file", "create_review", "write_doc", "delete_doc", "get_agent_guide"])
+        // Everything but writing docs has its own command (attach_file is `attach`, read from a file
+        // or standard input); those go through `raw`. (`tasks guide` prints the guide itself,
+        // offline: the same text get_agent_guide returns.)
+        XCTAssertEqual(Set(AgentTools.all.map(\.name)).subtracting(used), ["attach_file", "write_doc", "delete_doc", "get_agent_guide"])
     }
 
     func testTheGuideCommand() throws {

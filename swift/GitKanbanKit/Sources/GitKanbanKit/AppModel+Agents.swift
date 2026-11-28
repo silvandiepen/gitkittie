@@ -326,7 +326,9 @@ extension AppModel {
             await agentDidChange(repo, selected.folder)
             return json(result)
         case "list_reviews":
-            return json(try await board.listReviews(state: string("state"), card: string("card")))
+            return json(try await board.listReviews(state: string("state"), card: string("card"), forUser: string("for")))
+        case "get_review_file":
+            return json(try await board.reviewFile(request: try required("request"), path: try required("path")))
         case "create_review":
             let rawItems = args["items"] as? [[String: Any]] ?? []
             let rawQuestions = args["questions"] as? [[String: Any]] ?? []
@@ -337,8 +339,10 @@ extension AppModel {
                 }
                 notify = level
             }
-            guard !rawItems.isEmpty || !rawQuestions.isEmpty || (string("request") != nil && notify != nil) else {
-                throw AgentBoardError("Give \"items\" (files to judge) or \"questions\" (choices to make), with at least one entry.")
+            let rawChecks = args["checks"] as? [[String: Any]] ?? []
+            let options = try Self.agentRequestOptions(args)
+            guard !rawItems.isEmpty || !rawQuestions.isEmpty || !rawChecks.isEmpty || (string("request") != nil && (notify != nil || options != nil)) else {
+                throw AgentBoardError("Give \"items\" (files to judge), \"checks\" (pages to check) or \"questions\" (choices to make), with at least one entry.")
             }
             let uploads = try rawItems.map { raw -> AgentBoard.ReviewUpload in
                 func text(_ key: String) -> String? { (raw[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
@@ -355,13 +359,16 @@ extension AppModel {
                 }
                 return AgentBoard.ReviewUpload(
                     item: Review.NewItem(id: id, file: file, preview: text("preview_file_name"), kind: text("kind"), group: text("group"),
-                                         pickOne: raw["pick_one"] as? Bool ?? false, note: text("note"), revises: text("revises")),
+                                         pickOne: raw["pick_one"] as? Bool ?? false, note: text("note"), revises: text("revises"),
+                                         actions: try Self.agentActions(raw, what: "item \"\(id)\"")),
                     data: data, preview: preview)
             }
             let questions = try rawQuestions.map(Self.agentQuestion)
+            let checks = try rawChecks.map(Self.agentCheck)
             let result = try await board.createReview(request: string("request"), card: string("card"), title: string("title"),
                                                       question: string("question"), notes: string("notes"), uploads: uploads,
-                                                      questions: questions, notify: notify, agent: try required("agent"))
+                                                      questions: questions, checks: checks, notify: notify, options: options,
+                                                      agent: try required("agent"))
             await agentReviewsDidChange(repo, selected.folder)
             return json(result)
         case "handle_review_item":
@@ -398,6 +405,82 @@ extension AppModel {
 }
 
 extension AppModel {
+    /// `on_accept` / `on_changes` / `on_reject` as a tool receives them: one action or a list.
+    nonisolated static func agentActions(_ raw: [String: Any], what: String) throws -> ReviewActions {
+        var actions = ReviewActions()
+        for outcome in ReviewOutcome.allCases {
+            guard let value = raw[outcome.key], !(value is NSNull) else { continue }
+            let list: [Any] = (value as? [Any]) ?? [value]
+            actions[outcome] = try list.map { entry in
+                guard let dict = entry as? [String: Any], let to = (dict["to"] as? String)?.trimmingCharacters(in: .whitespaces), !to.isEmpty else {
+                    throw AgentBoardError("\(outcome.key) of \(what) is {\"to\": \"<lane>\", \"move\"?, \"comment\"?, \"assign\"?} or a list of those.")
+                }
+                func text(_ key: String) -> String? { (dict[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
+                return ReviewAction(move: text("move"), to: to, comment: dict["comment"] as? Bool ?? false, assign: text("assign"))
+            }
+        }
+        return actions
+    }
+
+    /// `for`, `due` and the request's actions; `nil` when none is given.
+    nonisolated static func agentRequestOptions(_ args: [String: Any]) throws -> Review.RequestOptions? {
+        var assigned: [String] = []
+        if let one = args["for"] as? String { assigned = [one] } else if let many = args["for"] as? [Any] {
+            assigned = try many.map { entry in
+                guard let id = entry as? String, !id.isEmpty else { throw AgentBoardError("\"for\" is a board user id or a list of them.") }
+                return id
+            }
+        }
+        assigned = assigned.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let due = (args["due"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let actions = try agentActions(args, what: "the request")
+        guard !assigned.isEmpty || due != nil || !actions.isEmpty else { return nil }
+        return Review.RequestOptions(assignedTo: assigned, due: due, actions: actions)
+    }
+
+    /// A browser check as `create_review` receives it.
+    nonisolated static func agentCheck(_ raw: [String: Any]) throws -> Review.NewCheck {
+        func text(_ key: String, in dict: [String: Any] = raw) -> String? {
+            (dict[key] as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        }
+        guard let id = text("id"), let url = text("url") else { throw AgentBoardError("Every check needs \"id\" and \"url\".") }
+        let sizes = try (raw["sizes"] as? [Any] ?? []).map { entry -> CheckSize in
+            if let name = entry as? String {
+                if let preset = CheckSize.presets.first(where: { $0.id == name.lowercased() }) { return preset }
+                if let (w, h) = CheckSize.dimensions(name) { return CheckSize(id: "\(w)x\(h)", label: "\(w)x\(h)", width: w, height: h) }
+                throw AgentBoardError("Check \"\(id)\": size \"\(name)\" is not a preset (\(CheckSize.presets.map(\.id).joined(separator: ", "))) or WIDTHxHEIGHT.")
+            }
+            guard let dict = entry as? [String: Any] else { throw AgentBoardError("Check \"\(id)\": a size is a preset name, WIDTHxHEIGHT or an object.") }
+            let width = (dict["width"] as? NSNumber)?.intValue, height = (dict["height"] as? NSNumber)?.intValue
+            let sizeID = text("id", in: dict) ?? ((width != nil && height != nil) ? "\(width!)x\(height!)" : "")
+            let preset = CheckSize.presets.first { $0.id == sizeID }
+            var ua = preset?.ua ?? .default
+            if let raw = text("ua", in: dict) {
+                guard let value = CheckUserAgent(rawValue: raw) else { throw AgentBoardError("Check \"\(id)\": \"ua\" is mobile, desktop or default.") }
+                ua = value
+            }
+            return CheckSize(id: sizeID, label: text("label", in: dict) ?? preset?.label ?? sizeID,
+                             width: width ?? preset?.width, height: height ?? preset?.height, ua: ua)
+        }
+        let appearance = try (raw["appearance"] as? [Any] ?? []).map { entry -> CheckAppearance in
+            guard let name = entry as? String, let value = CheckAppearance(rawValue: name.lowercased()) else {
+                throw AgentBoardError("Check \"\(id)\": \"appearance\" lists light and/or dark.")
+            }
+            return value
+        }
+        let checklist = try (raw["checklist"] as? [Any] ?? []).enumerated().map { offset, entry -> CheckLine in
+            if let line = entry as? String { return CheckLine(id: CheckLine.id(for: line, index: offset), text: line) }
+            guard let dict = entry as? [String: Any], let line = text("text", in: dict) else {
+                throw AgentBoardError("Check \"\(id)\": a checklist line is text, or {\"id\", \"text\"}.")
+            }
+            return CheckLine(id: text("id", in: dict) ?? CheckLine.id(for: line, index: offset), text: line)
+        }
+        var unique: [CheckAppearance] = []
+        for value in appearance where !unique.contains(value) { unique.append(value) }
+        return Review.NewCheck(id: id, url: url, title: text("title"), note: text("note"), sizes: sizes, appearance: unique,
+                               checklist: checklist, revises: text("revises"), actions: try agentActions(raw, what: "check \"\(id)\""))
+    }
+
     /// A question as `create_review` receives it.
     nonisolated static func agentQuestion(_ raw: [String: Any]) throws -> Review.NewQuestion {
         func text(_ key: String, in dict: [String: Any] = raw) -> String? {
